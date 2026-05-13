@@ -1,0 +1,55 @@
+{
+  "name": "spancle-sports-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spancle Sports OS — Enterprise Multi-Tenant Sports SaaS Ecosystem",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.1.4",
+  "scripts": {
+    "build": "turbo run build",
+    "build:affected": "turbo run build --filter=[HEAD^1]",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "test:coverage": "turbo run test:coverage",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rimraf node_modules",
+    "clean:cache": "turbo run clean --cache",
+    "prepare": "husky",
+    "bootstrap": "pnpm install && pnpm run build",
+    "workspace:list": "pnpm list --recursive --depth 0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.3.2",
+    "rimraf": "^5.0.7",
+    "turbo": "^2.0.6",
+    "typescript": "^5.5.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "typescript": "^5.5.2"
+    }
+  },
+  "volta": {
+    "node": "20.11.0"
+  }
+}

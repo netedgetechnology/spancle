@@ -1,0 +1,91 @@
+# =============================================================================
+# SPANCLE SPORTS OS — .gitignore
+# =============================================================================
+
+# --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+!.env.docker
+*.pem
+*.key
+*.cert
+*.p12
+secrets/
+
+# --- Dependencies ---
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# --- Build Outputs ---
+dist/
+.next/
+.nuxt/
+out/
+build/
+*.tsbuildinfo
+
+# --- Turbo ---
+.turbo/
+
+# --- Cache ---
+.cache/
+.parcel-cache/
+
+# --- Testing ---
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+
+# --- Logs ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- OS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- IDEs ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Docker ---
+infrastructure/docker/volumes/
+infrastructure/docker/data/
+
+# --- Uploads ---
+uploads/
+tmp/
+
+# --- TypeORM / Prisma ---
+migrations/*.js
+!migrations/*.ts
+
+# --- Misc ---
+*.zip
+*.tar.gz
+.vercel
+.netlify

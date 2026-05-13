@@ -1,0 +1,12 @@
+packages:
+  # Applications (NextJS frontend apps)
+  - 'apps/*'
+
+  # Backend microservices (NestJS)
+  - 'services/*'
+
+  # Shared internal packages
+  - 'packages/*'
+
+  # Infrastructure tooling (if any package.json-based infra tools exist)
+  - 'infrastructure/tooling/*'

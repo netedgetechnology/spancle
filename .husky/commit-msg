@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Spancle Sports OS — commit-msg hook
+# Validates commit message against conventional commits standard
+pnpm commitlint --edit "$1"

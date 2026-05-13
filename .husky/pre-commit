@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Spancle Sports OS — pre-commit hook
+# Runs lint-staged on all staged files before allowing commit
+pnpm lint-staged

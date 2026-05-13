@@ -1,0 +1,13 @@
+{
+  "name": "@spancle/tsconfig",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spancle Sports OS — Shared TypeScript Configurations",
+  "license": "UNLICENSED",
+  "files": [
+    "tsconfig.base.json",
+    "tsconfig.nestjs.json",
+    "tsconfig.nextjs.json",
+    "tsconfig.lib.json"
+  ]
+}
