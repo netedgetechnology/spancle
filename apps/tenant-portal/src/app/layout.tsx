@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import { AppProviders } from '@/providers/app-providers';
 import '@/styles/globals.css';
 
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
 export const metadata: Metadata = {
