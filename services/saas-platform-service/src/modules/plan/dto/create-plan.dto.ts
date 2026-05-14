@@ -1,8 +1,8 @@
-import {{
+import {
   IsBoolean, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID,
-}} from 'class-validator';
+} from 'class-validator';
 
-export class CreatePlanDto {{
+export class CreatePlanDto {
   @IsUUID()
   tenantId!: string;
 
@@ -20,4 +20,4 @@ export class CreatePlanDto {{
   @IsObject()
   @IsOptional()
   limitOverrides?: Record<string, number>;
-}}
+}

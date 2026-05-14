@@ -32,8 +32,7 @@ export class MenuService {
     if (handleTaken) throw new ConflictException(`Menu handle "${dto.handle}" already exists`);
 
     const menu = await this.menuRepository.insert(
-      { name: dto.name, handle: dto.handle, description: dto.description, tenantId, isActive: dto.isActive ?? true }
-        as unknown as Parameters<typeof this.menuRepository.insert>[0],
+      { name: dto.name, handle: dto.handle, description: dto.description, tenantId, isActive: dto.isActive ?? true } as any,
       tenantId,
     );
 

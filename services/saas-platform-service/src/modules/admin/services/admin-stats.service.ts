@@ -92,6 +92,22 @@ export class AdminStatsService {
 
   // ── Tenant aggregation ─────────────────────────────────────────────────────
 
+
+  // ── Recent tenants ────────────────────────────────────────────────────────────
+
+  private async getRecentTenants(limit: number): Promise<RecentTenant[]> {
+    const rows = await this.dataSource.query<RecentTenant[]>(
+      `SELECT id, name, slug, email, status, tier,
+              to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt"
+         FROM tenants
+        WHERE is_deleted = false
+        ORDER BY created_at DESC
+        LIMIT $1`,
+      [limit],
+    );
+    return rows;
+  }
+
   private async computeTenantStats(periodDays: number): Promise<TenantStats> {
     const [statusCounts, periodCounts] = await Promise.all([
       this.dataSource.query<Array<{ status: string; count: string }>>(

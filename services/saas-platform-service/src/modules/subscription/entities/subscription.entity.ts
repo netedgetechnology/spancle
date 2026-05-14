@@ -1,7 +1,7 @@
-import {{
+import {
   Column, CreateDateColumn, DeleteDateColumn,
   Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn,
-}} from 'typeorm';
+} from 'typeorm';
 
 /**
  * Subscription lifecycle state machine:
@@ -39,90 +39,90 @@ export type SubscriptionBillingCycle = 'monthly' | 'annual' | 'one_time' | 'cust
 @Index(['tenantId', 'status'])
 @Index(['tenantId', 'isDeleted'])
 @Index(['packageId'])
-export class SubscriptionEntity {{
+export class SubscriptionEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({{ name: 'tenant_id', type: 'uuid', nullable: false }})
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: false })
   @Index()
   tenantId!: string;
 
   /** FK to package_definitions.id */
-  @Column({{ name: 'package_id', type: 'uuid', nullable: false }})
+  @Column({ name: 'package_id', type: 'uuid', nullable: false })
   packageId!: string;
 
   /** Snapshot of package.tierKey at subscription time */
-  @Column({{ name: 'tier_key', type: 'varchar', length: 32, nullable: false }})
+  @Column({ name: 'tier_key', type: 'varchar', length: 32, nullable: false })
   tierKey!: string;
 
-  @Column({{
+  @Column({
     type: 'enum',
     enum: ['trialing', 'active', 'past_due', 'cancelled', 'expired', 'paused'],
     default: 'trialing',
-  }})
+  })
   status!: SubscriptionStatus;
 
-  @Column({{
+  @Column({
     name: 'billing_cycle',
     type: 'enum',
     enum: ['monthly', 'annual', 'one_time', 'custom'],
     default: 'monthly',
-  }})
+  })
   billingCycle!: SubscriptionBillingCycle;
 
   /** Price paid in minor units — snapshot at subscription time */
-  @Column({{ name: 'price_minor_units', type: 'int', default: 0 }})
+  @Column({ name: 'price_minor_units', type: 'int', default: 0 })
   priceMinorUnits!: number;
 
-  @Column({{ type: 'varchar', length: 3, default: 'GBP' }})
+  @Column({ type: 'varchar', length: 3, default: 'GBP' })
   currency!: string;
 
   /** Start of current billing period */
-  @Column({{ name: 'period_start', type: 'timestamptz', nullable: false }})
+  @Column({ name: 'period_start', type: 'timestamptz', nullable: false })
   periodStart!: Date;
 
   /** End of current billing period — next renewal date */
-  @Column({{ name: 'period_end', type: 'timestamptz', nullable: false }})
+  @Column({ name: 'period_end', type: 'timestamptz', nullable: false })
   periodEnd!: Date;
 
   /** When the trial ends (null if no trial) */
-  @Column({{ name: 'trial_end', type: 'timestamptz', nullable: true }})
+  @Column({ name: 'trial_end', type: 'timestamptz', nullable: true })
   trialEnd!: Date | null;
 
   /** When this subscription was cancelled */
-  @Column({{ name: 'cancelled_at', type: 'timestamptz', nullable: true }})
+  @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
   cancelledAt!: Date | null;
 
   /** Reason for cancellation */
-  @Column({{ name: 'cancel_reason', type: 'varchar', length: 500, nullable: true }})
+  @Column({ name: 'cancel_reason', type: 'varchar', length: 500, nullable: true })
   cancelReason!: string | null;
 
   /**
    * Feature flags snapshot — copied from package.features at subscribe time.
    * Ensures existing subscriptions are unaffected by package updates.
    */
-  @Column({{ name: 'features_snapshot', type: 'jsonb', nullable: false, default: '{{}}'  }})
+  @Column({ name: 'features_snapshot', type: 'jsonb', nullable: false, default: '{}'  })
   featuresSnapshot!: Record<string, boolean>;
 
   /**
    * Resource limits snapshot — copied from package.limits at subscribe time.
    */
-  @Column({{ name: 'limits_snapshot', type: 'jsonb', nullable: false, default: '{{}}'  }})
+  @Column({ name: 'limits_snapshot', type: 'jsonb', nullable: false, default: '{}'  })
   limitsSnapshot!: Record<string, number>;
 
   /** External payment provider subscription ID (Stripe, etc.) — Sprint 3 */
-  @Column({{ name: 'external_sub_id', type: 'varchar', length: 255, nullable: true }})
+  @Column({ name: 'external_sub_id', type: 'varchar', length: 255, nullable: true })
   externalSubId!: string | null;
 
-  @Column({{ name: 'is_deleted', type: 'boolean', default: false }})
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
   isDeleted!: boolean;
 
-  @CreateDateColumn({{ name: 'created_at', type: 'timestamptz' }})
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
-  @UpdateDateColumn({{ name: 'updated_at', type: 'timestamptz' }})
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 
-  @DeleteDateColumn({{ name: 'deleted_at', type: 'timestamptz', nullable: true }})
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt!: Date | null;
-}}
+}

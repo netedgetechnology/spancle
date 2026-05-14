@@ -1,6 +1,6 @@
-import {{ IsBoolean, IsObject, IsOptional }} from 'class-validator';
+import { IsBoolean, IsObject, IsOptional } from 'class-validator';
 
-export class UpdatePlanDto {{
+export class UpdatePlanDto {
   @IsObject()
   @IsOptional()
   featureOverrides?: Record<string, boolean>;
@@ -12,4 +12,4 @@ export class UpdatePlanDto {{
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
-}}
+}

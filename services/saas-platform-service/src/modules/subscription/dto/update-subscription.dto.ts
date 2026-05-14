@@ -1,10 +1,10 @@
-import {{
+import {
   IsEnum, IsOptional, IsString, MaxLength,
-}} from 'class-validator';
+} from 'class-validator';
 
 const STATUSES = ['trialing', 'active', 'past_due', 'cancelled', 'expired', 'paused'] as const;
 
-export class UpdateSubscriptionDto {{
+export class UpdateSubscriptionDto {
   @IsEnum(STATUSES)
   @IsOptional()
   status?: typeof STATUSES[number];
@@ -13,4 +13,4 @@ export class UpdateSubscriptionDto {{
   @IsOptional()
   @MaxLength(255)
   externalSubId?: string;
-}}
+}

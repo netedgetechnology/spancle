@@ -1,4 +1,4 @@
-export enum SubscriptionEvents {{
+export enum SubscriptionEvents {
   CREATED         = 'spancle.subscription.created',
   TRIAL_STARTED   = 'spancle.subscription.trial_started',
   ACTIVATED       = 'spancle.subscription.activated',
@@ -8,17 +8,17 @@ export enum SubscriptionEvents {{
   PAUSED          = 'spancle.subscription.paused',
   RESUMED         = 'spancle.subscription.resumed',
   RENEWED         = 'spancle.subscription.renewed',
-}}
+}
 
-export interface SubscriptionEventPayload {{
+export interface SubscriptionEventPayload {
   tenantId:       string;
   subscriptionId: string;
   packageId:      string;
   tierKey:        string;
   actorId:        string;
   timestamp:      string;
-}}
+}
 
-export interface SubscriptionCancelledPayload extends SubscriptionEventPayload {{
+export interface SubscriptionCancelledPayload extends SubscriptionEventPayload {
   reason: string;
-}}
+}
