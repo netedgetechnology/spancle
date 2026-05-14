@@ -37,7 +37,7 @@ export const AcademyClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Academy>>(
       `/academies${query ? `?${query}` : ''}`,
@@ -76,7 +76,7 @@ export const AcademyClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Player>>(`/players${query ? `?${query}` : ''}`, ctx);
   },
@@ -119,7 +119,7 @@ export const AcademyClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<unknown>>(
       `/academies/${academyId}/coaches${query ? `?${query}` : ''}`,

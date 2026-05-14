@@ -34,7 +34,7 @@ export const BookingClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Booking>>(`/bookings${query ? `?${query}` : ''}`, ctx);
   },
@@ -63,7 +63,7 @@ export const BookingClient = {
     ctx: RequestContext,
   ): Promise<Slot[]> {
     const query = new URLSearchParams(
-      Object.entries(params).map(([k, v]) => [k, String(v)]),
+      Object.entries(params).map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<Slot[]>(`/venues/${venueId}/slots/available?${query}`, ctx);
   },
@@ -92,7 +92,7 @@ export const BookingClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Venue>>(`/venues${query ? `?${query}` : ''}`, ctx);
   },

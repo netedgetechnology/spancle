@@ -71,7 +71,7 @@ export const IdentityClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<User>>(`/users${query ? `?${query}` : ''}`, ctx);
   },

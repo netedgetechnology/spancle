@@ -45,7 +45,7 @@ export const ReportingClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Report>>(
       `/reports${query ? `?${query}` : ''}`,
@@ -64,7 +64,7 @@ export const ReportingClient = {
     ctx: RequestContext,
   ): Promise<DashboardMetric[]> {
     const query = new URLSearchParams(
-      Object.entries(params).map(([k, v]) => [k, String(v)]),
+      Object.entries(params).map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<DashboardMetric[]>(`/dashboard/metrics?${query}`, ctx);
   },

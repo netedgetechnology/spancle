@@ -34,7 +34,7 @@ export const FinanceClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Invoice>>(`/invoices${query ? `?${query}` : ''}`, ctx);
   },

@@ -2,7 +2,6 @@ import axios, {
   type AxiosInstance,
   type AxiosRequestConfig,
   type AxiosResponse,
-  type InternalAxiosRequestConfig,
 } from 'axios';
 import { API_TIMEOUTS_MS, SERVICE_PORTS } from '@spancle/constants';
 import { normaliseError } from './api-error';

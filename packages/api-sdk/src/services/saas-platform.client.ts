@@ -38,7 +38,7 @@ export const SaasPlatformClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Tenant>>(`/tenants${query ? `?${query}` : ''}`, ctx);
   },

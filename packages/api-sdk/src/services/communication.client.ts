@@ -52,7 +52,7 @@ export const CommunicationClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<Notification>>(
       `/notifications${query ? `?${query}` : ''}`,
@@ -90,7 +90,7 @@ export const CommunicationClient = {
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
+        .map(([k, v]) => [k, String(v)]) as [string, string][],
     ).toString();
     return http.get<PaginatedResult<{ id: string; name: string; type: string }>>(
       `/templates${query ? `?${query}` : ''}`,

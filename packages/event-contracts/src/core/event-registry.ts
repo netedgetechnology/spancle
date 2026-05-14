@@ -1,5 +1,3 @@
-import { buildEventChannel } from '@spancle/constants';
-import type { EventDomain, EventAction } from '@spancle/constants';
 
 /**
  * EventRegistry — canonical list of all platform event channels.
