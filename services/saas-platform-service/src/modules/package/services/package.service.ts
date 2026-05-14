@@ -17,7 +17,7 @@ import { PackageEventNames } from '../events/package.events';
  * Imported from identity-service path in monorepo.
  * Sprint 3: move to @spancle/constants package.
  */
-import { DEFAULT_PLAN_LIMITS } from '../../../../../../../../services/identity-service/src/modules/tenant/types/plan-limits.types';
+import { DEFAULT_PLAN_LIMITS } from '../constants/plan-limits.constants';
 
 /** State machine: allowed transitions from each status */
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {

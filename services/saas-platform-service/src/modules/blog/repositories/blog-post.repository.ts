@@ -156,4 +156,19 @@ export class BlogPostRepository extends TenantAwareRepository<BlogPostEntity> {
       .where('id = :id AND tenantId = :tenantId', { id, tenantId })
       .execute();
   }
+  async findPaginated(
+    tenantId: string,
+    page = 1,
+    limit = 20,
+    alias = 'b',
+  ): Promise<{ data: BlogPostEntity[]; total: number }> {
+    const [data, total] = await this.scopedQb(alias, tenantId)
+      .orderBy(`${alias}.publishedAt`, 'DESC')
+      .addOrderBy(`${alias}.createdAt`, 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+    return { data, total };
+  }
+
 }

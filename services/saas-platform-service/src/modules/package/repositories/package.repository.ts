@@ -78,22 +78,25 @@ export class PackageRepository {
   }
 
   async update(id: string, data: Partial<PackageEntity>): Promise<PackageEntity> {
-    await this.repo.update({ id }, { ...data, updatedAt: new Date() });
-    return this.repo.findOneOrFail({ where: { id } });
+    const existing = await this.repo.findOneOrFail({ where: { id } });
+    const merged   = this.repo.merge(existing, data, { updatedAt: new Date() } as Partial<PackageEntity>);
+    return this.repo.save(merged);
   }
 
   async updateStatus(id: string, status: PackageStatus): Promise<void> {
-    const now = new Date();
-    const extra: Partial<PackageEntity> = { status };
+    const now     = new Date();
+    const existing = await this.repo.findOneOrFail({ where: { id } });
+    existing.status    = status;
+    existing.updatedAt = now;
 
-    if (status === 'active' && !((await this.findById(id))?.publishedAt)) {
-      extra.publishedAt = now;
+    if (status === 'active' && !existing.publishedAt) {
+      existing.publishedAt = now;
     }
     if (status === 'deprecated') {
-      extra.deprecatedAt = now;
+      existing.deprecatedAt = now;
     }
 
-    await this.repo.update({ id }, { ...extra, updatedAt: now });
+    await this.repo.save(existing);
   }
 
   async softDelete(id: string): Promise<void> {

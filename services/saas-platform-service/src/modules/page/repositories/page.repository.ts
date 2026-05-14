@@ -74,4 +74,19 @@ export class PageRepository extends TenantAwareRepository<PageEntity> {
       .where('tenantId = :tenantId AND isHomepage = true AND isDeleted = false', { tenantId })
       .execute();
   }
+  async findPaginated(
+    tenantId: string,
+    page = 1,
+    limit = 20,
+    alias = 'p',
+  ): Promise<{ data: PageEntity[]; total: number }> {
+    const [data, total] = await this.scopedQb(alias, tenantId)
+      .orderBy(`${alias}.sortOrder`, 'ASC')
+      .addOrderBy(`${alias}.createdAt`, 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+    return { data, total };
+  }
+
 }

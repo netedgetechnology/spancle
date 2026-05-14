@@ -41,4 +41,18 @@ export class MediaAssetRepository extends TenantAwareRepository<MediaAssetEntity
       .andWhere('m.storedName = :storedName', { storedName })
       .getOne();
   }
+  async findPaginated(
+    tenantId: string,
+    page = 1,
+    limit = 20,
+    alias = 'm',
+  ): Promise<{ data: MediaAssetEntity[]; total: number }> {
+    const [data, total] = await this.scopedQb(alias, tenantId)
+      .orderBy(`${alias}.createdAt`, 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+    return { data, total };
+  }
+
 }
