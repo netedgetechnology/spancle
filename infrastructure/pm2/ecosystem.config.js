@@ -105,46 +105,8 @@ const nestServices = [
       SERVICE_NAME: 'booking-service',
     },
   },
-  {
-    name:  'spancle-finance',
-    cwd:   path.join(ROOT, 'services/finance-service'),
-    env: {
-      PORT:         3004,
-      SERVICE_NAME: 'finance-service',
-    },
-  },
-  {
-    name:  'spancle-tournament',
-    cwd:   path.join(ROOT, 'services/tournament-service'),
-    env: {
-      PORT:         3005,
-      SERVICE_NAME: 'tournament-service',
-    },
-  },
-  {
-    name:  'spancle-academy',
-    cwd:   path.join(ROOT, 'services/academy-service'),
-    env: {
-      PORT:         3006,
-      SERVICE_NAME: 'academy-service',
-    },
-  },
-  {
-    name:  'spancle-communication',
-    cwd:   path.join(ROOT, 'services/communication-service'),
-    env: {
-      PORT:         3007,
-      SERVICE_NAME: 'communication-service',
-    },
-  },
-  {
-    name:  'spancle-reporting',
-    cwd:   path.join(ROOT, 'services/reporting-service'),
-    env: {
-      PORT:         3008,
-      SERVICE_NAME: 'reporting-service',
-    },
-  },
+  // spancle-finance, spancle-tournament, spancle-academy,
+  // spancle-communication, spancle-reporting — not yet deployable (dist/main.js absent).
 ];
 
 // ── NextJS app definitions ─────────────────────────────────────────────────
