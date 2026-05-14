@@ -3,7 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import {
   TenantAwareRepository,
-} from '../../../../common/repositories/tenant-aware.repository';
+} from '../../../common/repositories/tenant-aware.repository';
 import { PageEntity, type PageStatus } from '../entities/page.entity';
 
 @Injectable()

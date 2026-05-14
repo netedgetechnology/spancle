@@ -338,7 +338,7 @@ export class HomepageService {
 
     if (!result.success) {
       const issues = result.error.issues
-        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .map((i: { path: Array<string | number>; message: string }) => `${i.path.join('.')}: ${i.message}`)
         .join('; ');
       throw new UnprocessableEntityException(
         `Invalid payload for section type "${sectionType}": ${issues}`,

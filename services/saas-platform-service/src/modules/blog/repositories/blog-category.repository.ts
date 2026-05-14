@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { TenantAwareRepository } from '../../../../common/repositories/tenant-aware.repository';
+import { TenantAwareRepository } from '../../../common/repositories/tenant-aware.repository';
 import { BlogCategoryEntity } from '../entities/blog-category.entity';
 
 @Injectable()

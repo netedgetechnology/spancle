@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { TenantAwareRepository } from '../../../../common/repositories/tenant-aware.repository';
+import { TenantAwareRepository } from '../../../common/repositories/tenant-aware.repository';
 import { MediaAssetEntity, type MediaAssetType } from '../entities/media-asset.entity';
 
 @Injectable()

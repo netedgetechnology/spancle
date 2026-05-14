@@ -3,7 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import {
   TenantAwareRepository,
-} from '../../../../common/repositories/tenant-aware.repository';
+} from '../../../common/repositories/tenant-aware.repository';
 import { HomepageSectionEntity } from '../entities/homepage-section.entity';
 import type { SectionType } from '../types/section-payload.types';
 
@@ -94,6 +94,44 @@ export class HomepageSectionRepository
           .execute();
       }
     });
+  }
+
+  /**
+   * Updates a single section by id within a tenant.
+   */
+  async updateById(
+    id:       string,
+    data:     Partial<HomepageSectionEntity>,
+    tenantId: string,
+  ): Promise<HomepageSectionEntity> {
+    await this.entityManager
+      .createQueryBuilder()
+      .update(HomepageSectionEntity)
+      .set({ ...data, updatedAt: new Date() })
+      .where('id = :id AND tenantId = :tenantId AND isDeleted = false', { id, tenantId })
+      .execute();
+
+    const updated = await this.scopedQb('hs', tenantId)
+      .andWhere('hs.id = :id', { id })
+      .getOne();
+
+    if (!updated) {
+      const { NotFoundException } = await import('@nestjs/common');
+      throw new NotFoundException(`HomepageSection ${id} not found`);
+    }
+    return updated;
+  }
+
+  /**
+   * Soft-deletes a single section by id within a tenant.
+   */
+  async softDelete(id: string, tenantId: string): Promise<void> {
+    await this.entityManager
+      .createQueryBuilder()
+      .update(HomepageSectionEntity)
+      .set({ isDeleted: true, deletedAt: new Date() })
+      .where('id = :id AND tenantId = :tenantId AND isDeleted = false', { id, tenantId })
+      .execute();
   }
 
   /**
