@@ -11,8 +11,7 @@ import { PasswordService }  from './services/password.service';
 import { AuthRepository }   from './repositories/auth.repository';
 import { JwtStrategy }      from './strategies/jwt.strategy';
 
-import { IdentityEntity }     from '../identity/entities/identity.entity';
-import { IdentityRepository } from '../identity/repositories/identity.repository';
+import { IdentityModule }     from '../identity/identity.module';
 
 /**
  * AuthModule — the authentication and authorisation foundation.
@@ -43,7 +42,7 @@ import { IdentityRepository } from '../identity/repositories/identity.repository
       }),
     }),
 
-    TypeOrmModule.forFeature([IdentityEntity]),
+    IdentityModule,
   ],
 
   controllers: [AuthController],
@@ -54,7 +53,6 @@ import { IdentityRepository } from '../identity/repositories/identity.repository
     PasswordService,
     AuthRepository,
     JwtStrategy,
-    IdentityRepository,
   ],
 
   exports: [

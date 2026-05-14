@@ -45,6 +45,7 @@ import { TenantResolverMiddleware }  from '../../common/middleware/tenant-resolv
   exports: [
     TenantService,
     TenantCacheService,
+    TenantRepository,
     TenantStatusGuard,
     PlanLimitGuard,
     RequestContextProvider,

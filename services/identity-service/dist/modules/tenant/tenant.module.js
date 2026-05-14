@@ -63,6 +63,7 @@ exports.TenantModule = TenantModule = __decorate([
         exports: [
             tenant_service_1.TenantService,
             tenant_cache_service_1.TenantCacheService,
+            tenant_repository_1.TenantRepository,
             tenant_status_guard_1.TenantStatusGuard,
             plan_limit_guard_1.PlanLimitGuard,
             request_context_provider_1.RequestContextProvider,

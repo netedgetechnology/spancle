@@ -6,6 +6,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { AuthModule }        from './modules/auth/auth.module';
+import { IdentityModule }    from './modules/identity/identity.module';
 import { UserModule }        from './modules/user/user.module';
 import { RoleModule }        from './modules/role/role.module';
 import { TenantModule }      from './modules/tenant/tenant.module';
@@ -79,6 +80,7 @@ import { TenantContextInterceptor } from './common/interceptors/tenant-context.i
     // Domain modules
     TenantModule,
     AuthModule,
+    IdentityModule,
     UserModule,
     RoleModule,
     OnboardingModule,

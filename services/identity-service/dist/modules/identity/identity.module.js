@@ -38,7 +38,7 @@ exports.IdentityModule = IdentityModule = __decorate([
         ],
         controllers: [identity_controller_1.IdentityController],
         providers: [identity_service_1.IdentityService, identity_repository_1.IdentityRepository],
-        exports: [identity_service_1.IdentityService, jwt_1.JwtModule],
+        exports: [identity_service_1.IdentityService, identity_repository_1.IdentityRepository, jwt_1.JwtModule],
     })
 ], IdentityModule);
 //# sourceMappingURL=identity.module.js.map

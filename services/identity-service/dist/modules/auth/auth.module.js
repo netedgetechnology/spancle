@@ -11,15 +11,13 @@ const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const passport_1 = require("@nestjs/passport");
 const config_1 = require("@nestjs/config");
-const typeorm_1 = require("@nestjs/typeorm");
 const auth_controller_1 = require("./controllers/auth.controller");
 const auth_service_1 = require("./services/auth.service");
 const token_service_1 = require("./services/token.service");
 const password_service_1 = require("./services/password.service");
 const auth_repository_1 = require("./repositories/auth.repository");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
-const identity_entity_1 = require("../identity/entities/identity.entity");
-const identity_repository_1 = require("../identity/repositories/identity.repository");
+const identity_module_1 = require("../identity/identity.module");
 /**
  * AuthModule — the authentication and authorisation foundation.
  *
@@ -51,7 +49,7 @@ exports.AuthModule = AuthModule = __decorate([
                     },
                 }),
             }),
-            typeorm_1.TypeOrmModule.forFeature([identity_entity_1.IdentityEntity]),
+            identity_module_1.IdentityModule,
         ],
         controllers: [auth_controller_1.AuthController],
         providers: [
@@ -60,7 +58,6 @@ exports.AuthModule = AuthModule = __decorate([
             password_service_1.PasswordService,
             auth_repository_1.AuthRepository,
             jwt_strategy_1.JwtStrategy,
-            identity_repository_1.IdentityRepository,
         ],
         exports: [
             auth_service_1.AuthService,

@@ -14,6 +14,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const throttler_1 = require("@nestjs/throttler");
 const core_1 = require("@nestjs/core");
 const auth_module_1 = require("./modules/auth/auth.module");
+const identity_module_1 = require("./modules/identity/identity.module");
 const user_module_1 = require("./modules/user/user.module");
 const role_module_1 = require("./modules/role/role.module");
 const tenant_module_1 = require("./modules/tenant/tenant.module");
@@ -92,6 +93,7 @@ exports.AppModule = AppModule = __decorate([
             // Domain modules
             tenant_module_1.TenantModule,
             auth_module_1.AuthModule,
+            identity_module_1.IdentityModule,
             user_module_1.UserModule,
             role_module_1.RoleModule,
             onboarding_module_1.OnboardingModule,

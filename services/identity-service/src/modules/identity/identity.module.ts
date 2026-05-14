@@ -27,6 +27,6 @@ import { IdentityEntity } from './entities/identity.entity';
   ],
   controllers: [IdentityController],
   providers: [IdentityService, IdentityRepository],
-  exports: [IdentityService, JwtModule],
+  exports: [IdentityService, IdentityRepository, JwtModule],
 })
 export class IdentityModule {}
