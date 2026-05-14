@@ -1,0 +1,37 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+require("reflect-metadata");
+const core_1 = require("@nestjs/core");
+const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
+const app_module_1 = require("./app.module");
+const http_exception_filter_1 = require("./common/filters/http-exception.filter");
+async function bootstrap() {
+    const app = await core_1.NestFactory.create(app_module_1.AppModule, {
+        logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+        bufferLogs: true,
+    });
+    const config = app.get(config_1.ConfigService);
+    const port = config.get('PORT', 3001);
+    // API versioning
+    app.enableVersioning({ type: common_1.VersioningType.URI, defaultVersion: '1' });
+    // Global prefix
+    app.setGlobalPrefix('api');
+    // Validation — strict, no unknown properties pass through
+    app.useGlobalPipes(new common_1.ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: false },
+    }));
+    // Global exception filter
+    app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter());
+    // CORS — restricted in production via config
+    app.enableCors({
+        origin: config.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
+        credentials: true,
+    });
+    await app.listen(port);
+}
+void bootstrap();
+//# sourceMappingURL=main.js.map
