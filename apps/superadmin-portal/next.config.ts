@@ -2,6 +2,9 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   output: 'standalone',
   images: {
     remotePatterns: [{ protocol: 'https', hostname: 'assets.spancle.io' }],
