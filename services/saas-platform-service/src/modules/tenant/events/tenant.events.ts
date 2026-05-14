@@ -10,13 +10,12 @@ export enum TenantEvents {
 }
 
 export interface TenantEventPayload {
-  tenantId: string;
-  tenantId: string;
-  actorId?: string;
+  tenantId:   string;
+  actorId?:   string;
   timestamp?: string;
 }
 
 export interface TenantStatusChangedPayload extends TenantEventPayload {
   previousStatus: string;
-  newStatus: string;
+  newStatus:      string;
 }

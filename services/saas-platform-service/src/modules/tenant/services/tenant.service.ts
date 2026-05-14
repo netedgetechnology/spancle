@@ -18,7 +18,7 @@ export class TenantService {
   async create(dto: CreateTenantDto, tenantId: string): Promise<TenantEntity> {
     this.logger.log(`Creating tenant -- tenant: ${tenantId}`);
     const entity = await this.tenantRepository.create({ ...dto, tenantId });
-    await this.eventEmitter.emitAsync(TenantEvents.CREATED, { tenantId, tenantId: entity.id });
+    await this.eventEmitter.emitAsync(TenantEvents.CREATED, { tenantId: entity.id });
     return entity;
   }
 
@@ -35,13 +35,13 @@ export class TenantService {
   async update(id: string, dto: UpdateTenantDto, tenantId: string): Promise<TenantEntity> {
     await this.findOne(id, tenantId);
     const updated = await this.tenantRepository.update(id, tenantId, dto);
-    await this.eventEmitter.emitAsync(TenantEvents.UPDATED, { tenantId, tenantId: id });
+    await this.eventEmitter.emitAsync(TenantEvents.UPDATED, { tenantId: id });
     return updated;
   }
 
   async remove(id: string, tenantId: string): Promise<void> {
     await this.findOne(id, tenantId);
     await this.tenantRepository.softDelete(id, tenantId);
-    await this.eventEmitter.emitAsync(TenantEvents.DELETED, { tenantId, tenantId: id });
+    await this.eventEmitter.emitAsync(TenantEvents.DELETED, { tenantId: id });
   }
 }
