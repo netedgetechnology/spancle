@@ -1,6 +1,6 @@
-import React from 'react';
 'use client';
 
+import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Input, Select, Badge } from '@spancle/ui-kit';
 import { cn } from '@/lib/utils/cn';

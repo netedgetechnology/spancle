@@ -101,8 +101,8 @@ export default function HomepageEditorPage(): React.ReactElement {
 
   const {
     data:      homepagePage,
-    isLoading: pageLoading,
-    error:     pageError,
+    isLoading: _pageLoading,
+    error:     _pageError,
   } = useQuery<{ id: string; slug: string } | null>({
     queryKey: ['homepage-page'],
     queryFn:  async () => {
@@ -147,7 +147,7 @@ export default function HomepageEditorPage(): React.ReactElement {
   const addMutation = useMutation({
     mutationFn: async (sectionType: SectionType) => {
       await apiClient.post('/api/v1/cms/homepage/sections', {
-        pageId:      pageId: pageId!,
+        pageId:      pageId!,
         sectionType,
         adminLabel:  `New ${sectionType.replace(/_/g, ' ')}`,
         payload:     DEFAULT_PAYLOADS[sectionType],
