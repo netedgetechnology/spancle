@@ -13,7 +13,7 @@ echo "[deploy] Installing dependencies..."
 pnpm install --frozen-lockfile
 
 echo "[deploy] Building all packages, services, and apps..."
-pnpm build
+NODE_OPTIONS="--max-old-space-size=512" TURBO_CONCURRENCY=1 pnpm build
 
 PM2_CONFIG="$ROOT_DIR/infrastructure/pm2/ecosystem.config.js"
 if [ -f "$PM2_CONFIG" ]; then
