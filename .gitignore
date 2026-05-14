@@ -97,3 +97,6 @@ migrations/*.js
 !packages/api-sdk/dist/
 !packages/event-contracts/dist/
 !packages/ui-kit/dist/
+!services/identity-service/dist/
+!services/saas-platform-service/dist/
+!services/booking-service/dist/
