@@ -1,6 +1,6 @@
 import { JwtPayloadSchema } from '@spancle/types';
 import { JWT } from '@spancle/constants';
-import type { DecodedToken, TokenValidationResult } from './token.types';
+import type { TokenValidationResult } from './token.types';
 
 /**
  * TokenUtils — stateless token helpers.

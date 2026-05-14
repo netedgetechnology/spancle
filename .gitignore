@@ -89,3 +89,6 @@ migrations/*.js
 *.tar.gz
 .vercel
 .netlify
+
+# Allow compiled package dist outputs needed at runtime
+!packages/auth-sdk/dist/
