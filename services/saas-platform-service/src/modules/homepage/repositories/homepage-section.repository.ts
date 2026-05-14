@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import {
@@ -58,6 +58,32 @@ export class HomepageSectionRepository
       .andWhere('hs.sectionType = :sectionType', { sectionType })
       .orderBy('hs.sortOrder', 'ASC')
       .getMany();
+  }
+
+  /**
+   * Returns a single section by id within a tenant.
+   * Throws NotFoundException if not found or already deleted.
+   */
+  async findByIdOrFail(id: string, tenantId: string): Promise<HomepageSectionEntity> {
+    const section = await this.scopedQb('hs', tenantId)
+      .andWhere('hs.id = :id', { id })
+      .getOne();
+
+    if (!section) {
+      throw new NotFoundException(`HomepageSection ${id} not found`);
+    }
+    return section;
+  }
+
+  /**
+   * Creates and saves a new section. tenantId must be set on data before calling.
+   */
+  async insert(data: Partial<HomepageSectionEntity>, tenantId?: string): Promise<HomepageSectionEntity> {
+    const entity = this.entityManager.create(
+      HomepageSectionEntity,
+      { ...data, ...(tenantId ? { tenantId } : {}) } as HomepageSectionEntity,
+    );
+    return this.entityManager.save(HomepageSectionEntity, entity);
   }
 
   /**
