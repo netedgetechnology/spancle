@@ -100,3 +100,5 @@ migrations/*.js
 !services/identity-service/dist/
 !services/saas-platform-service/dist/
 !services/booking-service/dist/
+ecosystem.config.js
+.env.production
