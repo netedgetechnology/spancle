@@ -13,20 +13,15 @@ async function bootstrap() {
     });
     const config = app.get(config_1.ConfigService);
     const port = config.get('PORT', 3001);
-    // API versioning
     app.enableVersioning({ type: common_1.VersioningType.URI, defaultVersion: '1' });
-    // Global prefix
     app.setGlobalPrefix('api');
-    // Validation — strict, no unknown properties pass through
     app.useGlobalPipes(new common_1.ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
         transform: true,
         transformOptions: { enableImplicitConversion: false },
     }));
-    // Global exception filter
     app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter());
-    // CORS — restricted in production via config
     app.enableCors({
         origin: config.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
         credentials: true,

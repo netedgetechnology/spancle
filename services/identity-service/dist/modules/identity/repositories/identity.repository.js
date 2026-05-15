@@ -22,11 +22,7 @@ let IdentityRepository = IdentityRepository_1 = class IdentityRepository {
         this.repo = repo;
         this.logger = new common_1.Logger(IdentityRepository_1.name);
     }
-    /**
-     * All queries MUST filter by tenantId — no cross-tenant reads permitted.
-     */
     async findByEmailAndTenant(email, tenantId) {
-        // passwordHash selected explicitly — normally excluded via select: false
         return this.repo
             .createQueryBuilder('identity')
             .addSelect('identity.passwordHash')
@@ -46,9 +42,6 @@ let IdentityRepository = IdentityRepository_1 = class IdentityRepository {
         const record = this.repo.create(entity);
         return this.repo.save(record);
     }
-    /**
-     * Records a successful login — resets failure counters, updates lastLoginAt.
-     */
     async updateLoginSuccess(id, tenantId) {
         await this.repo.update({ id, tenantId }, {
             lastLoginAt: new Date(),
@@ -56,29 +49,16 @@ let IdentityRepository = IdentityRepository_1 = class IdentityRepository {
             lockedUntil: null,
         });
     }
-    /**
-     * Records a failed login attempt — increments counter, optionally sets lock.
-     */
     async updateLoginFailure(id, tenantId, attemptCount, lockedUntil) {
         await this.repo.update({ id, tenantId }, { failedLoginAttempts: attemptCount, lockedUntil });
     }
-    /**
-     * Updates the password hash and sets passwordChangedAt timestamp.
-     */
     async updatePassword(id, tenantId, newHash) {
         await this.repo.update({ id, tenantId }, {
             passwordHash: newHash,
             passwordChangedAt: new Date(),
         });
     }
-    /**
-     * Resolves the system role for an identity by joining to the user and role tables.
-     * Returns null if no role is assigned — caller defaults to 'VIEWER'.
-     *
-     * TODO: Join to user → role in Sprint 2 when UserModule is wired.
-     */
     async getRoleForIdentity(identityId, _tenantId) {
-        // Placeholder — returns null until UserModule role join is implemented
         this.logger.debug(`getRoleForIdentity called for ${identityId} — returning null (Sprint 2)`);
         return null;
     }

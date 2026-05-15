@@ -13,16 +13,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PricingRuleValidationService = void 0;
 const common_1 = require("@nestjs/common");
 const pricing_rule_repository_1 = require("../repositories/pricing-rule.repository");
-/**
- * Allowed (ruleType, modifierType) combinations:
- *
- *   base    → percentage | fixed | absolute  (sets or adjusts the base)
- *   peak    → percentage | fixed             (surcharge, not price override)
- *   weekend → percentage | fixed
- *   holiday → percentage | fixed
- *   member  → percentage | fixed             (discount — negative values expected)
- *   custom  → percentage | fixed | absolute  (full flexibility)
- */
 const ALLOWED_MODIFIER_TYPES = {
     base: ['percentage', 'fixed', 'absolute'],
     peak: ['percentage', 'fixed'],
@@ -31,33 +21,11 @@ const ALLOWED_MODIFIER_TYPES = {
     member: ['percentage', 'fixed'],
     custom: ['percentage', 'fixed', 'absolute'],
 };
-/**
- * PricingRuleValidationService — validates pricing rules before persistence.
- *
- * Runs on CREATE and UPDATE. Surfaces:
- *   - Hard errors   → operation rejected (400 / 422)
- *   - Soft warnings → operation allowed, warnings returned in response
- *
- * Validation categories:
- *   1. Semantic validation    — ruleType / modifierType compatibility
- *   2. Value range validation — percentage bounds, date ordering, time ordering
- *   3. Scope consistency     — scope enum matches the FK provided
- *   4. Conflict detection    — checks against existing active rules for this tenant
- */
 let PricingRuleValidationService = PricingRuleValidationService_1 = class PricingRuleValidationService {
     constructor(pricingRuleRepository) {
         this.pricingRuleRepository = pricingRuleRepository;
         this.logger = new common_1.Logger(PricingRuleValidationService_1.name);
     }
-    /**
-     * Full validation pass for a pricing rule.
-     * Throws BadRequestException on any ERROR-level finding.
-     * Returns ConflictReport containing warnings (non-fatal).
-     *
-     * @param candidate  The rule data to validate (may be partial for updates)
-     * @param tenantId   Tenant context
-     * @param excludeId  ID to exclude from conflict queries (for updates)
-     */
     async validate(candidate, tenantId, excludeId) {
         const errors = [];
         const warnings = [];
@@ -67,27 +35,19 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             else
                 warnings.push(entry);
         };
-        // 1. Semantic: ruleType + modifierType compatibility
         this.validateSemantics(candidate, add);
-        // 2. Value ranges
         this.validateValueRanges(candidate, add);
-        // 3. Scope FK consistency
         this.validateScopeConsistency(candidate, add);
-        // 4. Time window ordering
         this.validateTimeWindow(candidate, add);
-        // 5. Date range ordering
         this.validateDateRange(candidate, add);
-        // Fail fast on structural errors before hitting the DB
         if (errors.length > 0) {
             throw new common_1.BadRequestException({
                 message: 'Pricing rule validation failed',
                 errors: errors.map((e) => ({ code: e.code, message: e.message })),
             });
         }
-        // 6. Conflict detection against existing rules (DB queries)
         await this.detectConflicts(candidate, tenantId, excludeId, add);
-        // Throw on any DB-derived errors too
-        const errorConflicts = errors; // errors array is mutated by add()
+        const errorConflicts = errors;
         if (errors.length > 0) {
             throw new common_1.UnprocessableEntityException({
                 message: 'Pricing rule conflicts with existing rules',
@@ -105,11 +65,10 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             warnings,
         };
     }
-    // ── 1. Semantic validation ────────────────────────────────────────────────
     validateSemantics(candidate, add) {
         const { ruleType, modifierType } = candidate;
         if (!ruleType || !modifierType)
-            return; // partial update — skip
+            return;
         const allowed = ALLOWED_MODIFIER_TYPES[ruleType] ?? [];
         if (!allowed.includes(modifierType)) {
             add({
@@ -119,8 +78,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
                     `Allowed for ${ruleType}: ${allowed.join(', ')}.`,
             });
         }
-        // Member discount with absolute = semantically wrong (would set a fixed absolute price
-        // rather than apply a discount on top of the base)
         if (ruleType === 'member' && modifierType === 'absolute') {
             add({
                 level: 'error',
@@ -130,13 +87,11 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             });
         }
     }
-    // ── 2. Value range validation ─────────────────────────────────────────────
     validateValueRanges(candidate, add) {
         const { modifierType, modifierValue, ruleType } = candidate;
         if (modifierValue === undefined || modifierValue === null)
             return;
         if (modifierType === 'percentage') {
-            // Member discounts should be negative (−100 floor); surcharges 0–10000%
             if (ruleType === 'member' && modifierValue > 0) {
                 add({
                     level: 'warning',
@@ -173,7 +128,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             }
         }
     }
-    // ── 3. Scope FK consistency ───────────────────────────────────────────────
     validateScopeConsistency(candidate, add) {
         const { scope, branchId, sportId, courtId } = candidate;
         if (!scope)
@@ -192,7 +146,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
                         `Provide a valid ${scopeName}Id when scope = "${scopeName}".`,
                 });
             }
-            // Warn if a FK is set for a scope it doesn't belong to
             if (!required && fkValue && scope !== 'tenant') {
                 add({
                     level: 'warning',
@@ -203,7 +156,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             }
         }
     }
-    // ── 4. Time window validation ─────────────────────────────────────────────
     validateTimeWindow(candidate, add) {
         const { timeStart, timeEnd } = candidate;
         if (!timeStart || !timeEnd)
@@ -230,7 +182,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
                 message: `timeStart (${timeStart}) must be before timeEnd (${timeEnd}).`,
             });
         }
-        // Warn if the window is shorter than 30 minutes (probably a typo)
         const [sh, sm] = timeStart.split(':').map(Number);
         const [eh, em] = timeEnd.split(':').map(Number);
         const startMins = sh * 60 + sm;
@@ -244,7 +195,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             });
         }
     }
-    // ── 5. Date range validation ──────────────────────────────────────────────
     validateDateRange(candidate, add) {
         const { validFrom, validUntil } = candidate;
         if (!validFrom || !validUntil)
@@ -257,16 +207,14 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             });
         }
     }
-    // ── 6. Conflict detection ─────────────────────────────────────────────────
     async detectConflicts(candidate, tenantId, excludeId, add) {
         const { ruleType, scope } = candidate;
         if (!ruleType)
             return;
-        // Fetch all active rules of the same type for this tenant
         const existingRules = await this.pricingRuleRepository.findAll(tenantId, false);
         const peers = existingRules.filter((r) => {
             if (excludeId && r.id === excludeId)
-                return false; // skip self on update
+                return false;
             return r.ruleType === ruleType;
         });
         for (const peer of peers) {
@@ -278,7 +226,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
                 continue;
             if (!this.daysOfWeekOverlap(candidate, peer))
                 continue;
-            // Two BASE rules with overlapping applicability — only one can win
             if (ruleType === 'base') {
                 add({
                     level: 'error',
@@ -293,7 +240,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
                 });
                 continue;
             }
-            // Two ABSOLUTE custom rules — both would try to set the final price
             if (ruleType === 'custom' &&
                 candidate.modifierType === 'absolute' &&
                 peer.modifierType === 'absolute') {
@@ -310,7 +256,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
                 });
                 continue;
             }
-            // Same priority, same type — ambiguous ordering (warning only)
             const candidatePriority = candidate.priority ?? 0;
             if (peer.priority === candidatePriority && ruleType !== 'base') {
                 add({
@@ -326,16 +271,9 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             }
         }
     }
-    // ── Overlap helpers ───────────────────────────────────────────────────────
-    /**
-     * Returns true if the two rules could apply to the same slot
-     * based on their scope and scope FKs.
-     */
     scopesCouldOverlap(a, b) {
-        // tenant-scoped rules overlap with everything
         if (a.scope === 'tenant' || b.scope === 'tenant')
             return true;
-        // same scope type + same FK
         if (a.scope === b.scope) {
             if (a.scope === 'branch')
                 return a.branchId === b.branchId;
@@ -344,14 +282,12 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
             if (a.scope === 'court')
                 return a.courtId === b.courtId;
         }
-        // branch + court: court rule overrides but could overlap semantically
         if (a.scope === 'branch' && b.scope === 'court' && b.branchId === a.branchId)
             return true;
         if (a.scope === 'court' && b.scope === 'branch' && a.branchId === b.branchId)
             return true;
         return false;
     }
-    /** Returns true if the two date ranges overlap (open-ended = infinite). */
     dateRangesOverlap(a, b) {
         const aFrom = a.validFrom ?? '0001-01-01';
         const aUntil = a.validUntil ?? '9999-12-31';
@@ -359,7 +295,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
         const bUntil = b.validUntil ?? '9999-12-31';
         return aFrom <= bUntil && aUntil >= bFrom;
     }
-    /** Returns true if the two time windows overlap (null = all day). */
     timeWindowsOverlap(a, b) {
         const aStart = a.timeStart ?? '00:00';
         const aEnd = a.timeEnd ?? '24:00';
@@ -367,7 +302,6 @@ let PricingRuleValidationService = PricingRuleValidationService_1 = class Pricin
         const bEnd = b.timeEnd ?? '24:00';
         return aStart < bEnd && aEnd > bStart;
     }
-    /** Returns true if the two day-of-week sets share any day. */
     daysOfWeekOverlap(a, b) {
         const ALL_DAYS = new Set([
             'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',

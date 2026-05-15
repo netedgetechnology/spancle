@@ -17,25 +17,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const ioredis_1 = require("ioredis");
 const constants_1 = require("@spancle/constants");
 const TENANT_CACHE_PREFIX = 'spancle:tenant_runtime:';
-const TENANT_CACHE_TTL = constants_1.REDIS_TTL_SECONDS.CACHE_MEDIUM; // 5 minutes
-/**
- * TenantCacheService — Redis-backed cache for resolved TenantContextRuntime.
- *
- * Why cache:
- *   - Every authenticated request triggers tenant resolution
- *   - Without cache: 1 DB round-trip per request per tenant
- *   - With cache: resolved in <1ms from Redis DB0
- *
- * Invalidation triggers (all flush the tenant's cache entry):
- *   - TENANT_UPDATED         → settings may have changed
- *   - TENANT_TIER_CHANGED    → plan limits changed (critical)
- *   - TENANT_ACTIVATED       → status changed
- *   - TENANT_SUSPENDED       → status changed (security critical — immediate flush)
- *   - TENANT_TERMINATED      → status changed
- *
- * TTL: 5 minutes for normal status. Suspended/terminated tenants cached
- * for only 60 seconds — ensures re-activation propagates quickly.
- */
+const TENANT_CACHE_TTL = constants_1.REDIS_TTL_SECONDS.CACHE_MEDIUM;
 let TenantCacheService = TenantCacheService_1 = class TenantCacheService {
     constructor(config) {
         this.config = config;
@@ -52,7 +34,6 @@ let TenantCacheService = TenantCacheService_1 = class TenantCacheService {
         });
         this.redis.on('error', (err) => this.logger.error(`TenantCache Redis error: ${String(err)}`));
     }
-    // ── Cache operations ───────────────────────────────────────────────────────
     async get(tenantId) {
         const key = this.key(tenantId);
         const data = await this.redis.get(key);
@@ -60,7 +41,6 @@ let TenantCacheService = TenantCacheService_1 = class TenantCacheService {
             return null;
         try {
             const parsed = JSON.parse(data);
-            // Rehydrate Date — JSON.parse gives a string
             return { ...parsed, resolvedAt: new Date(parsed.resolvedAt), fromCache: true };
         }
         catch (err) {
@@ -90,12 +70,10 @@ let TenantCacheService = TenantCacheService_1 = class TenantCacheService {
         await pipeline.exec();
         this.logger.log(`Bulk cache invalidated — ${tenantIds.length} tenants`);
     }
-    // ── Event-driven invalidation ──────────────────────────────────────────────
     async onTenantUpdated(payload) {
         await this.invalidate(payload.tenantId);
     }
     async onTierChanged(payload) {
-        // Tier change affects plan limits — immediate flush required
         await this.invalidate(payload.tenantId);
         this.logger.log(`Tier changed — flushed tenant cache: ${payload.tenantId}`);
     }
@@ -103,7 +81,6 @@ let TenantCacheService = TenantCacheService_1 = class TenantCacheService {
         await this.invalidate(payload.tenantId);
     }
     async onTenantSuspended(payload) {
-        // Suspension is security-critical — must propagate within one cache TTL
         await this.invalidate(payload.tenantId);
         this.logger.warn(`Tenant suspended — flushed tenant cache: ${payload.tenantId}`);
     }
@@ -111,16 +88,14 @@ let TenantCacheService = TenantCacheService_1 = class TenantCacheService {
         await this.invalidate(payload.tenantId);
         this.logger.warn(`Tenant terminated — flushed tenant cache: ${payload.tenantId}`);
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
     key(tenantId) {
         return `${TENANT_CACHE_PREFIX}${tenantId}`;
     }
     resolveTtl(runtime) {
-        // Degraded tenants get a short TTL so re-activation propagates quickly
         if (runtime.status === 'suspended' || runtime.status === 'terminated') {
-            return constants_1.REDIS_TTL_SECONDS.CACHE_SHORT; // 60s
+            return constants_1.REDIS_TTL_SECONDS.CACHE_SHORT;
         }
-        return TENANT_CACHE_TTL; // 5 min
+        return TENANT_CACHE_TTL;
     }
 };
 exports.TenantCacheService = TenantCacheService;

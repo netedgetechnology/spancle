@@ -11,47 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookingEntity = void 0;
 const typeorm_1 = require("typeorm");
-// ── Entity ─────────────────────────────────────────────────────────────────
-/**
- * BookingEntity — a confirmed or in-progress reservation of one or more slots.
- *
- * Architecture decisions:
- *
- *   - A booking may span multiple slots (multi-slot booking).
- *     The slot IDs are stored as JSONB array (slotIds) rather than a
- *     join table — simplifies queries for single-slot bookings (the
- *     common case) and avoids a booking_slots join table.
- *     When any slot in slotIds transitions to 'booked', it FK-references
- *     this booking's id via slots.booking_id.
- *
- *   - Customer data is denormalised onto the booking row for display
- *     without a user service lookup. It is also the source of truth for
- *     guest bookings (no user account).
- *
- *   - Pricing is snapshotted at booking time:
- *       finalPriceMinor = the total amount the customer pays / paid.
- *       It equals the sum of resolved prices for all slotIds at booking
- *       creation. Subsequent pricing rule changes do not affect it.
- *
- *   - isMember: passed through to PricingService at slot generation time
- *     so that member discounts are applied correctly to the booking total.
- *
- *   - All cross-service FKs (branchId, courtId, sportId, userId) are plain
- *     UUIDs — no DB-level FK constraints. Validated at service layer.
- *
- *   - Soft-delete is supported for GDPR erasure requests.
- *     Hard deletion is not exposed via any API.
- *
- * Table: bookings
- * Indices:
- *   (tenant_id)                    — RLS baseline
- *   (tenant_id, status)            — status filtering
- *   (tenant_id, branch_id)         — branch-level reports
- *   (tenant_id, court_id)          — court occupancy queries
- *   (tenant_id, user_id)           — customer booking history
- *   (tenant_id, reference)         — unique booking reference lookup
- *   (tenant_id, created_at)        — chronological listing
- */
 let BookingEntity = class BookingEntity {
 };
 exports.BookingEntity = BookingEntity;

@@ -24,13 +24,11 @@ let BlogService = BlogService_1 = class BlogService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(BlogService_1.name);
     }
-    // ── Posts ──────────────────────────────────────────────────────────────────
     async createPost(dto, tenantId, actorId) {
         const slugTaken = await this.postRepository.isSlugTaken(dto.slug, tenantId);
         if (slugTaken)
             throw new common_1.ConflictException(`Blog post slug "${dto.slug}" already exists`);
         const status = dto.status ?? 'draft';
-        // Validate scheduling: scheduled posts must have a future publishedAt
         if (status === 'scheduled') {
             if (!dto.publishedAt)
                 throw new common_1.BadRequestException('Scheduled posts require a publishedAt date');
@@ -92,7 +90,6 @@ let BlogService = BlogService_1 = class BlogService {
             if (taken)
                 throw new common_1.ConflictException(`Blog post slug "${dto.slug}" already exists`);
         }
-        // Validate scheduling transition
         const newStatus = dto.status;
         if (newStatus === 'scheduled') {
             const scheduledDate = dto.publishedAt ? new Date(dto.publishedAt) : existing.publishedAt;
@@ -121,13 +118,7 @@ let BlogService = BlogService_1 = class BlogService {
         });
         return updated;
     }
-    /**
-     * Bulk-updates the status of multiple posts.
-     * Each post emits its own event — no aggregate events.
-     * Sprint 2: wrap in a queue job for large batches.
-     */
     async bulkUpdateStatus(dto, tenantId, actorId) {
-        // Validate all IDs belong to this tenant before updating
         for (const id of dto.ids) {
             await this.postRepository.findByIdOrFail(id, tenantId);
         }
@@ -145,11 +136,6 @@ let BlogService = BlogService_1 = class BlogService {
         this.logger.log(`Bulk status update: ${count} posts → ${dto.status} by ${actorId} tenant=${tenantId}`);
         return count;
     }
-    /**
-     * Publishes all scheduled posts whose publishedAt has passed.
-     * Called by a @Cron() task in Sprint 2.
-     * Safe to call concurrently — uses status='scheduled' guard.
-     */
     async publishScheduled() {
         const due = await this.postRepository.findScheduledToPublish();
         if (due.length === 0)
@@ -174,7 +160,6 @@ let BlogService = BlogService_1 = class BlogService {
             tenantId, postId: id, actorId, timestamp: new Date().toISOString(),
         });
     }
-    // ── Categories ─────────────────────────────────────────────────────────────
     async createCategory(dto, tenantId, actorId) {
         const slugTaken = await this.categoryRepository.isSlugTaken(dto.slug, tenantId);
         if (slugTaken)
@@ -218,7 +203,6 @@ let BlogService = BlogService_1 = class BlogService {
         ]);
         return categories.map((c) => Object.assign(c, { postCount: counts[c.id] ?? 0 }));
     }
-    // ── Helpers ────────────────────────────────────────────────────────────────
     estimateReadingTime(content) {
         if (!content)
             return 1;

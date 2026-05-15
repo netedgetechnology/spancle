@@ -11,19 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * SubscriptionEntity — a tenant's subscription to a Package.
- *
- * One active subscription per tenant at any time.
- * Historical subscriptions are kept (is_deleted = false, status = cancelled/expired).
- *
- * Lifecycle:
- *   new tenant → trialing (if trialDays > 0) or active (free tier)
- *   trial ends → active (if payment provided) or expired (no payment)
- *   active     → cancelled (by tenant request)
- *   active     → past_due (payment failure)
- *   past_due   → active (payment recovered) or expired (grace period lapsed)
- */
 let SubscriptionEntity = class SubscriptionEntity {
 };
 exports.SubscriptionEntity = SubscriptionEntity;

@@ -11,26 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HolidayEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * HolidayEntity — a public holiday or custom closure date.
- *
- * Purpose:
- *   1. Trigger holiday pricing rules in PricingService
- *   2. Optionally skip slot generation on these dates (controlled per template)
- *   3. Surface in the admin calendar as highlighted dates
- *
- * Recurrence:
- *   - isRecurring = true: the holiday repeats every year on the same date
- *     (e.g. Christmas Day — Dec 25). The year in `date` is ignored.
- *   - isRecurring = false: one-off holiday on a specific date with year.
- *
- * System holidays:
- *   Seeded by HolidayService.seedSystemHolidays() for common locales.
- *   Tenants can override a system holiday by creating a tenant-scoped
- *   record with the same date and isActive=false (disables the system one).
- *
- * Table: holidays
- */
 let HolidayEntity = class HolidayEntity {
 };
 exports.HolidayEntity = HolidayEntity;

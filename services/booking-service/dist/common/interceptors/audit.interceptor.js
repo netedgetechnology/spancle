@@ -27,7 +27,6 @@ let AuditInterceptor = class AuditInterceptor {
     write(req, ctx, result, start, errorStatus) {
         const resp = ctx.switchToHttp().getResponse();
         const pathParts = req.path.split('/').filter(Boolean);
-        // Path shape: /api/v1/{resource}/{id?}/{sub?}
         const resource = pathParts[2] ?? 'unknown';
         const resourceId = pathParts[3] && UUID_RE.test(pathParts[3]) ? pathParts[3] : undefined;
         const record = {

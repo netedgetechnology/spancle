@@ -24,7 +24,6 @@ let MenuService = MenuService_1 = class MenuService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(MenuService_1.name);
     }
-    // ── Menus ──────────────────────────────────────────────────────────────────
     async create(dto, tenantId, actorId) {
         const handleTaken = await this.menuRepository.isHandleTaken(dto.handle, tenantId);
         if (handleTaken)
@@ -68,7 +67,6 @@ let MenuService = MenuService_1 = class MenuService {
             tenantId, menuId: id, actorId, timestamp: new Date().toISOString(),
         });
     }
-    // ── Menu Items ─────────────────────────────────────────────────────────────
     async addItem(menuId, dto, tenantId, actorId) {
         await this.menuRepository.findByIdOrFail(menuId, tenantId);
         if (dto.parentId) {
@@ -110,7 +108,6 @@ let MenuService = MenuService_1 = class MenuService {
         await this.menuRepository.findByIdOrFail(menuId, tenantId);
         return this.menuItemRepository.findByMenuId(menuId, tenantId);
     }
-    // ── Private helpers ─────────────────────────────────────────────────────────
     async validateDepth(parentId, tenantId, currentDepth = 1) {
         if (currentDepth >= MAX_MENU_DEPTH) {
             throw new common_1.BadRequestException(`Menu nesting cannot exceed ${MAX_MENU_DEPTH} levels`);

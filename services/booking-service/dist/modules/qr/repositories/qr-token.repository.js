@@ -26,7 +26,6 @@ let QrTokenRepository = QrTokenRepository_1 = class QrTokenRepository {
     }
     get repo() { return this.dataSource.getRepository(qr_token_entity_1.QrTokenEntity); }
     get scanRepo() { return this.dataSource.getRepository(qr_scan_log_entity_1.QrScanLogEntity); }
-    // ── Token CRUD ─────────────────────────────────────────────────────────────
     async create(data) {
         return this.repo.save(this.repo.create(data));
     }
@@ -39,10 +38,6 @@ let QrTokenRepository = QrTokenRepository_1 = class QrTokenRepository {
             throw new Error(`QrToken ${id} not found`);
         return t;
     }
-    /**
-     * Primary lookup path — O(1) via UNIQUE index on token_hash.
-     * Called on every scan; must be fast.
-     */
     async findByHash(tokenHash) {
         return this.repo.findOne({ where: { tokenHash } });
     }
@@ -64,10 +59,6 @@ let QrTokenRepository = QrTokenRepository_1 = class QrTokenRepository {
             .orderBy('t.createdAt', 'DESC')
             .getOne();
     }
-    /**
-     * Increments useCount and conditionally marks as 'used' when maxUses reached.
-     * Atomic: uses a single UPDATE with computed status.
-     */
     async recordUsage(id, tenantId, deviceId, scanIp) {
         const now = new Date();
         await this.repo
@@ -89,10 +80,6 @@ let QrTokenRepository = QrTokenRepository_1 = class QrTokenRepository {
     async updateStatus(id, tenantId, status, extra) {
         await this.repo.update({ id, tenantId }, { status, ...extra });
     }
-    /**
-     * Bulk-expires all active tokens whose expiresAt has passed.
-     * Called by a scheduled job.
-     */
     async bulkExpireStale() {
         const result = await this.repo
             .createQueryBuilder()
@@ -103,7 +90,6 @@ let QrTokenRepository = QrTokenRepository_1 = class QrTokenRepository {
             .execute();
         return result.affected ?? 0;
     }
-    // ── Scan log (INSERT only) ─────────────────────────────────────────────────
     async logScan(data) {
         await this.scanRepo.save(this.scanRepo.create(data));
     }

@@ -1,9 +1,4 @@
 "use strict";
-/**
- * Local copy of per-tier default plan limits for saas-platform-service.
- * Source of truth lives in identity-service plan-limits.types — keep in sync.
- * -1 = unlimited (Enterprise tier)
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_PLAN_LIMITS = void 0;
 exports.DEFAULT_PLAN_LIMITS = {

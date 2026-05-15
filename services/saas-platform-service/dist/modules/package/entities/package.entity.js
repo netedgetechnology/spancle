@@ -11,26 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PackageEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * PackageEntity — a platform-level product offering.
- *
- * NOT tenant-scoped — packages are global platform definitions
- * created by superadmins and subscribed to by tenants.
- * Table: `package_definitions` (avoids collision with PostgreSQL reserved word)
- *
- * Architecture:
- *   - `features` JSONB: typed feature flag booleans (mirrors PlanFeatureFlags)
- *   - `limits` JSONB:   typed resource limits (mirrors PlanResourceLimits)
- *   - `metadata` JSONB: arbitrary display/marketing data
- *   - `tierKey`: links to identity-service TenantTier enum (free/starter/etc.)
- *     When a tenant subscribes, their tenant.tier is set to this value.
- *
- * Pricing:
- *   - `priceMonthlyMinorUnits` in minor currency units (pence/cents)
- *   - `priceAnnualMinorUnits`  (annual price, typically discounted)
- *   - `currency` ISO-4217
- *   - `trialDays` — how many days the free trial lasts (0 = no trial)
- */
 let PackageEntity = class PackageEntity {
 };
 exports.PackageEntity = PackageEntity;

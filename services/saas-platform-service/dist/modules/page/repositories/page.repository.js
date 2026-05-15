@@ -57,7 +57,6 @@ let PageRepository = class PageRepository extends tenant_aware_repository_1.Tena
         }
         return (await qb.getCount()) > 0;
     }
-    /** Clears isHomepage on all pages for the tenant before setting a new one */
     async clearHomepage(tenantId) {
         await this.entityManager
             .createQueryBuilder()

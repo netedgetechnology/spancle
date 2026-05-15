@@ -9,14 +9,12 @@ class TenantAwareRepository {
         this.entityName = typeof entity === 'function' ? entity.name : String(entity);
         this.logger = new common_1.Logger(this.entityName + 'Repository');
     }
-    // ── Scoped query builder ────────────────────────────────────────────────────
     scopedQb(alias, tenantId) {
         return this.entityManager
             .createQueryBuilder(this.entity, alias)
             .where(`${alias}.tenantId = :tenantId`, { tenantId })
             .andWhere(`${alias}.isDeleted = false`);
     }
-    // ── Read ────────────────────────────────────────────────────────────────────
     async findAll(tenantId) {
         return this.scopedQb('e', tenantId).getMany();
     }
@@ -35,7 +33,6 @@ class TenantAwareRepository {
     async count(tenantId) {
         return this.scopedQb('e', tenantId).getCount();
     }
-    // ── Write ───────────────────────────────────────────────────────────────────
     async insert(data, tenantId) {
         const row = this.entityManager.create(this.entity, {
             ...data,

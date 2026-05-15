@@ -11,10 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookingLogEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * BookingLogEntity — immutable audit log.
- * INSERT only. No UPDATE, no soft-delete, no deletedAt.
- */
 let BookingLogEntity = class BookingLogEntity {
 };
 exports.BookingLogEntity = BookingLogEntity;

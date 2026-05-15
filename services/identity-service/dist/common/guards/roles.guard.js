@@ -15,19 +15,6 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const auth_sdk_1 = require("@spancle/auth-sdk");
 const roles_decorator_1 = require("../decorators/roles.decorator");
-/**
- * RolesGuard — enforces @Roles() metadata using the stateless RbacEngine.
- *
- * Execution position: after JwtAuthGuard (requires request.user to be populated).
- *
- * Behaviour:
- *   - @Public()          → always passes
- *   - No @Roles()        → passes (any authenticated user)
- *   - @Roles('X', 'Y')  → passes if user.role is X or Y
- *   - SUPER_ADMIN        → always passes (wildcard — handled by RbacEngine)
- *
- * Emits a structured log on denial — feeds into the audit pipeline.
- */
 let RolesGuard = RolesGuard_1 = class RolesGuard {
     constructor(reflector) {
         this.reflector = reflector;
@@ -44,14 +31,12 @@ let RolesGuard = RolesGuard_1 = class RolesGuard {
             context.getHandler(),
             context.getClass(),
         ]);
-        // No @Roles() decorator — any authenticated user is permitted
         if (!requiredRoles || requiredRoles.length === 0)
             return true;
         const request = context
             .switchToHttp()
             .getRequest();
         const { user } = request;
-        // Treat absence of user as a guard ordering bug — should not reach here
         if (!user) {
             this.logger.error('RolesGuard reached without an authenticated user — check guard ordering');
             throw new common_1.ForbiddenException('Insufficient permissions');

@@ -18,53 +18,25 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const tenant_aware_repository_1 = require("../../../common/repositories/tenant-aware.repository");
 const tenant_entity_1 = require("../entities/tenant.entity");
-/**
- * TenantRepository — extends TenantAwareRepository for tenant registry operations.
- *
- * Special consideration: the Tenants table is the root of multi-tenancy.
- * Queries here are often CROSS-TENANT (superadmin operations) or
- * SELF-TENANT (a tenant reading its own record).
- *
- * Cross-tenant methods (e.g. findBySlug) do not use scopedQb() intentionally —
- * they are used during resolution before a tenant context is established.
- * These are clearly documented as cross-tenant operations.
- */
 let TenantRepository = class TenantRepository extends tenant_aware_repository_1.TenantAwareRepository {
     constructor(dataSource) {
         super(tenant_entity_1.TenantEntity, dataSource.manager);
     }
-    // ── Cross-tenant operations (resolution + superadmin) ─────────────────────
-    /**
-     * Finds a tenant by slug — CROSS-TENANT.
-     * Called during subdomain resolution before context is established.
-     */
     async findBySlug(slug) {
         return this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
             .findOne({ where: { slug, isDeleted: false } });
     }
-    /**
-     * Finds a tenant by UUID — CROSS-TENANT.
-     * Called during header-based resolution.
-     */
     async findRawById(id) {
         return this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
             .findOne({ where: { id, isDeleted: false } });
     }
-    /**
-     * Finds tenant by email — CROSS-TENANT.
-     * Used during signup to enforce unique email constraint.
-     */
     async findByEmail(email) {
         return this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
             .findOne({ where: { email, isDeleted: false } });
     }
-    /**
-     * Lists all tenants — SUPERADMIN only.
-     * Paginated; never exposed to tenant-level callers.
-     */
     async findAllTenants(page = 1, limit = 20, status, tier) {
         const qb = this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
@@ -81,33 +53,19 @@ let TenantRepository = class TenantRepository extends tenant_aware_repository_1.
             .getManyAndCount();
         return { data, total };
     }
-    /**
-     * Updates tenant status — CROSS-TENANT (superadmin + event-driven).
-     */
     async updateStatus(tenantId, status) {
         await this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
             .update({ id: tenantId }, { status, updatedAt: new Date() });
     }
-    /**
-     * Updates tenant tier — CROSS-TENANT (superadmin).
-     */
     async updateTier(tenantId, tier) {
         await this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
             .update({ id: tenantId }, { tier, updatedAt: new Date() });
     }
-    // ── Self-tenant operations (tenant reads own record) ───────────────────────
-    /**
-     * A tenant reading its own settings — SELF-TENANT (scoped).
-     */
     async findOwnSettings(tenantId) {
         return this.findRawById(tenantId);
     }
-    /**
-     * Checks if a slug is already taken (case-insensitive).
-     * Used during tenant creation to enforce uniqueness.
-     */
     async isSlugTaken(slug, excludeId) {
         const qb = this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)

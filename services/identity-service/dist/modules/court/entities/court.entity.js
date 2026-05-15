@@ -11,31 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CourtEntity = void 0;
 const typeorm_1 = require("typeorm");
-// ── Entity ────────────────────────────────────────────────────────────────────
-/**
- * CourtEntity — a bookable court / pitch / lane / pool within a branch.
- *
- * Design decisions:
- *
- *   - A court MUST belong to a branch (branchId non-nullable).
- *   - A court MAY be linked to a primary sport (sportId nullable).
- *     Multi-sport courts leave sportId null; the booking layer handles
- *     sport selection at booking time.
- *
- *   - `operatingHours`: court-specific schedule (JSONB, WeeklyTimings shape).
- *     Defaults to null — when null, the parent branch operating hours apply.
- *     When set, court hours override branch hours for this court specifically.
- *
- *   - `maintenanceNote`: free-text reason visible to admins when status = maintenance.
- *
- *   - Unique: (tenant_id, branch_id, name) — no two courts in the same branch
- *     share a name. Enforced at DB level + service layer.
- *
- *   - `courtNumber`: optional numeric identifier used for bulk-generated courts
- *     (e.g. Court 1, Court 2…). Stored separately so sorting is numeric, not lexical.
- *
- * Table: `courts`
- */
 let CourtEntity = class CourtEntity {
 };
 exports.CourtEntity = CourtEntity;

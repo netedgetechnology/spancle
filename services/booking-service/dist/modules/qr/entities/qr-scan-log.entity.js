@@ -11,18 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QrScanLogEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * QrScanLogEntity — immutable audit log of every QR scan event.
- * INSERT only — no UPDATE, no soft-delete.
- *
- * Used for:
- *   - Compliance audit of physical access events
- *   - Debugging scanner/device misconfigurations
- *   - Fraud detection (unusual scan patterns)
- *   - Smart access device performance monitoring
- *
- * Table: qr_scan_logs
- */
 let QrScanLogEntity = class QrScanLogEntity {
 };
 exports.QrScanLogEntity = QrScanLogEntity;

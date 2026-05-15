@@ -25,23 +25,6 @@ const tenant_repository_1 = require("../../tenant/repositories/tenant.repository
 const onboarding_token_service_1 = require("./onboarding-token.service");
 const onboarding_events_1 = require("../events/onboarding.events");
 const utils_1 = require("@spancle/utils");
-/**
- * OnboardingService — orchestrates the 6-step tenant onboarding saga.
- *
- * Steps:
- *   1. signup()           — create registration record + send verification email
- *   2. verifyEmail()      — validate token → mark emailVerified = true
- *   3. selectPackage()    — record chosen package + billing cycle
- *   4. complete()         — provision tenant + subscription + admin user + identity
- *
- * Cross-service calls:
- *   - saas-platform-service: GET /api/v1/packages/active (package catalogue)
- *   - saas-platform-service: POST /api/v1/subscriptions (create trial subscription)
- *   - communication-service: POST /api/v1/emails/send (verification + welcome email)
- *
- * All calls use internal HTTP with 5s timeout.
- * On failure: tenant is set to 'pending', error logged, event emitted for retry.
- */
 let OnboardingService = OnboardingService_1 = class OnboardingService {
     constructor(tokenService, tenantService, userService, passwordService, jwtTokenService, identityRepository, tenantRepository, eventEmitter, httpService, config) {
         this.tokenService = tokenService;
@@ -56,57 +39,35 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.config = config;
         this.logger = new common_1.Logger(OnboardingService_1.name);
     }
-    // ── Step 1: Signup ─────────────────────────────────────────────────────────
-    /**
-     * Initiates onboarding — validates uniqueness, creates registration state,
-     * triggers email verification.
-     *
-     * Checks:
-     *   1. Slug is not reserved (Redis cache)
-     *   2. Slug is not taken in DB
-     *   3. Email is not already in a pending registration (Redis)
-     *   4. Email is not already the owner of an existing tenant
-     */
     async signup(dto) {
-        // Check slug in Redis (pending registrations)
         if (await this.tokenService.isSlugReserved(dto.slug)) {
             throw new common_1.ConflictException(`The subdomain "${dto.slug}" is already taken`);
         }
-        // Check slug in DB (existing tenants)
         const existingBySlug = await this.tenantRepository.findBySlug(dto.slug);
         if (existingBySlug) {
             throw new common_1.ConflictException(`The subdomain "${dto.slug}" is already taken`);
         }
-        // Check email in pending registrations
         const pendingId = await this.tokenService.isEmailPendingRegistration(dto.email);
         if (pendingId) {
-            // Return the existing registration — idempotent
             this.logger.log(`Email ${(0, utils_1.maskEmail)(dto.email)} has a pending registration: ${pendingId}`);
             return { registrationId: pendingId, maskedEmail: (0, utils_1.maskEmail)(dto.email) };
         }
-        // Check email against existing tenants
         const existingByEmail = await this.tenantRepository.findByEmail(dto.email);
         if (existingByEmail) {
-            // Security: don't reveal whether the email is registered — return same shape
             this.logger.warn(`Signup attempt for existing tenant email: ${(0, utils_1.maskEmail)(dto.email)}`);
             throw new common_1.ConflictException('An account with this email already exists. Please sign in or use a different email.');
         }
-        // Create registration
         const registration = await this.tokenService.createRegistration({
             fullName: dto.fullName,
             orgName: dto.orgName,
             slug: dto.slug,
             email: dto.email,
         });
-        // Generate verification token
         const token = await this.tokenService.generateVerificationToken(registration.registrationId);
-        // Emit event — communication-service listens and sends the email
         await this.eventEmitter.emitAsync(onboarding_events_1.OnboardingEventNames.EMAIL_VERIFICATION_SENT, {
             registrationId: registration.registrationId,
             email: dto.email,
             maskedEmail: (0, utils_1.maskEmail)(dto.email),
-            // Token is passed in the event payload so communication-service can build the link
-            // It is never logged and never returned in the HTTP response
             verificationToken: token,
             verificationUrl: `${this.config.get('APP_URL')}/onboarding/verify?r=${registration.registrationId}&t=${token}`,
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
@@ -125,15 +86,10 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
             maskedEmail: (0, utils_1.maskEmail)(dto.email),
         };
     }
-    // ── Step 2: Email verification ─────────────────────────────────────────────
-    /**
-     * Validates the email verification token.
-     * Token is single-use — consumed immediately on valid match.
-     */
     async verifyEmail(dto) {
         const registration = await this.requireRegistration(dto.registrationId);
         if (registration.emailVerified) {
-            return { verified: true }; // Idempotent
+            return { verified: true };
         }
         const valid = await this.tokenService.validateAndConsumeToken(dto.registrationId, dto.token);
         if (!valid) {
@@ -152,15 +108,10 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.logger.log(`Email verified: ${dto.registrationId}`);
         return { verified: true };
     }
-    /**
-     * Resends the verification email.
-     * Generates a new token (invalidates the previous one).
-     * Rate-limited at nginx; also throttled by ThrottlerGuard.
-     */
     async resendVerification(dto) {
         const registration = await this.requireRegistration(dto.registrationId);
         if (registration.emailVerified) {
-            return { sent: false }; // Already verified — nothing to do
+            return { sent: false };
         }
         const token = await this.tokenService.generateVerificationToken(dto.registrationId);
         await this.eventEmitter.emitAsync(onboarding_events_1.OnboardingEventNames.EMAIL_VERIFICATION_SENT, {
@@ -175,22 +126,15 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.logger.log(`Verification email resent: ${dto.registrationId}`);
         return { sent: true };
     }
-    // ── Step 3: Package selection ──────────────────────────────────────────────
-    /**
-     * Records the tenant's chosen package and billing cycle.
-     * Validates that the package exists and is active.
-     */
     async selectPackage(dto) {
         const registration = await this.requireRegistration(dto.registrationId);
         this.requireEmailVerified(registration);
-        // Verify package exists and is active via saas-platform-service
         await this.assertPackageActive(dto.packageId);
         await this.tokenService.updateRegistration(dto.registrationId, {
             packageId: dto.packageId,
             billingCycle: dto.billingCycle ?? 'monthly',
             step: 3,
         });
-        // We need the tier key for the event — fetch from saas-platform
         const pkg = await this.fetchPackage(dto.packageId);
         await this.eventEmitter.emitAsync(onboarding_events_1.OnboardingEventNames.PACKAGE_SELECTED, {
             registrationId: dto.registrationId,
@@ -203,20 +147,6 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.logger.log(`Package selected: ${dto.registrationId} → ${dto.packageId}`);
         return { recorded: true };
     }
-    // ── Step 4: Provisioning + Admin creation ──────────────────────────────────
-    /**
-     * Provisions the tenant ecosystem:
-     *   a) Create TenantEntity (identity-service)
-     *   b) Create SubscriptionEntity (saas-platform-service)
-     *   c) Create UserEntity — the tenant admin (identity-service)
-     *   d) Create IdentityEntity — admin credentials (identity-service)
-     *   e) Set tenant status → 'trial' (already default)
-     *   f) Issue access tokens for immediate auto-login
-     *   g) Clean up registration record
-     *   h) Emit completion events
-     *
-     * On any failure: attempt rollback, emit ONBOARDING_FAILED event.
-     */
     async complete(dto) {
         const registration = await this.requireRegistration(dto.registrationId);
         this.requireEmailVerified(registration);
@@ -226,7 +156,6 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         if (dto.password !== dto.confirmPassword) {
             throw new common_1.BadRequestException('Password and confirmation do not match.');
         }
-        // Enforce password policy before any DB writes
         this.passwordService.enforcePolicy(dto.password);
         const startedAt = Date.now();
         let tenantId = null;
@@ -234,12 +163,11 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         let userId = null;
         let identityId = null;
         try {
-            // ── a) Create tenant ───────────────────────────────────────────────────
             const tenant = await this.tenantService.create({
                 name: registration.orgName,
                 slug: registration.slug,
                 email: registration.email,
-                tier: 'free', // will be updated after subscription creation
+                tier: 'free',
                 settings: {
                     timezone: dto.timezone ?? 'UTC',
                     currency: dto.currency ?? 'GBP',
@@ -251,10 +179,8 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
                 },
             });
             tenantId = tenant.id;
-            // ── b) Create subscription (cross-service) ─────────────────────────────
             const subscription = await this.createSubscription(tenantId, registration.packageId, registration.billingCycle);
             subscriptionId = subscription.id;
-            // Update tenant tier from the subscription's tierKey
             await this.tenantService.changeTier(tenantId, subscription.tierKey, 'onboarding');
             await this.eventEmitter.emitAsync(onboarding_events_1.OnboardingEventNames.TENANT_PROVISIONED, {
                 registrationId: dto.registrationId,
@@ -264,10 +190,8 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
                 tierKey: subscription.tierKey,
                 timestamp: new Date().toISOString(),
             });
-            // ── c) Create user (the tenant admin) ─────────────────────────────────
             const user = await this.userService.create({ name: registration.fullName }, tenantId);
             userId = user.id;
-            // ── d) Create identity (credentials) ──────────────────────────────────
             const passwordHash = await this.passwordService.hash(dto.password);
             const identity = await this.identityRepository.create({
                 tenantId,
@@ -290,14 +214,12 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
                 identityId: identity.id,
                 timestamp: new Date().toISOString(),
             });
-            // ── e) Issue tokens for auto-login ─────────────────────────────────────
             const issued = await this.jwtTokenService.issueTokenPair({
                 identityId: identity.id,
                 userId: user.id,
                 tenantId,
                 role: 'TENANT_ADMIN',
             }, {});
-            // ── f) Clean up registration record ───────────────────────────────────
             await this.tokenService.deleteRegistration(dto.registrationId);
             const durationMs = Date.now() - startedAt;
             await this.eventEmitter.emitAsync(onboarding_events_1.OnboardingEventNames.ONBOARDING_COMPLETED, {
@@ -320,12 +242,10 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         catch (error) {
             const errMsg = error instanceof Error ? error.message : String(error);
             this.logger.error(`Onboarding provisioning failed: ${errMsg}`, { dto: dto.registrationId });
-            // Determine which step failed and set a clean failure state
             const failedStep = !tenantId ? 'tenant_creation'
                 : !subscriptionId ? 'subscription_creation'
                     : !userId ? 'user_creation'
                         : 'identity_creation';
-            // Rollback: if tenant was created but subscription failed, set tenant to pending
             if (tenantId && !subscriptionId) {
                 try {
                     await this.tenantRepository.updateStatus(tenantId, 'pending');
@@ -345,7 +265,6 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
                 'Please try again or contact support.');
         }
     }
-    // ── Utility ────────────────────────────────────────────────────────────────
     async checkSlugAvailability(slug) {
         const reservedInCache = await this.tokenService.isSlugReserved(slug);
         if (reservedInCache)
@@ -363,7 +282,6 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
             hasPackage: !!reg.packageId,
         };
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
     async requireRegistration(registrationId) {
         const reg = await this.tokenService.getRegistration(registrationId);
         if (!reg) {

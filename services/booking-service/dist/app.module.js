@@ -55,9 +55,6 @@ exports.AppModule = AppModule = __decorate([
             booking_module_1.BookingModule, slot_module_1.SlotModule, venue_module_1.VenueModule, qr_module_1.QrModule,
         ],
         providers: [
-            // Global guard chain for all booking-service routes:
-            // 1. TenantGuard — validates x-tenant-id header
-            // 2. RbacGuard   — validates x-actor-role against @Roles() metadata
             { provide: core_1.APP_GUARD, useClass: booking_guard_1.TenantGuard },
             { provide: core_1.APP_GUARD, useClass: booking_guard_1.RbacGuard },
         ],

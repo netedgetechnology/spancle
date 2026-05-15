@@ -52,18 +52,6 @@ const qr_generation_service_1 = require("./services/qr-generation.service");
 const qr_validation_service_1 = require("./services/qr-validation.service");
 const qr_controller_1 = require("./controllers/qr.controller");
 const booking_module_1 = require("../booking/booking.module");
-/**
- * QrModule — QR token issuance, validation, and smart-access verification.
- *
- * Imports BookingModule for:
- *   BookingRepository  — booking existence / status checks
- *   BookingService     — triggers checkIn() on successful scan
- *
- * CacheModule: Redis-backed, scoped to this module.
- *   Keys:  tenant:{tenantId}:qr:{tokenHash} — issued token metadata
- *          qr:verify:{tokenHash}             — public verify cache
- *   TTL: inherits token expiresAt, capped at 24 h.
- */
 let QrModule = class QrModule {
 };
 exports.QrModule = QrModule;
@@ -80,7 +68,7 @@ exports.QrModule = QrModule = __decorate([
                     port: config.get('REDIS_PORT', 6379),
                     password: config.get('REDIS_PASSWORD', ''),
                     db: config.get('REDIS_DB_CACHE', 0),
-                    ttl: 86_400, // 24h default TTL (seconds)
+                    ttl: 86_400,
                     max: 500,
                 }),
             }),

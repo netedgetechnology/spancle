@@ -11,19 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SeoFieldsEmbed = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * SeoFieldsEmbed — TypeORM embedded column group for SEO metadata.
- *
- * Embedded into any entity that needs SEO fields by declaring:
- *   @Column(() => SeoFieldsEmbed)
- *   seo!: SeoFieldsEmbed;
- *
- * Column names in the parent table are prefixed with 'seo_' by TypeORM
- * (e.g. seo_title, seo_description, seo_keywords).
- *
- * Open Graph and Twitter Card fields are included for social sharing.
- * Schema.org JSON-LD blob stored as JSONB for extensibility.
- */
 class SeoFieldsEmbed {
 }
 exports.SeoFieldsEmbed = SeoFieldsEmbed;

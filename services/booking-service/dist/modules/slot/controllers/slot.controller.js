@@ -24,21 +24,6 @@ const create_slot_dto_1 = require("../dto/create-slot.dto");
 const update_slot_dto_1 = require("../dto/update-slot.dto");
 const generate_slots_dto_1 = require("../dto/generate-slots.dto");
 const query_slots_dto_1 = require("../dto/query-slots.dto");
-/**
- * SlotController — slot management + generation + availability endpoints.
- *
- * Routes:
- *   POST   /api/v1/slots               create one slot manually
- *   POST   /api/v1/slots/generate      bulk generate slots
- *   GET    /api/v1/slots               list/query slots
- *   GET    /api/v1/slots/status-summary
- *   GET    /api/v1/slots/:id
- *   PATCH  /api/v1/slots/:id           update metadata / price override
- *   PATCH  /api/v1/slots/:id/status    status transition
- *   PATCH  /api/v1/slots/:id/reserve   reserve a slot (checkout flow)
- *   DELETE /api/v1/slots/:id
- *   GET    /api/v1/slots/availability  available slots for a court/range
- */
 let SlotController = class SlotController {
     constructor(slotService, generatorService, availabilityService) {
         this.slotService = slotService;

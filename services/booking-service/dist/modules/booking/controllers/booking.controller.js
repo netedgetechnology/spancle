@@ -22,52 +22,25 @@ const booking_service_1 = require("../services/booking.service");
 const create_booking_dto_1 = require("../dto/create-booking.dto");
 const booking_query_dto_1 = require("../dto/booking-query.dto");
 const update_booking_dto_1 = require("../dto/update-booking.dto");
-/**
- * BookingController
- *
- * Route prefix: /api/v1/bookings
- * Guards: TenantGuard (every route) → RbacGuard (role-checked routes)
- * Audit: AuditInterceptor on every mutating method
- *
- * RBAC matrix:
- *   POST   /                        TENANT_ADMIN, TENANT_MANAGER, COACH, PLAYER
- *   GET    /                        TENANT_ADMIN, TENANT_MANAGER, COACH
- *   GET    /status-summary          TENANT_ADMIN, TENANT_MANAGER
- *   GET    /by-reference/:ref       TENANT_ADMIN, TENANT_MANAGER, COACH, PLAYER
- *   GET    /:id                     TENANT_ADMIN, TENANT_MANAGER, COACH, PLAYER
- *   GET    /:id/logs                TENANT_ADMIN, TENANT_MANAGER
- *   PATCH  /:id/confirm             TENANT_ADMIN, TENANT_MANAGER
- *   PATCH  /:id/cancel              TENANT_ADMIN, TENANT_MANAGER, PLAYER
- *   PATCH  /:id/reschedule          TENANT_ADMIN, TENANT_MANAGER
- *   PATCH  /:id/check-in            TENANT_ADMIN, TENANT_MANAGER, COACH
- *   PATCH  /:id/no-show             TENANT_ADMIN, TENANT_MANAGER
- *   PATCH  /:id/no-show/waive       TENANT_ADMIN
- *   PATCH  /:id/complete            TENANT_ADMIN, TENANT_MANAGER
- *   DELETE /:id                     TENANT_ADMIN
- */
 let BookingController = class BookingController {
     constructor(bookingService) {
         this.bookingService = bookingService;
     }
-    // ── Create ─────────────────────────────────────────────────────────────────
     create(dto, tenant, actor) {
         return this.bookingService.create(dto, tenant.tenantId, actor.actorId);
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     findAll(query, tenant) {
         return this.bookingService.findAll(query, tenant.tenantId);
     }
     getStatusSummary(tenant) {
         return this.bookingService.getStatusSummary(tenant.tenantId);
     }
-    /** Declared before /:id to prevent route shadowing */
     findByReference(reference, tenant) {
         return this.bookingService.findByReference(reference, tenant.tenantId);
     }
     findOne(id, tenant) {
         return this.bookingService.findOne(id, tenant.tenantId);
     }
-    // ── Status transitions ─────────────────────────────────────────────────────
     confirm(id, tenant, actor) {
         return this.bookingService.confirm(id, tenant.tenantId, actor.actorId);
     }
@@ -86,27 +59,17 @@ let BookingController = class BookingController {
     waiveNoShow(id, dto, tenant, actor) {
         return this.bookingService.waiveNoShow(id, dto, tenant.tenantId, actor.actorId);
     }
-    /**
-     * PATCH /bookings/:id/payment-failed
-     * Called by payment gateway webhook or client when payment is declined/timed-out.
-     * Transitions pending_payment → cancelled and releases reserved slots immediately.
-     */
     paymentFailed(id, dto, tenant, actor) {
         return this.bookingService.paymentFailed(id, dto, tenant.tenantId, actor.actorId);
     }
     complete(id, tenant, actor) {
         return this.bookingService.complete(id, tenant.tenantId, actor.actorId);
     }
-    // ── Delete ─────────────────────────────────────────────────────────────────
     async remove(id, tenant, actor) {
         const booking = await this.bookingService.findOne(id, tenant.tenantId);
-        // Must be non-active before deletion
         if (booking.status === 'confirmed' || booking.status === 'pending_payment') {
             await this.bookingService.cancel(id, { reason: 'Deleted by admin', cancelledById: actor.actorId }, tenant.tenantId, actor.actorId);
         }
-        // Soft-delete is handled inside the service; repository already has softDelete
-        // We surface it via the cancel+log path above; no separate delete endpoint needed
-        // for compliance (audit trail must be preserved)
     }
 };
 exports.BookingController = BookingController;

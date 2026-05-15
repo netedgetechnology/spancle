@@ -19,21 +19,6 @@ const identity_repository_1 = require("../../identity/repositories/identity.repo
 const password_service_1 = require("./password.service");
 const token_service_1 = require("./token.service");
 const auth_events_1 = require("../events/auth.events");
-/**
- * AuthService — orchestrates the authentication lifecycle.
- *
- * Design principles:
- *   - Audit events emitted on EVERY state transition — success and failure
- *   - No sensitive values (passwords, raw tokens) in logs or events
- *   - Lockout logic runs BEFORE issuing any tokens
- *   - All events emitted in try/finally so business logic never blocks on events
- *
- * Dependencies:
- *   - IdentityRepository: reads/writes identity records (PostgreSQL)
- *   - PasswordService:    hashing and policy enforcement
- *   - TokenService:       JWT signing and Redis token management
- *   - EventEmitter2:      internal domain event bus
- */
 let AuthService = AuthService_1 = class AuthService {
     constructor(identityRepository, passwordService, tokenService, eventEmitter) {
         this.identityRepository = identityRepository;
@@ -42,26 +27,8 @@ let AuthService = AuthService_1 = class AuthService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(AuthService_1.name);
     }
-    // ── Login ─────────────────────────────────────────────────────────────────
-    /**
-     * Authenticates a user and returns a token pair.
-     *
-     * Flow:
-     *   1. Look up identity by email + tenantId
-     *   2. Check account status (active, not locked)
-     *   3. Verify password
-     *   4. Reset failed attempt counter
-     *   5. Issue token pair
-     *   6. Emit LoginSuccess event
-     *
-     * On failure:
-     *   - Increment failedLoginAttempts
-     *   - Lock account if threshold exceeded
-     *   - Emit LoginFailed event (with masked email)
-     */
     async login(dto, tenantId, meta = {}) {
         const identity = await this.identityRepository.findByEmailAndTenant(dto.email, tenantId);
-        // Constant-time path — same log regardless of whether identity exists
         if (!identity) {
             await this.emitLoginFailed({
                 tenantId,
@@ -73,7 +40,6 @@ let AuthService = AuthService_1 = class AuthService {
             });
             throw new common_1.UnauthorizedException('Invalid email or password');
         }
-        // Account inactive
         if (!identity.isActive) {
             await this.emitLoginFailed({
                 tenantId,
@@ -85,7 +51,6 @@ let AuthService = AuthService_1 = class AuthService {
             });
             throw new common_1.UnauthorizedException('Account is inactive');
         }
-        // Account locked
         if (identity.lockedUntil && identity.lockedUntil > new Date()) {
             await this.emitLoginFailed({
                 tenantId,
@@ -97,7 +62,6 @@ let AuthService = AuthService_1 = class AuthService {
             });
             throw new common_1.UnauthorizedException(`Account is locked until ${identity.lockedUntil.toISOString()}`);
         }
-        // Password verification
         const passwordValid = await this.passwordService.compare(dto.password, identity.passwordHash);
         if (!passwordValid) {
             const newAttemptCount = identity.failedLoginAttempts + 1;
@@ -129,9 +93,7 @@ let AuthService = AuthService_1 = class AuthService {
             });
             throw new common_1.UnauthorizedException('Invalid email or password');
         }
-        // Successful authentication — reset failure counter + update last login
         await this.identityRepository.updateLoginSuccess(identity.id, tenantId);
-        // Issue tokens — lookup role from user record
         const role = await this.identityRepository.getRoleForIdentity(identity.id, tenantId);
         const issued = await this.tokenService.issueTokenPair({
             identityId: identity.id,
@@ -151,13 +113,11 @@ let AuthService = AuthService_1 = class AuthService {
         this.logger.log(`Login success — identityId: ${identity.id} tenantId: ${tenantId}`);
         return issued.tokens;
     }
-    // ── Token refresh ──────────────────────────────────────────────────────────
     async refreshToken(dto, tenantId, meta = {}) {
         const issued = await this.tokenService.rotateRefreshToken(dto.refreshToken, tenantId, meta);
         this.logger.log(`Token rotated — tenantId: ${tenantId} family: ${issued.family}`);
         return issued.tokens;
     }
-    // ── Logout ─────────────────────────────────────────────────────────────────
     async logout(dto, tenantId, currentJti, currentUserId, currentIdentityId, meta = {}) {
         await this.tokenService.revokeSession(tenantId, currentJti, dto.refreshToken);
         await this.eventEmitter.emitAsync(auth_events_1.AuthEventNames.LOGOUT, {
@@ -170,9 +130,7 @@ let AuthService = AuthService_1 = class AuthService {
         });
         this.logger.log(`Logout — identityId: ${currentIdentityId} tenantId: ${tenantId}`);
     }
-    // ── Password change ────────────────────────────────────────────────────────
     async changePassword(dto, identityId, tenantId, actorId, meta = {}) {
-        // Validate confirmation match
         if (dto.newPassword !== dto.confirmPassword) {
             throw new common_1.UnprocessableEntityException('New password and confirmation do not match');
         }
@@ -180,22 +138,17 @@ let AuthService = AuthService_1 = class AuthService {
         if (!identity) {
             throw new common_1.NotFoundException('Identity not found');
         }
-        // Verify current password
         const currentValid = await this.passwordService.compare(dto.currentPassword, identity.passwordHash);
         if (!currentValid) {
             throw new common_1.UnauthorizedException('Current password is incorrect');
         }
-        // Enforce new password policy
         this.passwordService.enforcePolicy(dto.newPassword);
-        // Prevent reuse of current password
         const isDifferent = await this.passwordService.isDifferentFromCurrent(dto.newPassword, identity.passwordHash);
         if (!isDifferent) {
             throw new common_1.UnprocessableEntityException('New password must be different from your current password');
         }
-        // Hash and persist
         const newHash = await this.passwordService.hash(dto.newPassword);
         await this.identityRepository.updatePassword(identityId, tenantId, newHash);
-        // Revoke all existing sessions — security requirement on password change
         await this.tokenService.revokeAllSessions(tenantId, identityId);
         const payload = {
             tenantId,
@@ -211,7 +164,7 @@ let AuthService = AuthService_1 = class AuthService {
             tenantId,
             identityId,
             userId: identity.userId,
-            revokedCount: -1, // count not tracked here — repo logs it
+            revokedCount: -1,
             reason: 'password_change',
             ...meta,
             timestamp: new Date().toISOString(),
@@ -219,7 +172,6 @@ let AuthService = AuthService_1 = class AuthService {
         await this.eventEmitter.emitAsync(auth_events_1.AuthEventNames.SESSIONS_REVOKED, sessionsPayload);
         this.logger.log(`Password changed — identityId: ${identityId} tenantId: ${tenantId} by: ${actorId}`);
     }
-    // ── Private event helpers ──────────────────────────────────────────────────
     async emitLoginSuccess(payload) {
         try {
             await this.eventEmitter.emitAsync(auth_events_1.AuthEventNames.LOGIN_SUCCESS, payload);

@@ -17,49 +17,30 @@ const types_1 = require("@spancle/types");
 const tenant_repository_1 = require("../repositories/tenant.repository");
 const tenant_entity_1 = require("../entities/tenant.entity");
 const plan_limits_types_1 = require("../types/plan-limits.types");
-/**
- * TenantService — tenant lifecycle management.
- *
- * Exposes:
- *   - CRUD operations for the superadmin portal
- *   - Resolution methods used by TenantResolverMiddleware
- *   - Plan limit resolution for TenantContextRuntime construction
- *   - Status transition methods with event emission
- */
 let TenantService = TenantService_1 = class TenantService {
     constructor(tenantRepository, eventEmitter) {
         this.tenantRepository = tenantRepository;
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(TenantService_1.name);
     }
-    // ── Resolution (called by TenantResolverMiddleware) ────────────────────────
     async findById(id) {
         return this.tenantRepository.findRawById(id);
     }
     async findBySlug(slug) {
         return this.tenantRepository.findBySlug(slug);
     }
-    /**
-     * Resolves plan limits for a given tier.
-     * Falls back to 'free' limits if tier is unrecognised.
-     * Sprint 3: allow per-tenant limit overrides stored in JSONB.
-     */
     resolvePlanLimits(tier) {
         return plan_limits_types_1.DEFAULT_PLAN_LIMITS[tier] ?? plan_limits_types_1.DEFAULT_PLAN_LIMITS['free'];
     }
-    // ── CRUD ───────────────────────────────────────────────────────────────────
     async create(dto) {
-        // Slug uniqueness
         const slugTaken = await this.tenantRepository.isSlugTaken(dto.slug);
         if (slugTaken) {
             throw new common_1.ConflictException(`Tenant slug "${dto.slug}" is already taken`);
         }
-        // Email uniqueness
         const emailTaken = await this.tenantRepository.findByEmail(dto.email);
         if (emailTaken) {
             throw new common_1.ConflictException(`A tenant with email "${dto.email}" already exists`);
         }
-        // Merge provided settings with defaults
         const defaultSettings = types_1.TenantSettingsSchema.parse({});
         const mergedSettings = {
             ...defaultSettings,
@@ -133,7 +114,6 @@ let TenantService = TenantService_1 = class TenantService {
         });
         return updated;
     }
-    // ── Status transitions ─────────────────────────────────────────────────────
     async activate(tenantId, actorId) {
         return this.transitionStatus(tenantId, 'active', actorId, 'spancle.tenant.activated');
     }
@@ -162,9 +142,8 @@ let TenantService = TenantService_1 = class TenantService {
         this.logger.log(`Tenant ${tenantId} tier changed: ${oldTier} → ${newTier} by ${actorId}`);
         return updated;
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
     async transitionStatus(tenantId, newStatus, actorId, eventName) {
-        await this.getById(tenantId); // validate existence
+        await this.getById(tenantId);
         await this.tenantRepository.updateStatus(tenantId, newStatus);
         const updated = await this.getById(tenantId);
         await this.eventEmitter.emitAsync(eventName, {

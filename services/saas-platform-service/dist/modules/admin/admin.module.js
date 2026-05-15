@@ -11,14 +11,6 @@ const common_1 = require("@nestjs/common");
 const admin_stats_controller_1 = require("./controllers/admin-stats.controller");
 const admin_stats_service_1 = require("./services/admin-stats.service");
 const super_admin_guard_1 = require("./guards/super-admin.guard");
-/**
- * AdminModule — platform administration endpoints.
- *
- * All routes require SUPER_ADMIN role (enforced by SuperAdminGuard
- * at controller class level, plus the global RolesGuard chain).
- *
- * Registered in AppModule.imports alongside CmsModule.
- */
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;

@@ -9,10 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantGuard = exports.VenueGuard = void 0;
 const common_1 = require("@nestjs/common");
 const booking_guard_1 = require("../../booking/guards/booking.guard");
-/**
- * VenueGuard — extends TenantGuard.
- * Add venue-specific RBAC permission checks in Sprint 2.
- */
 let VenueGuard = class VenueGuard extends booking_guard_1.TenantGuard {
 };
 exports.VenueGuard = VenueGuard;

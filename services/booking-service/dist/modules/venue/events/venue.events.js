@@ -1,10 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueEvents = void 0;
-/**
- * VenueEvents — domain event constants for the venue domain.
- * All events namespaced under spancle.venue.*
- */
 var VenueEvents;
 (function (VenueEvents) {
     VenueEvents["CREATED"] = "spancle.venue.created";

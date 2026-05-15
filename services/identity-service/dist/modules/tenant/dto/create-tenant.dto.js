@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChangeTierDto = exports.TenantStatusTransitionDto = exports.UpdateTenantSettingsDto = exports.UpdateTenantDto = exports.CreateTenantDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-// ── Tenant settings ──────────────────────────────────────────────────────────
 class TenantSettingsDto {
 }
 __decorate([
@@ -52,7 +51,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], TenantSettingsDto.prototype, "maxSessionDurationMs", void 0);
-// ── CreateTenantDto ──────────────────────────────────────────────────────────
 class CreateTenantDto {
 }
 exports.CreateTenantDto = CreateTenantDto;
@@ -99,7 +97,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", TenantSettingsDto)
 ], CreateTenantDto.prototype, "settings", void 0);
-// ── UpdateTenantDto ──────────────────────────────────────────────────────────
 class UpdateTenantDto {
 }
 exports.UpdateTenantDto = UpdateTenantDto;
@@ -129,7 +126,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(2048),
     __metadata("design:type", String)
 ], UpdateTenantDto.prototype, "logoUrl", void 0);
-// ── UpdateTenantSettingsDto ──────────────────────────────────────────────────
 class UpdateTenantSettingsDto {
 }
 exports.UpdateTenantSettingsDto = UpdateTenantSettingsDto;
@@ -138,7 +134,6 @@ __decorate([
     (0, class_transformer_1.Type)(() => TenantSettingsDto),
     __metadata("design:type", TenantSettingsDto)
 ], UpdateTenantSettingsDto.prototype, "settings", void 0);
-// ── TenantStatusTransitionDto ────────────────────────────────────────────────
 class TenantStatusTransitionDto {
 }
 exports.TenantStatusTransitionDto = TenantStatusTransitionDto;
@@ -148,7 +143,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], TenantStatusTransitionDto.prototype, "reason", void 0);
-// ── ChangeTierDto ────────────────────────────────────────────────────────────
 class ChangeTierDto {
 }
 exports.ChangeTierDto = ChangeTierDto;

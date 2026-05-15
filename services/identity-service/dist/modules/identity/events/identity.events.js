@@ -1,12 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IdentityEvents = void 0;
-/**
- * IdentityEvents — all domain events emitted by the identity module.
- *
- * Channel convention: spancle.identity.<event>
- * All consumers must be tenant-aware and validate tenantId on receipt.
- */
 var IdentityEvents;
 (function (IdentityEvents) {
     IdentityEvents["LOGIN_SUCCESS"] = "spancle.identity.login_success";

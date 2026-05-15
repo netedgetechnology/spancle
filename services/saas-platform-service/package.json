@@ -2,10 +2,10 @@
   "name": "@spancle/saas-platform-service",
   "version": "0.1.0",
   "private": true,
-  "description": "Spancle Sports OS — Tenant provisioning, subscription and plan management",
+  "description": "Spancle Sports OS \u2014 Tenant provisioning, subscription and plan management",
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "tsc --project tsconfig.build.json",
     "dev": "nest start --watch",
     "start": "node dist/main",
     "lint": "eslint src --ext .ts --max-warnings=0",

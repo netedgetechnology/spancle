@@ -18,33 +18,16 @@ const audit_interceptor_1 = require("../../../common/interceptors/audit.intercep
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const page_service_1 = require("../services/page.service");
 const create_page_dto_1 = require("../dto/create-page.dto");
-/**
- * PageController — CMS page management endpoints.
- *
- * All routes require:
- *   - Valid tenant context (TenantGuard via AppModule global guards)
- *   - Authenticated session (JwtAuthGuard via AppModule global guards)
- *
- * Public page retrieval by slug uses @Public() — accessible by the
- * frontend renderer without authentication.
- */
 let PageController = class PageController {
     constructor(pageService) {
         this.pageService = pageService;
     }
     create(dto, tenant) {
-        // actorId resolved from JWT in Sprint 2 — placeholder until CurrentUser wired
         return this.pageService.create(dto, tenant.tenantId, 'system');
     }
     findAll(tenant, page, limit, status) {
         return this.pageService.findAll(tenant.tenantId, page ? Number(page) : 1, limit ? Number(limit) : 20, status);
     }
-    /**
-     * GET /cms/pages/homepage
-     * Returns the tenant's designated homepage page record.
-     * Called by public-website resolvePageId for the root URL.
-     * Returns 404 if no homepage page has been set for this tenant.
-     */
     findHomepage(tenant) {
         return this.pageService.findHomepage(tenant.tenantId);
     }

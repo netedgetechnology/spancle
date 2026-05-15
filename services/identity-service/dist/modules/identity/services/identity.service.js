@@ -29,19 +29,16 @@ let IdentityService = IdentityService_1 = class IdentityService {
         if (!identity) {
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
-        // TODO: bcrypt.compare(dto.password, identity.passwordHash)
         const tokens = this.generateTokenPair(identity.id, tenantId, identity.userId);
         await this.eventEmitter.emitAsync(identity_events_1.IdentityEvents.LOGIN_SUCCESS, { tenantId, identityId: identity.id, userId: identity.userId });
         return tokens;
     }
     async refreshToken(dto, tenantId) {
-        // TODO: Validate refresh token against Redis store, rotate token
         this.logger.log(`Token refresh — tenant: ${tenantId}`);
         throw new common_1.UnauthorizedException('Not implemented');
     }
     async logout(refreshToken, tenantId) {
         this.logger.log(`Logout — tenant: ${tenantId}`);
-        // TODO: Revoke refresh token in Redis
         await this.eventEmitter.emitAsync(identity_events_1.IdentityEvents.LOGOUT, { tenantId, refreshToken });
     }
     generateTokenPair(identityId, tenantId, userId) {

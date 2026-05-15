@@ -11,25 +11,6 @@ exports.TenantContextMiddleware = void 0;
 const common_1 = require("@nestjs/common");
 const auth_sdk_1 = require("@spancle/auth-sdk");
 const constants_1 = require("@spancle/constants");
-/**
- * TenantContextMiddleware — NestJS middleware counterpart to TenantGuard.
- *
- * Guards run per-route; middleware runs globally on the request pipeline.
- * This middleware makes TenantContext available to any service that needs
- * it without requiring guard injection — particularly useful for:
- *   - Logging interceptors that need tenantId before guard execution
- *   - Health check endpoints that should still log tenant context
- *   - Middleware-level rate limiting keyed by tenant
- *
- * When applied globally in AppModule, it populates request.tenant
- * even before the guard chain runs. TenantGuard then validates + re-sets
- * it to ensure guards remain the security boundary.
- *
- * Registration (AppModule):
- *   configure(consumer: MiddlewareConsumer): void {
- *     consumer.apply(TenantContextMiddleware).forRoutes('*');
- *   }
- */
 let TenantContextMiddleware = TenantContextMiddleware_1 = class TenantContextMiddleware {
     constructor() {
         this.logger = new common_1.Logger(TenantContextMiddleware_1.name);

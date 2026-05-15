@@ -11,14 +11,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GenerateCourtsDto = exports.MaintenanceDto = exports.CourtStatusDto = exports.UpdateCourtDto = exports.CreateCourtDto = exports.SURFACE_TYPES = exports.COURT_TYPES = exports.COURT_STATUSES = void 0;
 const class_validator_1 = require("class-validator");
-// ── Shared constants ──────────────────────────────────────────────────────────
 exports.COURT_STATUSES = ['available', 'unavailable', 'maintenance', 'retired'];
 exports.COURT_TYPES = ['indoor', 'outdoor'];
 exports.SURFACE_TYPES = [
     'grass', 'artificial_grass', 'hard_court', 'clay', 'carpet',
     'wood', 'rubber', 'sand', 'water', 'ice', 'other',
 ];
-// ── CreateCourtDto ────────────────────────────────────────────────────────────
 class CreateCourtDto {
 }
 exports.CreateCourtDto = CreateCourtDto;
@@ -123,7 +121,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], CreateCourtDto.prototype, "hourlyRateMinor", void 0);
-// ── UpdateCourtDto ────────────────────────────────────────────────────────────
 class UpdateCourtDto {
 }
 exports.UpdateCourtDto = UpdateCourtDto;
@@ -214,7 +211,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], UpdateCourtDto.prototype, "hourlyRateMinor", void 0);
-// ── CourtStatusDto ────────────────────────────────────────────────────────────
 class CourtStatusDto {
 }
 exports.CourtStatusDto = CourtStatusDto;
@@ -224,11 +220,6 @@ __decorate([
     }),
     __metadata("design:type", Object)
 ], CourtStatusDto.prototype, "status", void 0);
-// ── MaintenanceDto ────────────────────────────────────────────────────────────
-/**
- * MaintenanceDto — sets a court into maintenance with a reason and optional
- * expected completion date. Used by PATCH /courts/:id/maintenance.
- */
 class MaintenanceDto {
 }
 exports.MaintenanceDto = MaintenanceDto;
@@ -243,20 +234,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], MaintenanceDto.prototype, "maintenanceExpectedEnd", void 0);
-// ── GenerateCourtsDto ─────────────────────────────────────────────────────────
-/**
- * GenerateCourtsDto — bulk court generation.
- *
- * Generates `count` courts with auto-incrementing names:
- *   namePrefix + separator + startNumber … startNumber + count - 1
- *
- * Examples:
- *   prefix="Court" separator=" " startNumber=1 count=6
- *   → Court 1, Court 2, Court 3, Court 4, Court 5, Court 6
- *
- *   prefix="Lane" separator="-" startNumber=1 count=8
- *   → Lane-1, Lane-2 … Lane-8
- */
 class GenerateCourtsDto {
 }
 exports.GenerateCourtsDto = GenerateCourtsDto;

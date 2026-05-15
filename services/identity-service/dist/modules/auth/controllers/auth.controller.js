@@ -22,59 +22,19 @@ const jwt_auth_guard_1 = require("../../../common/guards/jwt-auth.guard");
 const tenant_guard_1 = require("../../../common/guards/tenant.guard");
 const auth_service_1 = require("../services/auth.service");
 const login_dto_1 = require("../dto/login.dto");
-/**
- * AuthController — all authentication endpoints.
- *
- * Guard execution order (declared at class level):
- *   TenantGuard → [JwtAuthGuard per method] → AuditInterceptor
- *
- * @Public() endpoints still require a valid tenant header.
- * TenantGuard allows @Public() routes without a tenant header only when
- * the header is absent — if present and malformed, it still rejects.
- *
- * All mutating operations go through AuditInterceptor automatically.
- */
 let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
     }
-    /**
-     * POST /api/v1/auth/login
-     *
-     * Public endpoint — no JWT required.
-     * Requires x-tenant-id header.
-     * Returns access + refresh token pair on success.
-     */
     async login(dto, tenant) {
         return this.authService.login(dto, tenant.tenantId);
     }
-    /**
-     * POST /api/v1/auth/refresh
-     *
-     * Exchanges a valid refresh token for a new token pair.
-     * Old refresh token is consumed — one-time-use only.
-     * Refresh token reuse triggers full session revocation.
-     */
     async refreshToken(dto, tenant) {
         return this.authService.refreshToken(dto, tenant.tenantId);
     }
-    /**
-     * POST /api/v1/auth/logout
-     *
-     * Requires valid access token (authenticated endpoint).
-     * Blacklists the access token JTI and deletes the refresh token.
-     */
     async logout(dto, tenant, user) {
         return this.authService.logout(dto, tenant.tenantId, user.jti ?? user.sub, user.userId, user.sub);
     }
-    /**
-     * POST /api/v1/auth/change-password
-     *
-     * Requires valid access token.
-     * Verifies current password before accepting change.
-     * All active sessions are revoked on success.
-     * Full password policy enforced on the new password.
-     */
     async changePassword(dto, tenant, user) {
         return this.authService.changePassword(dto, user.sub, tenant.tenantId, user.userId);
     }

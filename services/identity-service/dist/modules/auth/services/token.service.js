@@ -17,27 +17,6 @@ const config_1 = require("@nestjs/config");
 const constants_1 = require("@spancle/constants");
 const utils_1 = require("@spancle/utils");
 const auth_repository_1 = require("../repositories/auth.repository");
-/**
- * TokenService — manages the full lifecycle of JWT access and refresh tokens.
- *
- * Access tokens:
- *   - Stateless JWTs (15 min TTL by default)
- *   - Contain: sub (identityId), userId, tenantId, role, jti, iss, iat, exp
- *   - Revocation via Redis JTI blacklist (populated on logout/security events)
- *
- * Refresh tokens:
- *   - Opaque random tokens (base64url, 48 bytes)
- *   - Stored in Redis with TTL = JWT_REFRESH_TOKEN_EXPIRY_SECONDS
- *   - One-time-use: consumed on rotation, immediately replaced
- *   - Token family: reuse of a consumed token revokes the entire family
- *
- * Rotation model (prevents refresh token theft):
- *   1. Client presents refresh token
- *   2. TokenService validates and retrieves the stored record
- *   3. Old refresh token is deleted from Redis
- *   4. New access + refresh token pair issued under the same family
- *   5. If old token already consumed: ENTIRE family revoked, session terminated
- */
 let TokenService = TokenService_1 = class TokenService {
     constructor(jwtService, config, authRepository) {
         this.jwtService = jwtService;
@@ -48,11 +27,6 @@ let TokenService = TokenService_1 = class TokenService {
         this.refreshExpirySeconds = this.config.get('JWT_REFRESH_TOKEN_EXPIRY_SECONDS', constants_1.JWT.REFRESH_TOKEN_EXPIRY_SECONDS);
         this.issuer = this.config.get('JWT_ISSUER', constants_1.JWT.ISSUER);
     }
-    // ── Public API ─────────────────────────────────────────────────────────────
-    /**
-     * Issues a fresh access + refresh token pair for a given identity.
-     * Creates a new token family — used on initial login.
-     */
     async issueTokenPair(subject, meta = {}) {
         const jti = (0, utils_1.generateUuid)();
         const family = (0, utils_1.generateUuid)();
@@ -86,35 +60,23 @@ let TokenService = TokenService_1 = class TokenService {
             family,
         };
     }
-    /**
-     * Rotates a refresh token — returns a new token pair under the same family.
-     *
-     * Security contract:
-     *   - Original refresh token is deleted before new one is stored (atomic-ish via Redis pipeline)
-     *   - If token not found: assume reuse attack → revoke entire family
-     */
     async rotateRefreshToken(rawRefreshToken, tenantId, meta = {}) {
         const record = await this.authRepository.getRefreshToken(tenantId, rawRefreshToken);
         if (!record) {
-            // Token not found — may be reuse attack. Attempt family revocation.
             this.logger.warn(`Refresh token not found — possible reuse attack. tenantId: ${tenantId}`);
             throw new common_1.UnauthorizedException('Refresh token is invalid or expired');
         }
-        // Validate tenant binding — prevents cross-tenant refresh token use
         if (record.tenantId !== tenantId) {
             this.logger.error(`Refresh token tenant mismatch — stored: ${record.tenantId} presented: ${tenantId}`);
             await this.authRepository.revokeTokenFamily(tenantId, record.family);
             throw new common_1.UnauthorizedException('Refresh token is invalid');
         }
-        // Validate expiry
         const now = Math.floor(Date.now() / 1000);
         if (record.expiresAt < now) {
             await this.authRepository.deleteRefreshToken(tenantId, rawRefreshToken);
             throw new common_1.UnauthorizedException('Refresh token has expired');
         }
-        // Delete old token first (consume it)
         await this.authRepository.deleteRefreshToken(tenantId, rawRefreshToken);
-        // Issue new pair under same family
         return this.issueTokenPair({
             identityId: record.identityId,
             userId: record.userId,
@@ -122,11 +84,6 @@ let TokenService = TokenService_1 = class TokenService {
             role: record.role,
         }, meta);
     }
-    /**
-     * Revokes an access token by blacklisting its JTI.
-     * Also deletes the associated refresh token.
-     * Called on logout.
-     */
     async revokeSession(tenantId, accessTokenJti, rawRefreshToken, remainingAccessTtlSeconds) {
         const ttl = remainingAccessTtlSeconds ?? this.accessExpirySeconds;
         await this.authRepository.blacklistToken(tenantId, accessTokenJti, ttl);
@@ -134,15 +91,10 @@ let TokenService = TokenService_1 = class TokenService {
             await this.authRepository.deleteRefreshToken(tenantId, rawRefreshToken);
         }
     }
-    /**
-     * Revokes ALL sessions for a user (all token families).
-     * Called on: password change, account suspension, security events.
-     */
     async revokeAllSessions(tenantId, identityId) {
         await this.authRepository.revokeAllIdentitySessions(tenantId, identityId);
         this.logger.log(`All sessions revoked — identityId: ${identityId} tenantId: ${tenantId}`);
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
     signAccessToken(subject, jti) {
         return this.jwtService.sign({
             userId: subject.userId,

@@ -12,10 +12,6 @@ var SpancleValidationPipe_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpancleValidationPipe = void 0;
 const common_1 = require("@nestjs/common");
-/**
- * SpancleValidationPipe — wraps NestJS ValidationPipe with structured error output.
- * Returns 422 Unprocessable Entity with field-level error map.
- */
 let SpancleValidationPipe = SpancleValidationPipe_1 = class SpancleValidationPipe extends common_1.ValidationPipe {
     constructor() {
         super({

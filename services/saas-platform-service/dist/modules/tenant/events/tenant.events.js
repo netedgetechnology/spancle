@@ -1,10 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantEvents = void 0;
-/**
- * TenantEvents — domain event constants for the tenant domain.
- * All events namespaced under spancle.tenant.*
- */
 var TenantEvents;
 (function (TenantEvents) {
     TenantEvents["CREATED"] = "spancle.tenant.created";

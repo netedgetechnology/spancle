@@ -11,22 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BranchEntity = void 0;
 const typeorm_1 = require("typeorm");
-// ── Entity ────────────────────────────────────────────────────────────────────
-/**
- * BranchEntity — a physical location / branch of a tenant's organisation.
- *
- * Tenant isolation: every row carries tenantId, enforced by repository layer.
- *
- * Geo: latitude + longitude stored as DECIMAL(10,7) — sufficient precision
- * for ~1cm accuracy. Indexed for future geospatial queries.
- *
- * Timings: stored as JSONB WeeklyTimings object — 7-day schedule.
- * Validated at service layer before persist.
- *
- * Manager: optional FK to users.id (same tenant). Validated at service layer.
- *
- * Slug: URL-safe identifier, unique per tenant. Used in public-facing URLs.
- */
 let BranchEntity = class BranchEntity {
 };
 exports.BranchEntity = BranchEntity;

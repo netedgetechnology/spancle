@@ -38,7 +38,6 @@ let BlackoutController = class BlackoutController {
             startAt: new Date(dto.startAt),
             endAt: new Date(dto.endAt),
         });
-        // Cancel existing available slots if flag is set
         if (dto.cancelExistingSlots) {
             await this.slotRepository.bulkCancelAvailable({
                 tenantId: tenant.tenantId,

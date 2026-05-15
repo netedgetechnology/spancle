@@ -11,15 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PricingPreviewDto = void 0;
 const class_validator_1 = require("class-validator");
-/**
- * PricingPreviewDto — resolves the effective price for a hypothetical slot
- * without creating any DB records.
- *
- * Used by the admin UI to show "what price would this slot be?" before
- * generating slots or while configuring pricing rules.
- *
- * All fields except courtId and startAt are optional with sensible defaults.
- */
 class PricingPreviewDto {
 }
 exports.PricingPreviewDto = PricingPreviewDto;

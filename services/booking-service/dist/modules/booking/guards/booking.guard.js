@@ -15,10 +15,6 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/**
- * TenantGuard — validates x-tenant-id header and attaches tenant context.
- * Must run before any controller that uses @TenantCtx().
- */
 let TenantGuard = TenantGuard_1 = class TenantGuard {
     constructor() {
         this.logger = new common_1.Logger(TenantGuard_1.name);
@@ -39,25 +35,12 @@ exports.TenantGuard = TenantGuard;
 exports.TenantGuard = TenantGuard = TenantGuard_1 = __decorate([
     (0, common_1.Injectable)()
 ], TenantGuard);
-/**
- * RbacGuard — enforces role-based access on booking routes.
- *
- * Reads actor context from:
- *   x-actor-id   — UUID of the acting user
- *   x-actor-role — their system role (passed by API Gateway / identity-service JWT validation)
- *
- * In production, the API Gateway validates the JWT and injects these headers.
- * The booking-service trusts them (internal network only — never exposed directly).
- *
- * Public routes (decorated @Public()) bypass all role checks.
- */
 let RbacGuard = RbacGuard_1 = class RbacGuard {
     constructor(reflector) {
         this.reflector = reflector;
         this.logger = new common_1.Logger(RbacGuard_1.name);
     }
     canActivate(ctx) {
-        // Check @Public() on handler or class
         const isPublic = this.reflector.getAllAndOverride(roles_decorator_1.IS_PUBLIC_KEY, [
             ctx.getHandler(),
             ctx.getClass(),
@@ -71,13 +54,11 @@ let RbacGuard = RbacGuard_1 = class RbacGuard {
         if (!actorId || typeof actorId !== 'string' || !UUID_RE.test(actorId)) {
             throw new common_1.UnauthorizedException('Authenticated actor required');
         }
-        // Attach actor context for @BookingActor() decorator
         req.actor = {
             actorId,
             tenantId: tenantId ?? '',
             role: typeof actorRole === 'string' ? actorRole : 'VIEWER',
         };
-        // Check required roles for this handler/class
         const requiredRoles = this.reflector.getAllAndOverride(roles_decorator_1.ROLES_KEY, [
             ctx.getHandler(),
             ctx.getClass(),
@@ -85,7 +66,6 @@ let RbacGuard = RbacGuard_1 = class RbacGuard {
         if (!requiredRoles || requiredRoles.length === 0)
             return true;
         const role = req.actor.role;
-        // SUPER_ADMIN bypasses all role checks
         if (role === 'SUPER_ADMIN')
             return true;
         if (!requiredRoles.includes(role)) {

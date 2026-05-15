@@ -1,8 +1,4 @@
 "use strict";
-/**
- * Tenant domain event constants and payload interfaces.
- * Aligns with EventRegistry in @spancle/event-contracts.
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantEventNames = void 0;
 var TenantEventNames;

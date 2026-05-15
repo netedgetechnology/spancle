@@ -16,15 +16,6 @@ const sport_service_1 = require("./services/sport.service");
 const sport_repository_1 = require("./repositories/sport.repository");
 const sport_branch_repository_1 = require("./repositories/sport-branch.repository");
 const branch_module_1 = require("../branch/branch.module");
-/**
- * SportModule — tenant sport management.
- *
- * Imports BranchModule to access BranchService for:
- *   - Validating branch membership before assignment
- *   - Rejecting archived branches from being mapped to sports
- *
- * Registered in AppModule.imports after BranchModule.
- */
 let SportModule = class SportModule {
 };
 exports.SportModule = SportModule;

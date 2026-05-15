@@ -14,28 +14,12 @@ exports.AvailabilityService = void 0;
 const common_1 = require("@nestjs/common");
 const slot_repository_1 = require("../repositories/slot.repository");
 const blackout_repository_1 = require("../repositories/blackout.repository");
-/**
- * AvailabilityService — answers "what slots are available?" queries.
- *
- * Responsibilities:
- *   - Query available/booked slots for a court or branch on a date range
- *   - Check whether a specific time window is free (used by BookingService)
- *   - Provide utilisation summaries for the admin calendar
- *   - Filter out blackout windows from availability results
- *
- * This service is read-only — it never mutates slots or blackouts.
- */
 let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
     constructor(slotRepository, blackoutRepository) {
         this.slotRepository = slotRepository;
         this.blackoutRepository = blackoutRepository;
         this.logger = new common_1.Logger(AvailabilityService_1.name);
     }
-    /**
-     * Returns available slots for a court within a date range.
-     * Blackout windows are annotated (slots within blackouts are still returned,
-     * but hasBlackout flag is set on the day — client-side decision to show/hide).
-     */
     async getAvailableSlots(params) {
         return this.slotRepository.query({
             tenantId: params.tenantId,
@@ -47,10 +31,6 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             status: 'available',
         });
     }
-    /**
-     * Returns all slots (all statuses) for a court within a range.
-     * Used by the admin calendar view.
-     */
     async getAllSlots(params) {
         return this.slotRepository.query({
             tenantId: params.tenantId,
@@ -61,18 +41,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             to: params.to,
         });
     }
-    /**
-     * Checks whether a specific time window is free on a court.
-     *
-     * Returns: { available: boolean, reason?: string }
-     * Used by BookingService before confirming a booking.
-     *
-     * Checks:
-     *   1. No overlapping non-cancelled slots
-     *   2. No active blackout blocks new bookings in this window
-     */
     async isWindowFree(params) {
-        // Check overlap
         const overlapCount = await this.slotRepository.countOverlapping({
             tenantId: params.tenantId,
             courtId: params.courtId,
@@ -83,7 +52,6 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         if (overlapCount > 0) {
             return { available: false, reason: 'overlap' };
         }
-        // Check blackout blocks new bookings
         const isBlocked = await this.blackoutRepository.isBlocked({
             tenantId: params.tenantId,
             courtId: params.courtId,
@@ -97,10 +65,6 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         }
         return { available: true };
     }
-    /**
-     * Court utilisation summary for an admin dashboard widget.
-     * Returns slot counts and utilisation percentage.
-     */
     async getCourtSummary(params) {
         const allSlots = await this.slotRepository.query({
             tenantId: params.tenantId,

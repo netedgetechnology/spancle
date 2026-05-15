@@ -11,10 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MenuEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * MenuEntity — a named navigation menu container (e.g. 'main-nav', 'footer-links').
- * Menu items are stored separately in MenuItemEntity.
- */
 let MenuEntity = class MenuEntity {
 };
 exports.MenuEntity = MenuEntity;

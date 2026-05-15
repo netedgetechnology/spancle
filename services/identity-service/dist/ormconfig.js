@@ -1,14 +1,4 @@
 "use strict";
-/**
- * TypeORM DataSource — identity-service
- * Used by: typeorm migration:run, migration:revert, migration:generate
- *
- * Usage:
- *   npx typeorm migration:run    -d dist/ormconfig.js
- *   npx typeorm migration:revert -d dist/ormconfig.js
- *   npx typeorm schema:sync      -d dist/ormconfig.js   # initial setup only
- *   npx typeorm schema:log       -d dist/ormconfig.js   # preview changes
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const typeorm_1 = require("typeorm");

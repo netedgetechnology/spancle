@@ -9,10 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantGuard = exports.RoleGuard = void 0;
 const common_1 = require("@nestjs/common");
 const user_guard_1 = require("../../user/guards/user.guard");
-/**
- * RoleGuard — extends TenantGuard.
- * Add role-specific RBAC permission checks in Sprint 2.
- */
 let RoleGuard = class RoleGuard extends user_guard_1.TenantGuard {
 };
 exports.RoleGuard = RoleGuard;

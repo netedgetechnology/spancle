@@ -1,8 +1,4 @@
 "use strict";
-/**
- * TypeORM DataSource — booking-service
- * Used by: typeorm migration:run, migration:revert, migration:generate
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const typeorm_1 = require("typeorm");

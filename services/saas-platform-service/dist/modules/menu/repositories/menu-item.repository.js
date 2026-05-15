@@ -38,7 +38,6 @@ let MenuItemRepository = class MenuItemRepository extends tenant_aware_repositor
             .execute();
     }
     async wouldCreateCycle(itemId, newParentId, tenantId) {
-        // Walk up the parent chain — if we reach itemId, it's a cycle
         let currentId = newParentId;
         const visited = new Set();
         while (currentId) {

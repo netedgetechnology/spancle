@@ -19,21 +19,6 @@ const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator"
 const super_admin_guard_1 = require("../../admin/guards/super-admin.guard");
 const subscription_service_1 = require("../services/subscription.service");
 const create_subscription_dto_1 = require("../dto/create-subscription.dto");
-/**
- * SubscriptionController
- *
- * Tenant routes (require valid tenant context):
- *   POST   /api/v1/subscriptions         → subscribe to a package
- *   GET    /api/v1/subscriptions/current → current subscription
- *   GET    /api/v1/subscriptions         → full history
- *   POST   /api/v1/subscriptions/:id/cancel
- *
- * Admin routes (SUPER_ADMIN only):
- *   POST   /api/v1/subscriptions/:id/activate
- *   POST   /api/v1/subscriptions/:id/pause
- *   POST   /api/v1/subscriptions/:id/resume
- *   POST   /api/v1/subscriptions/:id/expire
- */
 let SubscriptionController = class SubscriptionController {
     constructor(subscriptionService) {
         this.subscriptionService = subscriptionService;

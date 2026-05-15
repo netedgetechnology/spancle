@@ -1,15 +1,6 @@
 "use strict";
-/**
- * plan-limits.types.ts
- *
- * Type contracts for tier-based plan restrictions.
- * Consumed by PlanLimitGuard, PlanRestrictionMiddleware, and TenantContextRuntime.
- *
- * -1 = unlimited (Enterprise tier)
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_PLAN_LIMITS = void 0;
-/** Per-tier default limits — authoritative source for enforcement */
 exports.DEFAULT_PLAN_LIMITS = {
     free: {
         tier: 'free',

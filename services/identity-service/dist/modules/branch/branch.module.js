@@ -14,12 +14,6 @@ const branch_controller_1 = require("./controllers/branch.controller");
 const branch_service_1 = require("./services/branch.service");
 const branch_repository_1 = require("./repositories/branch.repository");
 const user_module_1 = require("../user/user.module");
-/**
- * BranchModule — tenant branch management.
- *
- * Imports UserModule to access UserRepository for manager validation.
- * Registered in AppModule.imports alongside UserModule and TenantModule.
- */
 let BranchModule = class BranchModule {
 };
 exports.BranchModule = BranchModule;

@@ -15,10 +15,8 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const tenant_context_types_1 = require("../types/tenant-context.types");
 const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
-// ── Metadata keys ──────────────────────────────────────────────────────────────
 exports.REQUIRED_FEATURE_KEY = 'spancle:required_feature';
 exports.REQUIRED_TIER_KEY = 'spancle:required_tier';
-// ── Tier hierarchy ─────────────────────────────────────────────────────────────
 const TIER_RANK = {
     free: 0,
     starter: 1,
@@ -26,45 +24,10 @@ const TIER_RANK = {
     pro: 3,
     enterprise: 4,
 };
-// ── Decorators ─────────────────────────────────────────────────────────────────
-/**
- * @RequiresFeature('apiAccess') — route is only accessible if the tenant's
- * plan includes the named feature flag.
- *
- * Usage:
- *   @RequiresFeature('advancedAnalytics')
- *   @Get('analytics/advanced')
- *   getAdvancedAnalytics() { ... }
- */
 const RequiresFeature = (feature) => (0, common_1.SetMetadata)(exports.REQUIRED_FEATURE_KEY, feature);
 exports.RequiresFeature = RequiresFeature;
-/**
- * @RequiresTier('pro') — route requires the tenant to be on at least
- * the specified tier (or higher).
- *
- * Usage:
- *   @RequiresTier('growth')
- *   @Post('webhooks')
- *   createWebhook() { ... }
- */
 const RequiresTier = (tier) => (0, common_1.SetMetadata)(exports.REQUIRED_TIER_KEY, tier);
 exports.RequiresTier = RequiresTier;
-// ── Guard ──────────────────────────────────────────────────────────────────────
-/**
- * PlanLimitGuard — enforces plan-based access restrictions.
- *
- * Evaluates two types of restrictions:
- *   1. @RequiresFeature() — boolean feature flag check against plan
- *   2. @RequiresTier()    — minimum tier check using TIER_RANK hierarchy
- *
- * Both checks are OR'd per decorator but AND'd across multiple decorators.
- *
- * Execution position: after TenantStatusGuard, before RolesGuard.
- *
- * When a tenant is denied:
- *   - 403 Forbidden with a clear upgrade message
- *   - Event emitted for analytics (Sprint 3 — upsell tracking)
- */
 let PlanLimitGuard = PlanLimitGuard_1 = class PlanLimitGuard {
     constructor(reflector) {
         this.reflector = reflector;
@@ -81,10 +44,8 @@ let PlanLimitGuard = PlanLimitGuard_1 = class PlanLimitGuard {
             .switchToHttp()
             .getRequest();
         const runtime = request[tenant_context_types_1.TENANT_RUNTIME_KEY];
-        // No runtime context — let other guards handle
         if (!runtime)
             return true;
-        // ── Feature flag check ───────────────────────────────────────────────────
         const requiredFeature = this.reflector.getAllAndOverride(exports.REQUIRED_FEATURE_KEY, [context.getHandler(), context.getClass()]);
         if (requiredFeature) {
             const hasFeature = (0, tenant_context_types_1.tenantHasFeature)(runtime, requiredFeature);
@@ -96,7 +57,6 @@ let PlanLimitGuard = PlanLimitGuard_1 = class PlanLimitGuard {
                     `Please upgrade to access "${String(requiredFeature)}".`);
             }
         }
-        // ── Minimum tier check ───────────────────────────────────────────────────
         const requiredTier = this.reflector.getAllAndOverride(exports.REQUIRED_TIER_KEY, [context.getHandler(), context.getClass()]);
         if (requiredTier) {
             const tenantRank = TIER_RANK[runtime.tier] ?? 0;

@@ -9,10 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantGuard = exports.SubscriptionGuard = void 0;
 const common_1 = require("@nestjs/common");
 const tenant_guard_1 = require("../../tenant/guards/tenant.guard");
-/**
- * SubscriptionGuard — extends TenantGuard.
- * Add subscription-specific RBAC permission checks in Sprint 2.
- */
 let SubscriptionGuard = class SubscriptionGuard extends tenant_guard_1.TenantGuard {
 };
 exports.SubscriptionGuard = SubscriptionGuard;

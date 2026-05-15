@@ -20,7 +20,6 @@ const typeorm_2 = require("typeorm");
 const booking_payment_entity_1 = require("../entities/booking-payment.entity");
 const booking_refund_entity_1 = require("../entities/booking-refund.entity");
 const booking_log_entity_1 = require("../entities/booking-log.entity");
-// ── Payment repository ─────────────────────────────────────────────────────
 let BookingPaymentRepository = BookingPaymentRepository_1 = class BookingPaymentRepository {
     constructor(dataSource) {
         this.dataSource = dataSource;
@@ -48,10 +47,6 @@ let BookingPaymentRepository = BookingPaymentRepository_1 = class BookingPayment
             .orderBy('p.createdAt', 'ASC')
             .getMany();
     }
-    /**
-     * Returns the most recent paid payment for a booking.
-     * Used by refund service to validate refund amount.
-     */
     async findPaidPayment(bookingId, tenantId) {
         return this.repo
             .createQueryBuilder('p')
@@ -89,7 +84,6 @@ exports.BookingPaymentRepository = BookingPaymentRepository = BookingPaymentRepo
     __param(0, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [typeorm_2.DataSource])
 ], BookingPaymentRepository);
-// ── Refund repository ──────────────────────────────────────────────────────
 let BookingRefundRepository = BookingRefundRepository_1 = class BookingRefundRepository {
     constructor(dataSource) {
         this.dataSource = dataSource;
@@ -147,14 +141,12 @@ exports.BookingRefundRepository = BookingRefundRepository = BookingRefundReposit
     __param(0, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [typeorm_2.DataSource])
 ], BookingRefundRepository);
-// ── Log repository ─────────────────────────────────────────────────────────
 let BookingLogRepository = BookingLogRepository_1 = class BookingLogRepository {
     constructor(dataSource) {
         this.dataSource = dataSource;
         this.logger = new common_1.Logger(BookingLogRepository_1.name);
     }
     get repo() { return this.dataSource.getRepository(booking_log_entity_1.BookingLogEntity); }
-    /** INSERT only — no update or delete operations exposed */
     async insert(data) {
         return this.repo.save(this.repo.create(data));
     }

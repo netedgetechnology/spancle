@@ -14,7 +14,6 @@ const class_validator_1 = require("class-validator");
 const QR_PURPOSES = [
     'booking_checkin', 'access_gate', 'locker_unlock', 'equipment_room', 'visitor_pass',
 ];
-// ── Issue ─────────────────────────────────────────────────────────────────────
 class IssueQrTokenDto {
 }
 exports.IssueQrTokenDto = IssueQrTokenDto;
@@ -41,7 +40,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], IssueQrTokenDto.prototype, "maxUses", void 0);
-// ── Scan (from device / mobile app) ──────────────────────────────────────────
 class ScanQrTokenDto {
 }
 exports.ScanQrTokenDto = ScanQrTokenDto;
@@ -73,7 +71,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], ScanQrTokenDto.prototype, "claimedBranchId", void 0);
-// ── Revoke ────────────────────────────────────────────────────────────────────
 class RevokeQrTokenDto {
 }
 exports.RevokeQrTokenDto = RevokeQrTokenDto;
@@ -83,7 +80,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], RevokeQrTokenDto.prototype, "reason", void 0);
-// ── Verify (public endpoint — no auth; for smart access device integration) ──
 class VerifyQrTokenDto {
 }
 exports.VerifyQrTokenDto = VerifyQrTokenDto;

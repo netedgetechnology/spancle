@@ -9,11 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuditInterceptor = void 0;
 const common_1 = require("@nestjs/common");
 const operators_1 = require("rxjs/operators");
-/**
- * AuditInterceptor — records every mutating HTTP operation.
- * Applied at controller class level — not optional.
- * Read operations (GET) are skipped to reduce noise.
- */
 let AuditInterceptor = class AuditInterceptor {
     constructor() {
         this.logger = new common_1.Logger('AuditLog');
@@ -50,7 +45,6 @@ let AuditInterceptor = class AuditInterceptor {
             timestamp: new Date().toISOString(),
             ipAddress: request.ip ?? 'unknown',
         };
-        // TODO: Replace with AuditLogService write in Sprint 2
         this.logger.log(JSON.stringify(record));
     }
 };

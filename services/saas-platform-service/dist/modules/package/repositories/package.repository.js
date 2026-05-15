@@ -17,13 +17,6 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const package_entity_1 = require("../entities/package.entity");
-/**
- * PackageRepository — global package definition repository.
- *
- * NOTE: Does NOT extend TenantAwareRepository — packages are
- * platform-global, not tenant-scoped. There is no tenantId filter.
- * Access is controlled at the controller layer by SuperAdminGuard.
- */
 let PackageRepository = class PackageRepository {
     constructor(repo) {
         this.repo = repo;

@@ -25,13 +25,10 @@ let SportService = SportService_1 = class SportService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(SportService_1.name);
     }
-    // ── Create ─────────────────────────────────────────────────────────────────
     async create(dto, tenantId, actorId) {
-        // Slug uniqueness per tenant
         if (await this.sportRepository.isSlugTaken(dto.slug, tenantId)) {
             throw new common_1.ConflictException(`A sport with slug "${dto.slug}" already exists in this organisation`);
         }
-        // Validate branches before creating the sport
         if (dto.branchIds && dto.branchIds.length > 0) {
             await this.assertBranchesBelongToTenant(dto.branchIds, tenantId);
         }
@@ -46,7 +43,6 @@ let SportService = SportService_1 = class SportService {
             status: dto.status ?? 'active',
             sortOrder: dto.sortOrder ?? 0,
         }, tenantId);
-        // Assign initial branches if provided
         if (dto.branchIds && dto.branchIds.length > 0) {
             await this.sportBranchRepository.replaceBranchMappings(sport.id, dto.branchIds, tenantId);
         }
@@ -54,7 +50,6 @@ let SportService = SportService_1 = class SportService {
         this.logger.log(`Sport created: ${sport.id} slug="${sport.slug}" tenant=${tenantId}`);
         return this.withBranches(sport, tenantId);
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     async findAll(tenantId, status) {
         const sports = status
             ? await this.sportRepository.findByStatus(status, tenantId)
@@ -80,10 +75,8 @@ let SportService = SportService_1 = class SportService {
     async getStatusSummary(tenantId) {
         return this.sportRepository.countByStatus(tenantId);
     }
-    // ── Update ─────────────────────────────────────────────────────────────────
     async update(id, dto, tenantId, actorId) {
         await this.sportRepository.findByIdOrFail(id, tenantId);
-        // Merge config — never full-replace
         let mergedConfig;
         if (dto.config !== undefined) {
             const current = await this.sportRepository.findByIdOrFail(id, tenantId);
@@ -101,7 +94,6 @@ let SportService = SportService_1 = class SportService {
         await this.emit(sport_events_1.SportEventNames.UPDATED, { tenantId, sportId: id, actorId });
         return this.withBranches(updated, tenantId);
     }
-    // ── Status transition ──────────────────────────────────────────────────────
     async updateStatus(id, dto, tenantId, actorId) {
         const sport = await this.sportRepository.findByIdOrFail(id, tenantId);
         const from = sport.status;
@@ -117,16 +109,6 @@ let SportService = SportService_1 = class SportService {
         this.logger.log(`Sport status: ${id} ${from} → ${dto.status} tenant=${tenantId}`);
         return this.withBranches(updated, tenantId);
     }
-    // ── Branch assignment ──────────────────────────────────────────────────────
-    /**
-     * Replaces the full set of branch mappings for a sport.
-     *
-     * Uses replace strategy (soft-delete all + insert new) to ensure
-     * atomicity. All provided branchIds must belong to the same tenant
-     * and must not be archived.
-     *
-     * Passing an empty array removes all branch mappings.
-     */
     async assignBranches(sportId, dto, tenantId, actorId) {
         await this.sportRepository.findByIdOrFail(sportId, tenantId);
         const previousBranchIds = await this.sportBranchRepository.getBranchIdsForSport(sportId, tenantId);
@@ -145,23 +127,16 @@ let SportService = SportService_1 = class SportService {
         this.logger.log(`Sport branches assigned: sport=${sportId} branches=[${dto.branchIds.join(',')}] tenant=${tenantId}`);
         return this.findOne(sportId, tenantId);
     }
-    // ── Delete ─────────────────────────────────────────────────────────────────
     async remove(id, tenantId, actorId) {
         const sport = await this.sportRepository.findByIdOrFail(id, tenantId);
         if (sport.status === 'active') {
             throw new common_1.BadRequestException('An active sport cannot be deleted. Set it to inactive first.');
         }
-        // Soft-delete all branch mappings first to avoid orphaned join rows
         await this.sportBranchRepository.deleteAllForSport(id, tenantId);
         await this.sportRepository.softDelete(id, tenantId);
         await this.emit(sport_events_1.SportEventNames.DELETED, { tenantId, sportId: id, actorId });
         this.logger.log(`Sport deleted: ${id} tenant=${tenantId}`);
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
-    /**
-     * Validates that all branchIds exist within the tenant and are not archived.
-     * Throws 422 if any validation fails — prevents cross-tenant assignment.
-     */
     async assertBranchesBelongToTenant(branchIds, tenantId) {
         for (const branchId of branchIds) {
             let branch;
@@ -176,9 +151,6 @@ let SportService = SportService_1 = class SportService {
             }
         }
     }
-    /**
-     * Augments a SportEntity with its current branch ID list.
-     */
     async withBranches(sport, tenantId) {
         const branchIds = await this.sportBranchRepository.getBranchIdsForSport(sport.id, tenantId);
         return { ...sport, branchIds };

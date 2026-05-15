@@ -46,10 +46,6 @@ let BlogPostRepository = class BlogPostRepository extends tenant_aware_repositor
             .getManyAndCount();
         return { data, total };
     }
-    /**
-     * Returns all posts with status='scheduled' whose publishedAt has passed.
-     * Called by the scheduler task (Sprint 2: @Cron every minute).
-     */
     async findScheduledToPublish() {
         return this.entityManager
             .getRepository(blog_post_entity_1.BlogPostEntity)
@@ -59,9 +55,6 @@ let BlogPostRepository = class BlogPostRepository extends tenant_aware_repositor
             .andWhere('b.isDeleted = false')
             .getMany();
     }
-    /**
-     * Returns featured posts for homepage/sidebar widgets.
-     */
     async findFeatured(tenantId, limit = 5) {
         return this.scopedQb('b', tenantId)
             .andWhere('b.isFeatured = true')
@@ -70,10 +63,6 @@ let BlogPostRepository = class BlogPostRepository extends tenant_aware_repositor
             .take(limit)
             .getMany();
     }
-    /**
-     * Full-text search across title, excerpt and tags.
-     * Uses PostgreSQL ILIKE for case-insensitive substring match.
-     */
     async searchByText(query, tenantId, page = 1, limit = 20) {
         const term = `%${query.replace(/[%_]/g, '\\$&')}%`;
         const [data, total] = await this.scopedQb('b', tenantId)
@@ -84,10 +73,6 @@ let BlogPostRepository = class BlogPostRepository extends tenant_aware_repositor
             .getManyAndCount();
         return { data, total };
     }
-    /**
-     * Returns posts sharing the same category, excluding the source post.
-     * Used for "Related posts" widgets.
-     */
     async findRelated(postId, categoryId, tenantId, limit = 4) {
         return this.scopedQb('b', tenantId)
             .andWhere('b.categoryId = :categoryId', { categoryId })
@@ -97,10 +82,6 @@ let BlogPostRepository = class BlogPostRepository extends tenant_aware_repositor
             .take(limit)
             .getMany();
     }
-    /**
-     * Bulk-updates status for a list of post IDs.
-     * Validates all IDs belong to the tenant before updating.
-     */
     async bulkUpdateStatus(ids, status, tenantId) {
         if (ids.length === 0)
             return 0;

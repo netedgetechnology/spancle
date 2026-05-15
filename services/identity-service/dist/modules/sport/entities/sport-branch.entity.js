@@ -11,31 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SportBranchEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * SportBranchEntity — join table linking a sport to the branches where
- * it is offered.
- *
- * Architecture decisions:
- *
- *   1. `tenantId` is on every row — not derived from the sport or branch FKs.
- *      This satisfies the TenantAwareRepository contract and enables
- *      RLS policies to scope queries without joins.
- *
- *   2. This is NOT a standard TypeORM @ManyToMany relation. We avoid
- *      TypeORM's auto-generated join tables because:
- *      a. They cannot carry tenantId (no extra columns on implicit join tables)
- *      b. We need soft-delete (isDeleted) on the mapping itself
- *      c. We need sortOrder for ordered branch display per sport
- *
- *   3. Uniqueness: UNIQUE(tenant_id, sport_id, branch_id) — the DB constraint
- *      prevents duplicate mappings. Service layer uses replace strategy
- *      (delete existing + insert new) to avoid concurrent insert conflicts.
- *
- *   4. No DB-level FK constraints on sport_id or branch_id — multi-tenant
- *      pattern enforces referential integrity at the service layer.
- *
- * Table: `sport_branches`
- */
 let SportBranchEntity = class SportBranchEntity {
 };
 exports.SportBranchEntity = SportBranchEntity;

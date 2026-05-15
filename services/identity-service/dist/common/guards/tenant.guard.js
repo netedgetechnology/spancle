@@ -16,18 +16,6 @@ const core_1 = require("@nestjs/core");
 const auth_sdk_1 = require("@spancle/auth-sdk");
 const constants_1 = require("@spancle/constants");
 const roles_decorator_1 = require("../decorators/roles.decorator");
-/**
- * TenantGuard — first guard in the chain on every controller.
- *
- * Responsibilities:
- *   1. Reads `x-tenant-id` header (configurable via TENANT_HEADER env var)
- *   2. Validates it is a well-formed UUID
- *   3. Constructs a TenantContext and attaches it to request.tenant
- *
- * Throws 401 (not 400) — avoids leaking tenant resolution logic to clients.
- * Returns 401 on @Public() routes too if tenant header is present but malformed.
- * Returns early (passes) if @Public() and no tenant header provided.
- */
 let TenantGuard = TenantGuard_1 = class TenantGuard {
     constructor(reflector) {
         this.reflector = reflector;
@@ -44,16 +32,13 @@ let TenantGuard = TenantGuard_1 = class TenantGuard {
             .switchToHttp()
             .getRequest();
         const tenantId = request.headers[this.tenantHeader];
-        // Public route with no tenant header — allow through without tenant context
         if (isPublic && !tenantId) {
             return true;
         }
-        // Tenant header missing on protected route
         if (!tenantId || typeof tenantId !== 'string') {
             this.logger.warn(`Missing [${this.tenantHeader}] header — ip: ${request.ip ?? 'unknown'} path: ${request.path}`);
             throw new common_1.UnauthorizedException('Tenant context is required');
         }
-        // Tenant ID format validation — prevents header injection attacks
         if (!this.uuidPattern.test(tenantId)) {
             this.logger.warn(`Malformed tenant ID "${tenantId}" — ip: ${request.ip ?? 'unknown'}`);
             throw new common_1.UnauthorizedException('Invalid tenant context');

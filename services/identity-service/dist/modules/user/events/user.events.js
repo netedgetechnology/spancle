@@ -1,10 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserEvents = void 0;
-/**
- * UserEvents — domain event constants for the user domain.
- * All events namespaced under spancle.user.*
- */
 var UserEvents;
 (function (UserEvents) {
     UserEvents["CREATED"] = "spancle.user.created";

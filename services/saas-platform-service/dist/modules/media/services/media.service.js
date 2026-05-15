@@ -23,11 +23,6 @@ let MediaService = MediaService_1 = class MediaService {
         this.config = config;
         this.logger = new common_1.Logger(MediaService_1.name);
     }
-    /**
-     * Registers a media asset after the file has been uploaded to storage.
-     * The upload itself is handled by the controller (multipart) — this
-     * service only persists the metadata record.
-     */
     async register(dto, tenantId, actorId) {
         const driver = (this.config.get('STORAGE_DRIVER') ?? 'local');
         const entity = await this.mediaRepository.insert({

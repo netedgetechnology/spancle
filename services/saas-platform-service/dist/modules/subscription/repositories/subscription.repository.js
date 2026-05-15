@@ -45,7 +45,6 @@ let SubscriptionRepository = class SubscriptionRepository {
             order: { createdAt: 'DESC' },
         });
     }
-    /** Returns all subscriptions with trials ending before `before` date */
     async findExpiredTrials(before) {
         return this.repo.find({
             where: {
@@ -55,7 +54,6 @@ let SubscriptionRepository = class SubscriptionRepository {
             },
         });
     }
-    /** Returns all subscriptions with periodEnd before `before` and still active */
     async findExpiredPeriods(before) {
         return this.repo.find({
             where: {

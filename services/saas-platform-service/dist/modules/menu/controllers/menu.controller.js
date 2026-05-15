@@ -22,7 +22,6 @@ let MenuController = class MenuController {
     constructor(menuService) {
         this.menuService = menuService;
     }
-    // ── Menus ──────────────────────────────────────────────────────────────────
     create(dto, tenant) {
         return this.menuService.create(dto, tenant.tenantId, 'system');
     }
@@ -41,7 +40,6 @@ let MenuController = class MenuController {
     remove(id, tenant) {
         return this.menuService.remove(id, tenant.tenantId, 'system');
     }
-    // ── Menu Items ─────────────────────────────────────────────────────────────
     getItems(id, tenant) {
         return this.menuService.getItems(id, tenant.tenantId);
     }

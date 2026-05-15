@@ -16,15 +16,6 @@ const identity_module_1 = require("../identity/identity.module");
 const onboarding_controller_1 = require("./controllers/onboarding.controller");
 const onboarding_service_1 = require("./services/onboarding.service");
 const onboarding_token_service_1 = require("./services/onboarding-token.service");
-/**
- * OnboardingModule — tenant onboarding workflow.
- *
- * Registers the 6-step onboarding saga as @Public() endpoints.
- * Depends on: TenantModule, UserModule, AuthModule, IdentityModule.
- *
- * HttpModule: used for cross-service calls to saas-platform-service
- * (package validation, subscription creation).
- */
 let OnboardingModule = class OnboardingModule {
 };
 exports.OnboardingModule = OnboardingModule;

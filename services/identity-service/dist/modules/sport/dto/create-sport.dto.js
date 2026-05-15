@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SportStatusDto = exports.AssignBranchesDto = exports.UpdateSportDto = exports.CreateSportDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-// ── CreateSportDto ────────────────────────────────────────────────────────────
 const SPORT_STATUSES = ['active', 'inactive'];
 class CreateSportDto {
 }
@@ -79,7 +78,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Array)
 ], CreateSportDto.prototype, "branchIds", void 0);
-// ── UpdateSportDto ────────────────────────────────────────────────────────────
 class UpdateSportDto {
 }
 exports.UpdateSportDto = UpdateSportDto;
@@ -126,16 +124,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], UpdateSportDto.prototype, "sortOrder", void 0);
-// ── AssignBranchesDto ─────────────────────────────────────────────────────────
-/**
- * AssignBranchesDto — replaces the full set of branch mappings for a sport.
- *
- * Passing an empty array removes all branch mappings (sport becomes
- * globally available, subject to business rules).
- *
- * All branchIds must belong to the same tenant as the sport.
- * Archived branches are rejected.
- */
 class AssignBranchesDto {
 }
 exports.AssignBranchesDto = AssignBranchesDto;
@@ -144,7 +132,6 @@ __decorate([
     (0, class_validator_1.IsUUID)('4', { each: true, message: 'Each branchId must be a valid UUID' }),
     __metadata("design:type", Array)
 ], AssignBranchesDto.prototype, "branchIds", void 0);
-// ── SportStatusDto ────────────────────────────────────────────────────────────
 class SportStatusDto {
 }
 exports.SportStatusDto = SportStatusDto;

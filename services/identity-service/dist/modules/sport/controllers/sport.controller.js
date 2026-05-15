@@ -20,74 +20,34 @@ const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
 const sport_service_1 = require("../services/sport.service");
 const create_sport_dto_1 = require("../dto/create-sport.dto");
-/**
- * SportController — sport management endpoints.
- *
- * All routes are behind the global guard chain:
- *   TenantGuard → JwtAuthGuard → TenantStatusGuard
- *
- * Write operations require TENANT_ADMIN or TENANT_MANAGER role.
- * Read operations are open to all authenticated tenant users.
- *
- * Routes:
- *   POST   /api/v1/sports
- *   GET    /api/v1/sports                       ?status=active|inactive
- *   GET    /api/v1/sports/status-summary
- *   GET    /api/v1/sports/by-slug/:slug
- *   GET    /api/v1/sports/by-branch/:branchId
- *   GET    /api/v1/sports/:id
- *   PATCH  /api/v1/sports/:id
- *   PATCH  /api/v1/sports/:id/status
- *   PATCH  /api/v1/sports/:id/branches
- *   DELETE /api/v1/sports/:id
- */
 let SportController = class SportController {
     constructor(sportService) {
         this.sportService = sportService;
     }
-    // ── Write ──────────────────────────────────────────────────────────────────
     create(dto, tenant, actorId) {
         return this.sportService.create(dto, tenant.tenantId, actorId);
     }
     update(id, dto, tenant, actorId) {
         return this.sportService.update(id, dto, tenant.tenantId, actorId);
     }
-    /**
-     * PATCH /sports/:id/status
-     * Dedicated status transition — explicit and auditable.
-     */
     updateStatus(id, dto, tenant, actorId) {
         return this.sportService.updateStatus(id, dto, tenant.tenantId, actorId);
     }
-    /**
-     * PATCH /sports/:id/branches
-     * Replaces the full set of branch mappings for this sport.
-     * Pass { branchIds: [] } to remove all mappings.
-     */
     assignBranches(id, dto, tenant, actorId) {
         return this.sportService.assignBranches(id, dto, tenant.tenantId, actorId);
     }
     remove(id, tenant, actorId) {
         return this.sportService.remove(id, tenant.tenantId, actorId);
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     findAll(tenant, status) {
         return this.sportService.findAll(tenant.tenantId, status);
     }
-    /**
-     * GET /sports/status-summary
-     * Returns { active: N, inactive: N } — declared before /:id to avoid shadowing.
-     */
     getStatusSummary(tenant) {
         return this.sportService.getStatusSummary(tenant.tenantId);
     }
     findBySlug(slug, tenant) {
         return this.sportService.findBySlug(slug, tenant.tenantId);
     }
-    /**
-     * GET /sports/by-branch/:branchId
-     * Returns all active sports mapped to a specific branch.
-     */
     findByBranch(branchId, tenant) {
         return this.sportService.findByBranch(branchId, tenant.tenantId);
     }

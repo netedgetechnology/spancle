@@ -55,10 +55,6 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
     constructor(dataSource) {
         super(homepage_section_entity_1.HomepageSectionEntity, dataSource.manager);
     }
-    /**
-     * Returns all published, visible sections for a page in sortOrder.
-     * Used by the public renderer.
-     */
     async findPublishedByPage(pageId, tenantId) {
         return this.scopedQb('hs', tenantId)
             .andWhere('hs.pageId    = :pageId', { pageId })
@@ -67,19 +63,12 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
             .orderBy('hs.sortOrder', 'ASC')
             .getMany();
     }
-    /**
-     * Returns ALL sections for a page (all statuses).
-     * Used by the admin editor.
-     */
     async findAllByPage(pageId, tenantId) {
         return this.scopedQb('hs', tenantId)
             .andWhere('hs.pageId = :pageId', { pageId })
             .orderBy('hs.sortOrder', 'ASC')
             .getMany();
     }
-    /**
-     * Returns sections filtered by type — used to enforce section limits.
-     */
     async findByPageAndType(pageId, sectionType, tenantId) {
         return this.scopedQb('hs', tenantId)
             .andWhere('hs.pageId      = :pageId', { pageId })
@@ -87,10 +76,6 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
             .orderBy('hs.sortOrder', 'ASC')
             .getMany();
     }
-    /**
-     * Returns a single section by id within a tenant.
-     * Throws NotFoundException if not found or already deleted.
-     */
     async findByIdOrFail(id, tenantId) {
         const section = await this.scopedQb('hs', tenantId)
             .andWhere('hs.id = :id', { id })
@@ -100,17 +85,10 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
         }
         return section;
     }
-    /**
-     * Creates and saves a new section. tenantId must be set on data before calling.
-     */
     async insert(data, tenantId) {
         const entity = this.entityManager.create(homepage_section_entity_1.HomepageSectionEntity, { ...data, ...(tenantId ? { tenantId } : {}) });
         return this.entityManager.save(homepage_section_entity_1.HomepageSectionEntity, entity);
     }
-    /**
-     * Returns the current max sortOrder for a page.
-     * Used to append a new section at the end.
-     */
     async getMaxSortOrder(pageId, tenantId) {
         const result = await this.scopedQb('hs', tenantId)
             .andWhere('hs.pageId = :pageId', { pageId })
@@ -118,10 +96,6 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
             .getRawOne();
         return result?.maxOrder !== null ? Number(result?.maxOrder) : -1;
     }
-    /**
-     * Bulk-updates sortOrder for reordering — uses a single transaction.
-     * All section IDs must belong to tenantId (validated in service).
-     */
     async bulkUpdateSortOrder(updates, tenantId) {
         await this.entityManager.transaction(async (em) => {
             for (const { id, sortOrder } of updates) {
@@ -137,9 +111,6 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
             }
         });
     }
-    /**
-     * Updates a single section by id within a tenant.
-     */
     async updateById(id, data, tenantId) {
         await this.entityManager
             .createQueryBuilder()
@@ -156,9 +127,6 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
         }
         return updated;
     }
-    /**
-     * Soft-deletes a single section by id within a tenant.
-     */
     async softDelete(id, tenantId) {
         await this.entityManager
             .createQueryBuilder()
@@ -167,9 +135,6 @@ let HomepageSectionRepository = class HomepageSectionRepository extends tenant_a
             .where('id = :id AND tenantId = :tenantId AND isDeleted = false', { id, tenantId })
             .execute();
     }
-    /**
-     * Soft-deletes all sections for a page — used when a page is deleted.
-     */
     async softDeleteAllByPage(pageId, tenantId) {
         await this.entityManager
             .createQueryBuilder()

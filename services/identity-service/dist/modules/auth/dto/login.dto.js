@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ResetPasswordDto = exports.ForgotPasswordDto = exports.ChangePasswordDto = exports.LogoutDto = exports.RefreshTokenDto = exports.LoginDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-// ── LoginDto ──────────────────────────────────────────────────────────────────
 class LoginDto {
 }
 exports.LoginDto = LoginDto;
@@ -29,7 +28,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(128, { message: 'Password must not exceed 128 characters' }),
     __metadata("design:type", String)
 ], LoginDto.prototype, "password", void 0);
-// ── RefreshTokenDto ───────────────────────────────────────────────────────────
 class RefreshTokenDto {
 }
 exports.RefreshTokenDto = RefreshTokenDto;
@@ -38,7 +36,6 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)({ message: 'Refresh token is required' }),
     __metadata("design:type", String)
 ], RefreshTokenDto.prototype, "refreshToken", void 0);
-// ── LogoutDto ─────────────────────────────────────────────────────────────────
 class LogoutDto {
 }
 exports.LogoutDto = LogoutDto;
@@ -47,7 +44,6 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)({ message: 'Refresh token is required' }),
     __metadata("design:type", String)
 ], LogoutDto.prototype, "refreshToken", void 0);
-// ── ChangePasswordDto ─────────────────────────────────────────────────────────
 class ChangePasswordDto {
 }
 exports.ChangePasswordDto = ChangePasswordDto;
@@ -68,7 +64,6 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)({ message: 'Password confirmation is required' }),
     __metadata("design:type", String)
 ], ChangePasswordDto.prototype, "confirmPassword", void 0);
-// ── ForgotPasswordDto ─────────────────────────────────────────────────────────
 class ForgotPasswordDto {
 }
 exports.ForgotPasswordDto = ForgotPasswordDto;
@@ -78,7 +73,6 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value?.toLowerCase().trim()),
     __metadata("design:type", String)
 ], ForgotPasswordDto.prototype, "email", void 0);
-// ── ResetPasswordDto ──────────────────────────────────────────────────────────
 class ResetPasswordDto {
 }
 exports.ResetPasswordDto = ResetPasswordDto;

@@ -11,26 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QrTokenEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * QrTokenEntity — an issued, single-use (or limited-use) QR token.
- *
- * Design:
- *   - tokenHash: SHA-256 of the raw token string — never stored in plain text.
- *     The raw token is returned once at generation time and never persisted.
- *
- *   - payload: JSONB blob encrypted/signed at the application layer.
- *     Contains: bookingId, tenantId, courtId, purpose, issuedAt, expiresAt.
- *     Smart access devices decode this to authorise entry without a DB call.
- *
- *   - maxUses: supports single-use (1) and multi-use (e.g. recurring group sessions).
- *     Default 1 for booking check-in.
- *
- *   - deviceId: ID of the smart access device that last scanned this token.
- *     Null until first scan. Future: cross-reference against door_controllers table.
- *
- * Table: qr_tokens
- * Audit: INSERT only for used_at / scan history; no UPDATE on the main record after issue.
- */
 let QrTokenEntity = class QrTokenEntity {
 };
 exports.QrTokenEntity = QrTokenEntity;

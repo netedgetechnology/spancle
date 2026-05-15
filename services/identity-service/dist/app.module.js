@@ -30,30 +30,7 @@ const tenant_status_guard_1 = require("./modules/tenant/guards/tenant-status.gua
 const plan_limit_guard_1 = require("./modules/tenant/guards/plan-limit.guard");
 const tenant_context_middleware_1 = require("./common/middleware/tenant-context.middleware");
 const tenant_context_interceptor_1 = require("./common/interceptors/tenant-context.interceptor");
-/**
- * AppModule — identity-service root module.
- *
- * Global guard execution order (guaranteed by APP_GUARD registration order):
- *   1. ThrottlerGuard    — rate limiting, all routes
- *   2. TenantGuard       — header extraction + UUID format validation
- *   3. JwtAuthGuard      — Bearer token validation, sets request.user
- *   4. TenantStatusGuard — blocks suspended/terminated tenants
- *   5. PlanLimitGuard    — enforces @RequiresFeature() / @RequiresTier()
- *   6. RolesGuard        — enforces @Roles() metadata
- *   7. PermissionsGuard  — enforces @RequirePermissions() metadata
- *
- * Global interceptors:
- *   TenantContextInterceptor — stamps x-tenant-* response headers
- *
- * Middleware pipeline (runs before guards):
- *   TenantContextMiddleware   — attaches raw tenantId to request
- *   TenantResolverMiddleware  — full resolution (registered in TenantModule)
- */
 let AppModule = class AppModule {
-    /**
-     * Middleware pipeline — runs before guard chain.
-     * TenantResolverMiddleware is registered inside TenantModule.configure().
-     */
     configure(consumer) {
         consumer.apply(tenant_context_middleware_1.TenantContextMiddleware).forRoutes('*');
     }
@@ -90,7 +67,6 @@ exports.AppModule = AppModule = __decorate([
                         }],
                 }),
             }),
-            // Domain modules
             tenant_module_1.TenantModule,
             auth_module_1.AuthModule,
             identity_module_1.IdentityModule,
@@ -102,7 +78,6 @@ exports.AppModule = AppModule = __decorate([
             court_module_1.CourtModule,
         ],
         providers: [
-            // ── Global guards — order = enforcement order ──────────────────────────
             { provide: core_1.APP_GUARD, useClass: throttler_1.ThrottlerGuard },
             { provide: core_1.APP_GUARD, useClass: tenant_guard_1.TenantGuard },
             { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },
@@ -110,7 +85,6 @@ exports.AppModule = AppModule = __decorate([
             { provide: core_1.APP_GUARD, useClass: plan_limit_guard_1.PlanLimitGuard },
             { provide: core_1.APP_GUARD, useClass: roles_guard_1.RolesGuard },
             { provide: core_1.APP_GUARD, useClass: permissions_guard_1.PermissionsGuard },
-            // ── Global interceptors ────────────────────────────────────────────────
             { provide: core_1.APP_INTERCEPTOR, useClass: tenant_context_interceptor_1.TenantContextInterceptor },
         ],
     })

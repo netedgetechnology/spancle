@@ -34,10 +34,6 @@ let SportRepository = class SportRepository extends tenant_aware_repository_1.Te
             .addOrderBy('s.name', 'ASC')
             .getMany();
     }
-    /**
-     * Returns all sports assigned to a specific branch (via sport_branches join).
-     * Only active sports are returned.
-     */
     async findByBranch(branchId, tenantId) {
         return this.scopedQb('s', tenantId)
             .innerJoin('sport_branches', 'sb', 'sb.sport_id = s.id AND sb.branch_id = :branchId AND sb.tenant_id = :tenantId AND sb.is_deleted = false', { branchId, tenantId })

@@ -15,29 +15,18 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const node_crypto_1 = require("node:crypto");
 const redis_config_1 = require("../../../infrastructure/config/redis.config");
-/**
- * OnboardingTokenService — manages onboarding workflow state in Redis.
- *
- * Key namespaces (all on Redis DB 0 — cache):
- *   onboarding:reg:{registrationId}    → RegistrationRecord JSON, TTL 48h
- *   onboarding:token:{registrationId}  → verification token hex, TTL 24h
- *   onboarding:slug:{slug}             → "reserved" string, TTL 48h (prevents races)
- *   onboarding:email:{email}           → registrationId, TTL 48h (prevents duplicate signups)
- *   onboarding:idempotency:{key}       → response JSON, TTL 60s (prevents double-submit)
- */
 let OnboardingTokenService = OnboardingTokenService_1 = class OnboardingTokenService {
     constructor(config) {
         this.config = config;
         this.logger = new common_1.Logger(OnboardingTokenService_1.name);
-        this.REG_TTL_S = 48 * 60 * 60; // 48 hours
-        this.TOKEN_TTL_S = 24 * 60 * 60; // 24 hours
-        this.IDEM_TTL_S = 60; // 60 seconds
+        this.REG_TTL_S = 48 * 60 * 60;
+        this.TOKEN_TTL_S = 24 * 60 * 60;
+        this.IDEM_TTL_S = 60;
     }
     onModuleInit() {
         this.redis = (0, redis_config_1.createRedisClient)(this.config, 'cache');
         this.logger.log('OnboardingTokenService Redis client initialised');
     }
-    // ── Registration records ───────────────────────────────────────────────────
     async createRegistration(data) {
         const registrationId = (0, node_crypto_1.randomBytes)(16).toString('hex');
         const now = new Date().toISOString();
@@ -90,42 +79,30 @@ let OnboardingTokenService = OnboardingTokenService_1 = class OnboardingTokenSer
             this.redis.del(this.emailKey(record.email)),
         ]);
     }
-    // ── Email verification tokens ──────────────────────────────────────────────
-    /**
-     * Generates a new 64-character hex verification token.
-     * Old token is overwritten — only one valid token per registration at a time.
-     */
     async generateVerificationToken(registrationId) {
-        const token = (0, node_crypto_1.randomBytes)(32).toString('hex'); // 64 hex chars
+        const token = (0, node_crypto_1.randomBytes)(32).toString('hex');
         await this.redis.setex(this.tokenKey(registrationId), this.TOKEN_TTL_S, token);
         return token;
     }
-    /**
-     * Validates a verification token — single-use, deleted immediately on match.
-     */
     async validateAndConsumeToken(registrationId, token) {
         const stored = await this.redis.get(this.tokenKey(registrationId));
         if (!stored || stored !== token)
             return false;
-        // Delete immediately — single use
         await this.redis.del(this.tokenKey(registrationId));
         return true;
     }
-    // ── Duplicate prevention ───────────────────────────────────────────────────
     async isSlugReserved(slug) {
         return (await this.redis.exists(this.slugKey(slug))) === 1;
     }
     async isEmailPendingRegistration(email) {
         return this.redis.get(this.emailKey(email));
     }
-    // ── Idempotency ────────────────────────────────────────────────────────────
     async getIdempotentResponse(key) {
         return this.redis.get(`onboarding:idempotency:${key}`);
     }
     async setIdempotentResponse(key, response) {
         await this.redis.setex(`onboarding:idempotency:${key}`, this.IDEM_TTL_S, JSON.stringify(response));
     }
-    // ── Private key builders ───────────────────────────────────────────────────
     regKey(id) { return `onboarding:reg:${id}`; }
     tokenKey(id) { return `onboarding:token:${id}`; }
     slugKey(slug) { return `onboarding:slug:${slug}`; }

@@ -19,31 +19,14 @@ const plan_limit_guard_1 = require("./guards/plan-limit.guard");
 const plan_restriction_middleware_1 = require("./middleware/plan-restriction.middleware");
 const request_context_provider_1 = require("../../common/context/request-context.provider");
 const tenant_resolver_middleware_1 = require("../../common/middleware/tenant-resolver.middleware");
-/**
- * TenantModule — tenant isolation and lifecycle management.
- *
- * Exports:
- *   TenantService         → for cross-module tenant resolution
- *   TenantCacheService    → for cache invalidation from other modules
- *   TenantStatusGuard     → for use in other module controllers
- *   PlanLimitGuard        → for use in other module controllers
- *   RequestContextProvider → for REQUEST-scoped DI in service methods
- *
- * Middleware registration:
- *   TenantResolverMiddleware runs on all routes (registered here via NestModule)
- *   PlanRestrictionMiddleware runs on resource creation routes
- */
 let TenantModule = class TenantModule {
     configure(consumer) {
-        // Full tenant resolution — runs after TenantContextMiddleware
         consumer
             .apply(tenant_resolver_middleware_1.TenantResolverMiddleware)
             .forRoutes('*');
-        // Plan restriction — resource creation enforcement
         consumer
             .apply(plan_restriction_middleware_1.PlanRestrictionMiddleware)
-            .forRoutes({ path: 'users', method: 3 }, // POST
-        { path: 'academies', method: 3 }, { path: 'bookings', method: 3 }, { path: 'tournaments', method: 3 });
+            .forRoutes({ path: 'users', method: 3 }, { path: 'academies', method: 3 }, { path: 'bookings', method: 3 }, { path: 'tournaments', method: 3 });
     }
 };
 exports.TenantModule = TenantModule;

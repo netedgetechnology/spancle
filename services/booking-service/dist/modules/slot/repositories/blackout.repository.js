@@ -53,21 +53,11 @@ let BlackoutRepository = BlackoutRepository_1 = class BlackoutRepository {
             .orderBy('b.startAt', 'DESC')
             .getMany();
     }
-    /**
-     * Checks whether a specific datetime window is blocked by any active blackout
-     * that applies to the given court/branch/tenant scope.
-     *
-     * A blackout blocks the window if:
-     *   - blackout.startAt < windowEnd AND blackout.endAt > windowStart (overlap)
-     *   - Scope: tenant wildcard OR matching branchId/courtId/sportId
-     */
     async isBlocked(params) {
         const { tenantId, courtId, branchId, sportId, startAt, endAt } = params;
         const count = await this.scopedQb('b', tenantId)
-            // Overlap: blackout starts before window ends AND blackout ends after window starts
             .andWhere('b.startAt < :endAt', { endAt })
             .andWhere('b.endAt > :startAt', { startAt })
-            // Scope match
             .andWhere(`(
           (b.scope = 'tenant')
           OR (b.scope = 'branch' AND b.branchId = :branchId)
@@ -77,10 +67,6 @@ let BlackoutRepository = BlackoutRepository_1 = class BlackoutRepository {
             .getCount();
         return count > 0;
     }
-    /**
-     * Returns all active blackouts that overlap with the given window.
-     * Used by SlotGeneratorService to pre-fetch all blackouts for a date range.
-     */
     async findOverlapping(params) {
         const { tenantId, courtId, branchId, sportId, startAt, endAt } = params;
         return this.scopedQb('b', tenantId)

@@ -18,19 +18,6 @@ const password_service_1 = require("./services/password.service");
 const auth_repository_1 = require("./repositories/auth.repository");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
 const identity_module_1 = require("../identity/identity.module");
-/**
- * AuthModule — the authentication and authorisation foundation.
- *
- * Exports:
- *   - JwtModule       → for signing tokens in other modules
- *   - TokenService    → for programmatic token management
- *   - PasswordService → for identity creation in UserModule
- *   - AuthRepository  → for JwtStrategy access to blacklist
- *
- * Guards (JwtAuthGuard, TenantGuard, RolesGuard, PermissionsGuard) are
- * registered as global guards in AppModule — not here.
- * This keeps AuthModule focused on auth logic, not cross-cutting guards.
- */
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;

@@ -12,11 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CheckSlugDto = exports.CompleteOnboardingDto = exports.SelectPackageDto = exports.ResendVerificationDto = exports.VerifyEmailDto = exports.SignupDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-// ── Step 1: Signup ────────────────────────────────────────────────────────────
-/**
- * SignupDto — initiates the onboarding flow.
- * Creates a pending registration record and sends a verification email.
- */
 class SignupDto {
 }
 exports.SignupDto = SignupDto;
@@ -51,10 +46,6 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value?.toLowerCase().trim()),
     __metadata("design:type", String)
 ], SignupDto.prototype, "email", void 0);
-// ── Step 2: Email verification ────────────────────────────────────────────────
-/**
- * VerifyEmailDto — submits the verification token received by email.
- */
 class VerifyEmailDto {
 }
 exports.VerifyEmailDto = VerifyEmailDto;
@@ -70,7 +61,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(64),
     __metadata("design:type", String)
 ], VerifyEmailDto.prototype, "token", void 0);
-// ── Step 2b: Resend verification ───────────────────────────────────────────────
 class ResendVerificationDto {
 }
 exports.ResendVerificationDto = ResendVerificationDto;
@@ -79,11 +69,6 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], ResendVerificationDto.prototype, "registrationId", void 0);
-// ── Step 3: Package selection ─────────────────────────────────────────────────
-/**
- * SelectPackageDto — tenant chooses a plan for their trial.
- * If packageId is omitted, the 'free' tier package is selected by default.
- */
 class SelectPackageDto {
 }
 exports.SelectPackageDto = SelectPackageDto;
@@ -101,11 +86,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], SelectPackageDto.prototype, "billingCycle", void 0);
-// ── Step 4: Setup (provisioning) ──────────────────────────────────────────────
-/**
- * CompleteOnboardingDto — final setup step.
- * Sets the admin password and any org-level settings before provisioning.
- */
 class CompleteOnboardingDto {
 }
 exports.CompleteOnboardingDto = CompleteOnboardingDto;
@@ -140,7 +120,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(3),
     __metadata("design:type", String)
 ], CompleteOnboardingDto.prototype, "currency", void 0);
-// ── Check slug availability ───────────────────────────────────────────────────
 class CheckSlugDto {
 }
 exports.CheckSlugDto = CheckSlugDto;

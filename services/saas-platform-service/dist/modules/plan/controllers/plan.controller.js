@@ -22,18 +22,15 @@ let PlanController = class PlanController {
     constructor(planService) {
         this.planService = planService;
     }
-    /** GET current plan + effective limits for the authenticated tenant */
     getCurrentPlan(tenant) {
         return this.planService.findForTenant(tenant.tenantId);
     }
-    /** GET resolved effective features + limits (merged with overrides) */
     getEffectiveLimits(tenant) {
         return this.planService.getEffectiveLimits(tenant.tenantId);
     }
     findOne(id) {
         return this.planService.findOne(id);
     }
-    /** PATCH overrides — superadmin only, e.g. custom enterprise limits */
     updateOverrides(id, dto) {
         return this.planService.updateOverrides(id, dto, 'system');
     }

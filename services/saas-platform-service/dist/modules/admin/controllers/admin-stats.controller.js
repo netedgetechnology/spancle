@@ -17,18 +17,6 @@ const common_1 = require("@nestjs/common");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
 const super_admin_guard_1 = require("../guards/super-admin.guard");
 const admin_stats_service_1 = require("../services/admin-stats.service");
-/**
- * AdminStatsController — platform-wide metrics for the superadmin dashboard.
- *
- * All routes require:
- *   - JwtAuthGuard (global — via AppModule)
- *   - SuperAdminGuard (class-level — role === 'SUPER_ADMIN')
- *
- * Routes:
- *   GET /api/v1/admin/stats?period=30
- *     Returns aggregated platform statistics for the given period window.
- *     period: number of days for "this period" comparisons (default: 30)
- */
 let AdminStatsController = class AdminStatsController {
     constructor(statsService) {
         this.statsService = statsService;

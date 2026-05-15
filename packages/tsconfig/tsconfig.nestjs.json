@@ -18,7 +18,8 @@
     "incremental": true,
     "skipLibCheck": true,
     "strict": false,
-    "noImplicitOverride": false
+    "noImplicitOverride": false,
+    "noEmitOnError": false
   },
   "exclude": [
     "node_modules",

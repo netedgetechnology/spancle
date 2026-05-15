@@ -5,7 +5,7 @@
   "description": "Spancle Sports OS \u2014 Facility bookings, time slot management and venue coordination",
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "tsc --project tsconfig.build.json",
     "dev": "nest start --watch",
     "start": "node dist/main",
     "lint": "eslint src --ext .ts --max-warnings=0",

@@ -11,18 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MenuItemEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * MenuItemEntity — a single navigation item within a Menu.
- *
- * Supports nesting via parentId (max depth enforced at service layer).
- * Items are ordered by sortOrder within their parent level.
- *
- * Link resolution:
- *   - internal_page: references a PageEntity by pageId
- *   - internal_post: references a BlogPostEntity by postId
- *   - external_url:  direct URL in the url field
- *   - custom:        arbitrary URL fragment (anchor, JS action)
- */
 let MenuItemEntity = class MenuItemEntity {
 };
 exports.MenuItemEntity = MenuItemEntity;

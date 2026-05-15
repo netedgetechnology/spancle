@@ -23,15 +23,8 @@ let PlanService = PlanService_1 = class PlanService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(PlanService_1.name);
     }
-    /**
-     * Upserts the active plan for a tenant.
-     * Called by SubscriptionService when a subscription is activated.
-     * Deactivates any previous plan before creating the new one.
-     */
     async upsertForTenant(dto, actorId) {
-        // Verify the package exists
         await this.packageService.findOne(dto.packageId);
-        // Deactivate existing plan
         await this.planRepository.deactivateByTenant(dto.tenantId);
         const entity = await this.planRepository.create({
             tenantId: dto.tenantId,
@@ -58,11 +51,6 @@ let PlanService = PlanService_1 = class PlanService {
             throw new common_1.NotFoundException(`Plan ${id} not found`);
         return entity;
     }
-    /**
-     * Updates feature/limit overrides for a tenant plan.
-     * Used by superadmin to grant enterprise-custom limits.
-     * Merges on top of existing overrides — never full-replaces.
-     */
     async updateOverrides(id, dto, actorId) {
         const plan = await this.findOne(id);
         const updated = await this.planRepository.update(id, {
@@ -80,14 +68,9 @@ let PlanService = PlanService_1 = class PlanService {
         });
         return updated;
     }
-    /**
-     * Returns the effective resolved limits for a tenant.
-     * Merges package.limits with plan.limitOverrides (overrides win).
-     */
     async getEffectiveLimits(tenantId) {
         const plan = await this.planRepository.findByTenant(tenantId);
         if (!plan) {
-            // Fallback to free tier defaults
             return {
                 features: {},
                 limits: {},

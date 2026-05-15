@@ -15,22 +15,6 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const auth_sdk_1 = require("@spancle/auth-sdk");
 const roles_decorator_1 = require("../decorators/roles.decorator");
-/**
- * PermissionsGuard — enforces @RequirePermissions() metadata.
- *
- * Execution position: after RolesGuard.
- *
- * Behaviour:
- *   - @Public()                               → always passes
- *   - No @RequirePermissions()                → passes
- *   - @RequirePermissions({resource, action}) → ALL listed permissions must be satisfied
- *   - SUPER_ADMIN                             → always passes (RbacEngine wildcard)
- *
- * Differs from RolesGuard:
- *   - RolesGuard checks WHAT role a user has
- *   - PermissionsGuard checks WHAT they can do with it
- *   Both can coexist on the same endpoint.
- */
 let PermissionsGuard = PermissionsGuard_1 = class PermissionsGuard {
     constructor(reflector) {
         this.reflector = reflector;
@@ -59,7 +43,6 @@ let PermissionsGuard = PermissionsGuard_1 = class PermissionsGuard {
             tenantId: user.tenantId,
             role: user.role,
         };
-        // ALL required permissions must pass — AND semantics
         for (const permission of requiredPermissions) {
             const result = auth_sdk_1.RbacEngine.evaluate(rbacContext, permission);
             if (result.decision === 'deny') {

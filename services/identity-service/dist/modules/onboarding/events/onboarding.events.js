@@ -1,12 +1,4 @@
 "use strict";
-/**
- * onboarding.events.ts — Domain events emitted at each onboarding step.
- *
- * These events are consumed by:
- *   - communication-service: sends verification email, welcome email
- *   - reporting-service: tracks funnel conversion
- *   - saas-platform-service: triggers subscription provisioning listener
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OnboardingEventNames = void 0;
 var OnboardingEventNames;

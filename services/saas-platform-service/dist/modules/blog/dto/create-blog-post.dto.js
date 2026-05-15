@@ -155,7 +155,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", seo_fields_dto_1.SeoFieldsDto)
 ], UpdateBlogPostDto.prototype, "seo", void 0);
-// ── BulkUpdateStatusDto ───────────────────────────────────────────────────────
 class BulkUpdateStatusDto {
 }
 exports.BulkUpdateStatusDto = BulkUpdateStatusDto;
@@ -170,7 +169,6 @@ __decorate([
     (0, class_validator_1.IsEnum)(['draft', 'published', 'archived']),
     __metadata("design:type", String)
 ], BulkUpdateStatusDto.prototype, "status", void 0);
-// ── CreateCategoryDto / UpdateCategoryDto ─────────────────────────────────────
 class CreateCategoryDto {
 }
 exports.CreateCategoryDto = CreateCategoryDto;

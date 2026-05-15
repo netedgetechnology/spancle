@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdatePackageDto = exports.CreatePackageDto = exports.PackageLimitsDto = exports.PackageFeaturesDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-// ── Feature flags sub-DTO ─────────────────────────────────────────────────────
 class PackageFeaturesDto {
 }
 exports.PackageFeaturesDto = PackageFeaturesDto;
@@ -66,8 +65,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Boolean)
 ], PackageFeaturesDto.prototype, "ssoIntegration", void 0);
-// ── Resource limits sub-DTO ───────────────────────────────────────────────────
-// -1 = unlimited; all other values must be >= 0.
 function unlimitedOrPositive(value) {
     return value === -1 || (typeof value === 'number' && value >= 0);
 }
@@ -119,7 +116,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], PackageLimitsDto.prototype, "maxReportsPerDay", void 0);
-// ── CreatePackageDto ──────────────────────────────────────────────────────────
 const TIER_KEYS = ['free', 'starter', 'growth', 'pro', 'enterprise'];
 const STATUSES = ['draft', 'active', 'deprecated', 'archived'];
 class CreatePackageDto {
@@ -223,7 +219,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], CreatePackageDto.prototype, "metadata", void 0);
-// ── UpdatePackageDto ──────────────────────────────────────────────────────────
 class UpdatePackageDto {
 }
 exports.UpdatePackageDto = UpdatePackageDto;

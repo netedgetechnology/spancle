@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BranchStatusDto = exports.AssignManagerDto = exports.UpdateBranchDto = exports.CreateBranchDto = exports.WeeklyTimingsDto = exports.DayTimingDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-// ── Day timing sub-DTO ────────────────────────────────────────────────────────
 class DayTimingDto {
 }
 exports.DayTimingDto = DayTimingDto;
@@ -34,7 +33,6 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], DayTimingDto.prototype, "closeTime", void 0);
-// ── Weekly timings sub-DTO ────────────────────────────────────────────────────
 class WeeklyTimingsDto {
 }
 exports.WeeklyTimingsDto = WeeklyTimingsDto;
@@ -73,7 +71,6 @@ __decorate([
     (0, class_transformer_1.Type)(() => DayTimingDto),
     __metadata("design:type", DayTimingDto)
 ], WeeklyTimingsDto.prototype, "sunday", void 0);
-// ── CreateBranchDto ───────────────────────────────────────────────────────────
 const BRANCH_STATUSES = ['active', 'inactive', 'suspended', 'archived'];
 class CreateBranchDto {
 }
@@ -214,7 +211,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], CreateBranchDto.prototype, "sortOrder", void 0);
-// ── UpdateBranchDto ───────────────────────────────────────────────────────────
 class UpdateBranchDto {
 }
 exports.UpdateBranchDto = UpdateBranchDto;
@@ -343,7 +339,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], UpdateBranchDto.prototype, "sortOrder", void 0);
-// ── AssignManagerDto ──────────────────────────────────────────────────────────
 class AssignManagerDto {
 }
 exports.AssignManagerDto = AssignManagerDto;
@@ -352,7 +347,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], AssignManagerDto.prototype, "managerUserId", void 0);
-// ── BranchStatusDto ───────────────────────────────────────────────────────────
 class BranchStatusDto {
 }
 exports.BranchStatusDto = BranchStatusDto;

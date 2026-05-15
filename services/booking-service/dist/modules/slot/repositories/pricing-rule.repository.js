@@ -54,34 +54,18 @@ let PricingRuleRepository = PricingRuleRepository_1 = class PricingRuleRepositor
             qb.andWhere('r.isActive = true');
         return qb.orderBy('r.priority', 'DESC').addOrderBy('r.ruleType', 'ASC').getMany();
     }
-    /**
-     * Core pricing query — finds all active rules that apply to a slot.
-     *
-     * Matching criteria:
-     *   - Scope matches (tenant wildcard, or specific branch/sport/court)
-     *   - Date range contains slotDate (or open-ended)
-     *   - Day of week matches (or daysOfWeek is null/empty = all days)
-     *   - Time window contains slotStartTime (or time fields are null = all day)
-     *
-     * Returns rules sorted by priority DESC so the service can apply them
-     * in the correct order.
-     */
     async findMatchingRules(params) {
         const { tenantId, courtId, branchId, sportId, slotDate, slotTime, dayOfWeek } = params;
         const qb = this.scopedQb('r', tenantId)
-            // Scope: tenant wildcard OR specific branch/sport/court
             .andWhere(`(
           (r.scope = 'tenant')
           OR (r.scope = 'branch' AND r.branchId = :branchId)
           OR (r.scope = 'court'  AND r.courtId  = :courtId)
           ${sportId ? "OR (r.scope = 'sport' AND r.sportId = :sportId)" : ''}
         )`, { branchId, courtId, ...(sportId && { sportId }) })
-            // Date range: validFrom <= slotDate <= validUntil (nulls = open-ended)
             .andWhere("(r.validFrom IS NULL OR r.validFrom <= :slotDate)", { slotDate })
             .andWhere("(r.validUntil IS NULL OR r.validUntil >= :slotDate)")
-            // Day of week: daysOfWeek is null/empty = all days, otherwise must contain dayOfWeek
             .andWhere(`(r.daysOfWeek IS NULL OR r.daysOfWeek = '[]'::jsonb OR r.daysOfWeek @> :dayJson::jsonb)`, { dayJson: JSON.stringify([dayOfWeek]) })
-            // Time window: null = all day, otherwise slotTime must be within window
             .andWhere("(r.timeStart IS NULL OR r.timeStart <= :slotTime)", { slotTime })
             .andWhere("(r.timeEnd IS NULL OR r.timeEnd > :slotTime)")
             .orderBy('r.priority', 'DESC')

@@ -11,15 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GenerateSlotsDto = void 0;
 const class_validator_1 = require("class-validator");
-/**
- * GenerateSlotsDto — input for bulk slot generation.
- *
- * Two modes:
- *   1. templateId provided → generate from a SlotTemplate's configuration
- *   2. No templateId       → use the fields directly (ad-hoc generation)
- *
- * In both modes, startDate/endDate defines the date range to generate.
- */
 class GenerateSlotsDto {
 }
 exports.GenerateSlotsDto = GenerateSlotsDto;

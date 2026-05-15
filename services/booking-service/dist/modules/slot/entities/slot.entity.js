@@ -11,42 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * SlotEntity — a concrete, bookable time block on a specific court.
- *
- * Architecture decisions:
- *
- *   - Slots are stored as rows (not generated on-the-fly). This enables
- *     booking FKs, pricing snapshots, overlap DB constraints, and
- *     efficient calendar range queries.
- *
- *   - courtId is a plain UUID — no DB-level FK to courts table (which
- *     lives in identity-service, a separate DB). Referential integrity
- *     enforced at service layer via HTTP call to identity-service.
- *
- *   - resolvedPriceMinor is computed at generation time by PricingService
- *     and stored. Avoids re-computing on every availability query.
- *     Historical accuracy: price doesn't change after slot is booked.
- *
- *   - priceOverrideMinor: admin-set per-slot manual price. Always wins
- *     over resolvedPriceMinor when set. Used for promotional pricing
- *     or corrections without touching pricing rules.
- *
- *   - templateId: optional link to the SlotTemplateEntity that generated
- *     this slot. Manual (one-off) slots have templateId = null.
- *
- *   - bookingId: set when status transitions to 'booked'. The booking
- *     record lives in the bookings table (same service DB).
- *
- *   - reservedUntil: expiry timestamp for 'reserved' status. A scheduler
- *     in SlotGeneratorService auto-expires stale reservations.
- *
- * DB uniqueness: UNIQUE(tenant_id, court_id, start_at) WHERE
- *   is_deleted = false AND status != 'cancelled'
- *   This is the primary overlap prevention constraint.
- *
- * Table: slots
- */
 let SlotEntity = class SlotEntity {
 };
 exports.SlotEntity = SlotEntity;
@@ -153,11 +117,9 @@ __decorate([
 ], SlotEntity.prototype, "deletedAt", void 0);
 exports.SlotEntity = SlotEntity = __decorate([
     (0, typeorm_1.Entity)('slots'),
-    (0, typeorm_1.Index)(['tenantId', 'courtId', 'startAt'], { unique: false }) // overlap query index
-    ,
+    (0, typeorm_1.Index)(['tenantId', 'courtId', 'startAt'], { unique: false }),
     (0, typeorm_1.Index)(['tenantId', 'courtId', 'status']),
-    (0, typeorm_1.Index)(['tenantId', 'startAt', 'endAt']) // calendar range queries
-    ,
+    (0, typeorm_1.Index)(['tenantId', 'startAt', 'endAt']),
     (0, typeorm_1.Index)(['tenantId', 'branchId']),
     (0, typeorm_1.Index)(['tenantId', 'sportId']),
     (0, typeorm_1.Index)(['tenantId', 'isDeleted'])

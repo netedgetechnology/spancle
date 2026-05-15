@@ -18,13 +18,6 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const slot_entity_1 = require("../entities/slot.entity");
-/**
- * SlotRepository — tenant-scoped slot data access.
- *
- * All methods enforce tenantId scoping on every query.
- * Overlap detection uses a range query (startAt < endAt AND endAt > startAt)
- * which correctly handles partial, full, and exact overlaps.
- */
 let SlotRepository = SlotRepository_1 = class SlotRepository {
     constructor(dataSource) {
         this.dataSource = dataSource;
@@ -39,7 +32,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
             .where(`${alias}.tenantId = :tenantId`, { tenantId })
             .andWhere(`${alias}.isDeleted = false`);
     }
-    // ── CRUD ───────────────────────────────────────────────────────────────────
     async create(data) {
         const entity = this.repo.create(data);
         return this.repo.save(entity);
@@ -66,7 +58,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
     async softDelete(id, tenantId) {
         await this.repo.update({ id, tenantId }, { isDeleted: true, deletedAt: new Date(), updatedAt: new Date() });
     }
-    // ── Query ──────────────────────────────────────────────────────────────────
     async query(params) {
         const qb = this.scopedQb('s', params.tenantId)
             .orderBy('s.startAt', 'ASC');
@@ -84,13 +75,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
             qb.andWhere('s.startAt < :to', { to: params.to });
         return qb.getMany();
     }
-    // ── Overlap detection ──────────────────────────────────────────────────────
-    /**
-     * Counts existing non-cancelled slots that overlap with [startAt, endAt).
-     * Used as the pre-generation soft check. DB unique index is the hard guard.
-     *
-     * Overlap condition: existing.startAt < newEndAt AND existing.endAt > newStartAt
-     */
     async countOverlapping(params) {
         const qb = this.scopedQb('s', params.tenantId)
             .andWhere('s.courtId = :courtId', { courtId: params.courtId })
@@ -102,10 +86,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
         }
         return qb.getCount();
     }
-    /**
-     * Returns all non-cancelled slots in the time window for a court.
-     * Used by generator to collect existing slot times before inserting.
-     */
     async findInRange(params) {
         return this.scopedQb('s', params.tenantId)
             .select(['s.startAt', 's.endAt'])
@@ -116,12 +96,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
             .orderBy('s.startAt', 'ASC')
             .getMany();
     }
-    // ── Status operations ──────────────────────────────────────────────────────
-    /**
-     * Bulk-cancels available slots within a time window for a court/branch.
-     * Used when a blackout is activated with cancelExistingSlots = true.
-     * Never cancels 'booked' slots — those require explicit admin action.
-     */
     async bulkCancelAvailable(params) {
         const qb = this.repo
             .createQueryBuilder()
@@ -139,10 +113,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
         const result = await qb.execute();
         return result.affected ?? 0;
     }
-    /**
-     * Expires stale 'reserved' slots where reservedUntil has passed.
-     * Called by the scheduler every minute.
-     */
     async expireStaleReservations(tenantId) {
         const result = await this.repo
             .createQueryBuilder()
@@ -155,7 +125,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
             .execute();
         return result.affected ?? 0;
     }
-    // ── Counts ─────────────────────────────────────────────────────────────────
     async countByStatus(tenantId) {
         const rows = await this.scopedQb('s', tenantId)
             .select('s.status', 'status')
@@ -169,14 +138,6 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
             counts[r.status] = Number(r.count);
         return counts;
     }
-    /**
-     * Acquires a pessimistic write lock on slots by IDs within a transaction.
-     * Returns slot entities if ALL are still in an available/reserved state.
-     * Throws ConflictException if any slot has been taken since the outer validation.
-     *
-     * MUST be called inside a DataSource.transaction() block with the manager's
-     * EntityManager — the manager passed here IS the transaction scope.
-     */
     async lockAndVerifyAvailable(slotIds, tenantId, manager) {
         const slots = await manager
             .createQueryBuilder(slot_entity_1.SlotEntity, 's')

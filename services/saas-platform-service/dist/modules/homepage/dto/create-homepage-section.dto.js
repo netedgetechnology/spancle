@@ -13,14 +13,6 @@ exports.CloneSectionDto = exports.ReorderSectionsDto = exports.UpdateHomepageSec
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 const section_payload_types_1 = require("../types/section-payload.types");
-// ── CreateHomepageSectionDto ───────────────────────────────────────────────────
-/**
- * CreateHomepageSectionDto
- *
- * The `payload` field is typed as `Record<string, unknown>` at the DTO layer.
- * Structural validation of the payload is performed in HomepageService
- * via SECTION_SCHEMAS[sectionType].parse(payload) before any DB write.
- */
 class CreateHomepageSectionDto {
 }
 exports.CreateHomepageSectionDto = CreateHomepageSectionDto;
@@ -66,7 +58,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], CreateHomepageSectionDto.prototype, "abVariant", void 0);
-// ── UpdateHomepageSectionDto ───────────────────────────────────────────────────
 class UpdateHomepageSectionDto {
 }
 exports.UpdateHomepageSectionDto = UpdateHomepageSectionDto;
@@ -103,7 +94,6 @@ __decorate([
     (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], UpdateHomepageSectionDto.prototype, "abVariant", void 0);
-// ── ReorderSectionsDto ────────────────────────────────────────────────────────
 class SectionOrderItem {
 }
 __decorate([
@@ -115,11 +105,6 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], SectionOrderItem.prototype, "sortOrder", void 0);
-/**
- * ReorderSectionsDto — sent after a drag-and-drop operation in the admin UI.
- * Contains the complete new ordered list for the page.
- * Service validates all IDs belong to the same tenantId before updating.
- */
 class ReorderSectionsDto {
 }
 exports.ReorderSectionsDto = ReorderSectionsDto;
@@ -134,7 +119,6 @@ __decorate([
     (0, class_transformer_1.Type)(() => SectionOrderItem),
     __metadata("design:type", Array)
 ], ReorderSectionsDto.prototype, "sections", void 0);
-// ── CloneSectionDto ────────────────────────────────────────────────────────────
 class CloneSectionDto {
 }
 exports.CloneSectionDto = CloneSectionDto;

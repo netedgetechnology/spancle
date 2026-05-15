@@ -9,21 +9,6 @@ var SuperAdminGuard_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SuperAdminGuard = void 0;
 const common_1 = require("@nestjs/common");
-/**
- * SuperAdminGuard — restricts access to SUPER_ADMIN role only.
- *
- * Applied at controller class level for all admin stats endpoints.
- * This is a defence-in-depth guard — the global RolesGuard also enforces
- * role checks, but this guard makes the SUPER_ADMIN requirement explicit
- * at the module level, independently of the global guard chain.
- *
- * Execution position: after JwtAuthGuard (requires request.user).
- *
- * Returns:
- *   - 401 if no authenticated user on the request
- *   - 403 if authenticated but not SUPER_ADMIN
- *   - passes if role === 'SUPER_ADMIN'
- */
 let SuperAdminGuard = SuperAdminGuard_1 = class SuperAdminGuard {
     constructor() {
         this.logger = new common_1.Logger(SuperAdminGuard_1.name);

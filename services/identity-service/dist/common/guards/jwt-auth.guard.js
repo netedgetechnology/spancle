@@ -15,19 +15,6 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const passport_1 = require("@nestjs/passport");
 const roles_decorator_1 = require("../decorators/roles.decorator");
-/**
- * JwtAuthGuard — validates the Bearer access token on every protected route.
- *
- * Extends Passport's AuthGuard('jwt') to add:
- *   1. @Public() short-circuit — skips validation for public routes
- *   2. Structured error logging with request context
- *   3. Consistent 401 error shape for all auth failures
- *
- * Execution order guarantee:
- *   TenantGuard → JwtAuthGuard → RolesGuard → PermissionsGuard → Handler
- *
- * On success: sets request.user = JwtPayload (via JwtStrategy.validate())
- */
 let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard extends (0, passport_1.AuthGuard)('jwt') {
     constructor(reflector) {
         super();
@@ -43,10 +30,6 @@ let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard extends (0, passport_1.Au
             return true;
         return super.canActivate(context);
     }
-    /**
-     * Called by Passport after strategy validation.
-     * Overridden to provide structured error responses.
-     */
     handleRequest(err, user, info, context) {
         if (err ?? !user) {
             const request = context.switchToHttp().getRequest();

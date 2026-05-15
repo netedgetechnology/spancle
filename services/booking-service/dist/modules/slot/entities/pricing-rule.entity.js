@@ -11,22 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PricingRuleEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * PricingRuleEntity — a price modifier rule.
- *
- * Rules are evaluated by PricingService in a waterfall:
- *
- *   1. All rules matching scope, date, time, day-of-week are collected
- *   2. Sorted by priority DESC (higher = evaluated first)
- *   3. Applied in order by ruleType (base → peak/weekend/holiday → member)
- *   4. Custom rules with absolute modifierType set the final price directly
- *
- * A court's effective price =
- *   base_rate × (1 + Σ percentage modifiers) + Σ fixed modifiers
- *   rounded to nearest integer (pence)
- *
- * Table: pricing_rules
- */
 let PricingRuleEntity = class PricingRuleEntity {
 };
 exports.PricingRuleEntity = PricingRuleEntity;

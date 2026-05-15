@@ -11,21 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * TenantEntity — the root aggregate for multi-tenancy.
- *
- * Note on RLS: PostgreSQL Row-Level Security policies reference the
- * `tenant_id` column. The policy is created in the migration:
- *
- *   CREATE POLICY tenant_isolation ON <table>
- *     USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
- *
- * This entity is NOT itself RLS-protected (it IS the tenant registry).
- * All other entities reference this via their tenantId FK.
- *
- * `slug` is the URL-safe subdomain identifier (immutable after creation).
- * `settings` is JSONB — allows per-tenant configuration without schema migration.
- */
 let TenantEntity = class TenantEntity {
 };
 exports.TenantEntity = TenantEntity;

@@ -11,28 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HomepageSectionEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * HomepageSectionEntity — stores all homepage sections in a single table.
- *
- * Design: polymorphic single-table with typed JSONB payload.
- *
- * Rationale for single table over table-per-section-type:
- *   - Drag-and-drop reordering across types needs a single sorted list
- *   - Adding a new section type requires no schema migration — just a new payload schema
- *   - Section metadata (status, sortOrder, title) is identical across all types
- *
- * Tenant isolation:
- *   - Every section carries tenantId (RLS-ready)
- *   - HomepageSectionRepository extends TenantAwareRepository
- *
- * Page binding:
- *   - pageId links sections to a specific Page (typically the homepage PageEntity)
- *   - Multiple pages can have independent section sets (e.g. landing pages)
- *
- * Payload validation:
- *   - JSONB payload is validated against SECTION_SCHEMAS[sectionType] in HomepageService
- *   - Raw JSONB never written without passing Zod validation
- */
 let HomepageSectionEntity = class HomepageSectionEntity {
 };
 exports.HomepageSectionEntity = HomepageSectionEntity;

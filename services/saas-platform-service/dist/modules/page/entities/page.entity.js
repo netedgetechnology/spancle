@@ -12,18 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PageEntity = void 0;
 const typeorm_1 = require("typeorm");
 const seo_fields_embed_1 = require("../../seo/embeds/seo-fields.embed");
-/**
- * PageEntity — a CMS page scoped to a tenant.
- *
- * Features:
- *   - Tenant isolation via tenantId (enforced by repository layer)
- *   - Slug uniqueness per tenant via composite index
- *   - SEO fields as an embedded column group
- *   - Draft/Published/Archived/Scheduled lifecycle
- *   - Full soft-delete (isDeleted + deletedAt)
- *   - Content body stored as JSONB — supports block editors (Lexical, Slate, ProseMirror)
- *   - Template reference for layout selection in the frontend renderer
- */
 let PageEntity = class PageEntity {
 };
 exports.PageEntity = PageEntity;

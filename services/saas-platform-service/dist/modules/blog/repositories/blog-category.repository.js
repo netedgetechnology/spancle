@@ -33,10 +33,6 @@ let BlogCategoryRepository = class BlogCategoryRepository extends tenant_aware_r
             qb.andWhere('bc.id != :excludeId', { excludeId });
         return (await qb.getCount()) > 0;
     }
-    /**
-     * Returns post count per category for the admin UI.
-     * Groups published posts by categoryId.
-     */
     async getPostCounts(tenantId) {
         const rows = await this.entityManager
             .createQueryBuilder()

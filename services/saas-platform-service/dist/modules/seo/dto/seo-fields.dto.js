@@ -17,14 +17,6 @@ exports.SEO_ROBOTS_OPTIONS = [
     'index,nofollow',
     'noindex,nofollow',
 ];
-/**
- * SeoFieldsDto — embedded DTO for SEO metadata.
- *
- * Used via @ValidateNested() + @Type(() => SeoFieldsDto) inside
- * CreatePageDto, CreateBlogPostDto, CreateBannerDto.
- *
- * All fields are optional — SEO metadata is supplementary, not required.
- */
 class SeoFieldsDto {
 }
 exports.SeoFieldsDto = SeoFieldsDto;

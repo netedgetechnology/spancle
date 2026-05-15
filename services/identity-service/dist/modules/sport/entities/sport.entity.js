@@ -11,30 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SportEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * SportEntity — a sport or activity offered by a tenant.
- *
- * Design decisions:
- *   - No hard limit on sports per tenant (requirement: unlimited).
- *     Plan-based limits enforced separately in Sprint 3 via PlanLimitGuard.
- *
- *   - `config` JSONB: sport-specific configuration (e.g. team sizes,
- *     duration presets, scoring rules, equipment checklist).
- *     Intentionally untyped at entity level — validated in service layer.
- *     Sprint 3: add sportType enum + per-type JSON Schema validation.
- *
- *   - `icon`: emoji or icon identifier string (e.g. "⚽", "football",
- *     "mdi:soccer"). Kept as a free-form string for flexibility.
- *
- *   - `color`: hex colour string (e.g. "#3b82f6") for UI differentiation.
- *
- *   - Branch mapping is handled by SportBranchEntity (separate join table).
- *     A sport with no branch mappings is available at all branches (global).
- *     A sport with mappings is available only at those branches.
- *
- * Table: `sports`
- * Unique: (tenant_id, slug)
- */
 let SportEntity = class SportEntity {
 };
 exports.SportEntity = SportEntity;

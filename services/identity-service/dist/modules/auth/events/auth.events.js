@@ -1,10 +1,4 @@
 "use strict";
-/**
- * Auth domain events — emitted by AuthService on every state transition.
- *
- * All events MUST be wrapped in EventEnvelope before Redis publication.
- * Consumers: audit-service (Sprint 2), notification-service, reporting-service.
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthEventNames = void 0;
 var AuthEventNames;

@@ -15,15 +15,6 @@ const court_service_1 = require("./services/court.service");
 const court_repository_1 = require("./repositories/court.repository");
 const branch_module_1 = require("../branch/branch.module");
 const sport_module_1 = require("../sport/sport.module");
-/**
- * CourtModule — tenant court / venue management.
- *
- * Imports:
- *   BranchModule → BranchService.findOne() validates branch ownership
- *   SportModule  → SportService.findOne() validates sport ownership
- *
- * Registered in AppModule.imports after BranchModule and SportModule.
- */
 let CourtModule = class CourtModule {
 };
 exports.CourtModule = CourtModule;

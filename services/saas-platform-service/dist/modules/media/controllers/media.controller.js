@@ -22,11 +22,6 @@ let MediaController = class MediaController {
     constructor(mediaService) {
         this.mediaService = mediaService;
     }
-    /**
-     * POST /api/v1/cms/media/register
-     * Registers an already-uploaded file's metadata.
-     * File upload (multipart) handled by a dedicated upload endpoint (Sprint 3).
-     */
     register(dto, tenant) {
         return this.mediaService.register(dto, tenant.tenantId, 'system');
     }

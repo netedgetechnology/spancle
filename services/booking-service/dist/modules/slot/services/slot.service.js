@@ -16,10 +16,6 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const slot_repository_1 = require("../repositories/slot.repository");
 const slot_utils_1 = require("../utils/slot.utils");
 const slot_events_1 = require("../events/slot.events");
-/**
- * Allowed status transitions.
- * Terminal states (completed, cancelled) have no outbound transitions.
- */
 const ALLOWED_TRANSITIONS = {
     available: ['reserved', 'booked', 'unavailable', 'cancelled'],
     reserved: ['available', 'booked', 'cancelled'],
@@ -28,7 +24,6 @@ const ALLOWED_TRANSITIONS = {
     cancelled: [],
     completed: [],
 };
-/** Default reservation TTL: 15 minutes */
 const RESERVATION_TTL_MINS = 15;
 let SlotService = SlotService_1 = class SlotService {
     constructor(slotRepository, eventEmitter) {
@@ -36,7 +31,6 @@ let SlotService = SlotService_1 = class SlotService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(SlotService_1.name);
     }
-    // ── Create ─────────────────────────────────────────────────────────────────
     async create(dto, tenantId, actorId) {
         const startAt = new Date(dto.startAt);
         const endAt = new Date(dto.endAt);
@@ -47,7 +41,6 @@ let SlotService = SlotService_1 = class SlotService {
         if (durationMins < 15) {
             throw new common_1.BadRequestException('Slot duration must be at least 15 minutes');
         }
-        // Overlap pre-check
         const overlaps = await this.slotRepository.countOverlapping({
             tenantId, courtId: dto.courtId, startAt, endAt,
         });
@@ -75,7 +68,6 @@ let SlotService = SlotService_1 = class SlotService {
         });
         return slot;
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     async findAll(tenantId, query) {
         return this.slotRepository.query({
             tenantId,
@@ -96,7 +88,6 @@ let SlotService = SlotService_1 = class SlotService {
     async getStatusSummary(tenantId) {
         return this.slotRepository.countByStatus(tenantId);
     }
-    // ── Update ─────────────────────────────────────────────────────────────────
     async update(id, dto, tenantId, actorId) {
         const slot = await this.findOne(id, tenantId);
         if (dto.status && dto.status !== slot.status) {
@@ -114,7 +105,6 @@ let SlotService = SlotService_1 = class SlotService {
         });
         return updated;
     }
-    // ── Status transitions ─────────────────────────────────────────────────────
     async updateStatus(id, status, tenantId, actorId) {
         const slot = await this.findOne(id, tenantId);
         this.assertTransitionAllowed(slot.status, status);
@@ -132,11 +122,6 @@ let SlotService = SlotService_1 = class SlotService {
         });
         return updated;
     }
-    // ── Reserve ────────────────────────────────────────────────────────────────
-    /**
-     * Reserves a slot for a checkout session. TTL: 15 minutes.
-     * Calling BookingService then calls this before creating a booking.
-     */
     async reserve(id, tenantId, actorId) {
         const slot = await this.findOne(id, tenantId);
         if (slot.status !== 'available') {
@@ -144,7 +129,6 @@ let SlotService = SlotService_1 = class SlotService {
         }
         return this.updateStatus(id, 'reserved', tenantId, actorId);
     }
-    // ── Scheduler: expire stale reservations ───────────────────────────────────
     async expireStaleReservations(tenantId) {
         const count = await this.slotRepository.expireStaleReservations(tenantId);
         if (count > 0) {
@@ -152,7 +136,6 @@ let SlotService = SlotService_1 = class SlotService {
         }
         return count;
     }
-    // ── Delete ─────────────────────────────────────────────────────────────────
     async remove(id, tenantId, actorId) {
         const slot = await this.findOne(id, tenantId);
         if (slot.status === 'booked') {
@@ -163,7 +146,6 @@ let SlotService = SlotService_1 = class SlotService {
             tenantId, slotId: id, actorId, timestamp: new Date().toISOString(),
         });
     }
-    // ── Private ────────────────────────────────────────────────────────────────
     assertTransitionAllowed(from, to) {
         const allowed = ALLOWED_TRANSITIONS[from] ?? [];
         if (!allowed.includes(to)) {

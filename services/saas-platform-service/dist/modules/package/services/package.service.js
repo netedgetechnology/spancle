@@ -15,14 +15,7 @@ const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const package_repository_1 = require("../repositories/package.repository");
 const package_events_1 = require("../events/package.events");
-/**
- * DEFAULT_PLAN_LIMITS import.
- *
- * Imported from identity-service path in monorepo.
- * Sprint 3: move to @spancle/constants package.
- */
 const plan_limits_constants_1 = require("../constants/plan-limits.constants");
-/** State machine: allowed transitions from each status */
 const ALLOWED_TRANSITIONS = {
     draft: ['active', 'archived'],
     active: ['deprecated', 'archived'],
@@ -35,7 +28,6 @@ let PackageService = PackageService_1 = class PackageService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(PackageService_1.name);
     }
-    // ── CRUD ───────────────────────────────────────────────────────────────────
     async create(dto, actorId) {
         if (await this.packageRepository.isSlugTaken(dto.slug)) {
             throw new common_1.ConflictException(`Package slug "${dto.slug}" is already taken`);
@@ -43,7 +35,6 @@ let PackageService = PackageService_1 = class PackageService {
         if (await this.packageRepository.isTierKeyTaken(dto.tierKey)) {
             throw new common_1.ConflictException(`A package for tier "${dto.tierKey}" already exists. Each tier can have only one package definition.`);
         }
-        // Seed features and limits from DEFAULT_PLAN_LIMITS if not provided
         const defaults = plan_limits_constants_1.DEFAULT_PLAN_LIMITS[dto.tierKey];
         const seedFeatures = defaults?.features ?? {};
         const seedLimits = defaults?.resources ?? {};
@@ -57,7 +48,6 @@ let PackageService = PackageService_1 = class PackageService {
             priceAnnualMinorUnits: dto.priceAnnualMinorUnits ?? 0,
             currency: dto.currency ?? 'GBP',
             trialDays: dto.trialDays ?? defaults?.resources ? 0 : 14,
-            // Merge DTO overrides on top of tier defaults
             features: { ...seedFeatures, ...(dto.features ?? {}) },
             limits: { ...seedLimits, ...(dto.limits ?? {}) },
             highlightFeatures: dto.highlightFeatures ?? null,
@@ -78,7 +68,6 @@ let PackageService = PackageService_1 = class PackageService {
     async findAll(includeArchived = false) {
         return this.packageRepository.findAll(includeArchived);
     }
-    /** Public endpoint — returns only active packages for the pricing page */
     async findActive() {
         return this.packageRepository.findActive();
     }
@@ -96,12 +85,10 @@ let PackageService = PackageService_1 = class PackageService {
     }
     async update(id, dto, actorId) {
         const existing = await this.findOne(id);
-        // Status transitions go through dedicated methods — reject via update
         if (dto.status && dto.status !== existing.status) {
             throw new common_1.BadRequestException(`Use the dedicated status-transition endpoints (publish, deprecate, archive) to change status. ` +
                 `Current: "${existing.status}", requested: "${dto.status}"`);
         }
-        // Merge features and limits on top of existing — never full-replace
         const updatedFeatures = dto.features
             ? { ...existing.features, ...dto.features }
             : undefined;
@@ -129,7 +116,6 @@ let PackageService = PackageService_1 = class PackageService {
         });
         return updated;
     }
-    // ── Status transitions ─────────────────────────────────────────────────────
     async publish(id, actorId) {
         return this.transitionStatus(id, 'active', package_events_1.PackageEventNames.PUBLISHED, actorId);
     }
@@ -139,12 +125,6 @@ let PackageService = PackageService_1 = class PackageService {
     async archive(id, actorId) {
         return this.transitionStatus(id, 'archived', package_events_1.PackageEventNames.ARCHIVED, actorId);
     }
-    // ── Seed from defaults ─────────────────────────────────────────────────────
-    /**
-     * Seeds the 5 default tier packages from DEFAULT_PLAN_LIMITS.
-     * Safe to call multiple times — skips tiers that already have a package.
-     * Returns the count of newly created packages.
-     */
     async seedDefaults(actorId) {
         let created = 0;
         let skipped = 0;
@@ -189,10 +169,6 @@ let PackageService = PackageService_1 = class PackageService {
         this.logger.log(`Package seed: created=${created} skipped=${skipped} by ${actorId}`);
         return { created, skipped };
     }
-    /**
-     * Clones an existing package — creates a draft copy.
-     * Useful for creating custom variations of a standard tier.
-     */
     async clone(id, newSlug, actorId) {
         const source = await this.findOne(id);
         if (await this.packageRepository.isSlugTaken(newSlug)) {
@@ -233,7 +209,6 @@ let PackageService = PackageService_1 = class PackageService {
             packageId: id, tierKey: pkg.tierKey, actorId, timestamp: new Date().toISOString(),
         });
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
     async transitionStatus(id, to, eventName, actorId) {
         const pkg = await this.findOne(id);
         const allowed = ALLOWED_TRANSITIONS[pkg.status] ?? [];

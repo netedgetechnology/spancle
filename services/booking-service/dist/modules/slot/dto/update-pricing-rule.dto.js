@@ -11,19 +11,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdatePricingRuleDto = exports.DAYS_OF_WEEK = exports.SCOPES = exports.MOD_TYPES = exports.RULE_TYPES = void 0;
 const class_validator_1 = require("class-validator");
-// ── Shared constants ──────────────────────────────────────────────────────────
 exports.RULE_TYPES = ['base', 'peak', 'weekend', 'holiday', 'member', 'custom'];
 exports.MOD_TYPES = ['percentage', 'fixed', 'absolute'];
 exports.SCOPES = ['tenant', 'branch', 'sport', 'court'];
 exports.DAYS_OF_WEEK = [
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ];
-// ── UpdatePricingRuleDto ──────────────────────────────────────────────────────
-/**
- * All fields are optional — partial updates allowed.
- * When modifierType or modifierValue changes, validation re-runs
- * against ruleType semantics in PricingRuleValidationService.
- */
 class UpdatePricingRuleDto {
 }
 exports.UpdatePricingRuleDto = UpdatePricingRuleDto;

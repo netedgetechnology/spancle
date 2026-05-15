@@ -9,21 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantContextInterceptor = void 0;
 const common_1 = require("@nestjs/common");
 const tenant_context_types_1 = require("../../modules/tenant/types/tenant-context.types");
-/**
- * TenantContextInterceptor — stamps tenant metadata on HTTP responses.
- *
- * Sets the following response headers on every request that has a resolved
- * TenantContextRuntime:
- *
- *   x-tenant-id:        {uuid}           — tenant identity
- *   x-tenant-slug:      {slug}           — human-readable tenant identifier
- *   x-tenant-tier:      {tier}           — plan tier for client-side feature gating
- *   x-context-resolved: {ms}             — resolution time for observability
- *
- * Applied globally in AppModule so all responses carry these headers.
- * Downstream clients (frontend apps, API gateway) can read x-tenant-tier
- * to show/hide features without an additional API call.
- */
 let TenantContextInterceptor = class TenantContextInterceptor {
     intercept(context, next) {
         const request = context

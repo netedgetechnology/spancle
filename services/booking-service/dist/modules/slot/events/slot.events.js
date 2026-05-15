@@ -1,8 +1,4 @@
 "use strict";
-/**
- * slot.events.ts — All domain event names and payloads for the slot engine.
- * Namespaced under spancle.slot.* and spancle.holiday.*
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotEvents = void 0;
 var SlotEvents;

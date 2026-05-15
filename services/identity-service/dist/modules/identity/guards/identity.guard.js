@@ -9,13 +9,6 @@ var TenantGuard_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantGuard = void 0;
 const common_1 = require("@nestjs/common");
-/**
- * TenantGuard — resolves tenant context from the configured header.
- * Must be the first guard in the chain on every controller.
- *
- * Sets request.tenant so downstream services and decorators can read it.
- * Throws 401 (not 400) to avoid leaking tenant resolution logic to clients.
- */
 let TenantGuard = TenantGuard_1 = class TenantGuard {
     constructor() {
         this.logger = new common_1.Logger(TenantGuard_1.name);
@@ -30,7 +23,6 @@ let TenantGuard = TenantGuard_1 = class TenantGuard {
             this.logger.warn(`Missing tenant header [${this.tenantHeader}] from ${request.ip ?? 'unknown'}`);
             throw new common_1.UnauthorizedException('Tenant context required');
         }
-        // Basic UUID-format validation — prevents header injection
         const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidPattern.test(tenantId)) {
             this.logger.warn(`Invalid tenant ID format: ${tenantId}`);

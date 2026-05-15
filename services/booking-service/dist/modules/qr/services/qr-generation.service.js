@@ -33,17 +33,6 @@ let QrGenerationService = QrGenerationService_1 = class QrGenerationService {
         this.logger = new common_1.Logger(QrGenerationService_1.name);
         this.secret = this.config.getOrThrow('QR_TOKEN_SECRET');
     }
-    // ── Issue ──────────────────────────────────────────────────────────────────
-    /**
-     * Issues a new QR token for a booking.
-     *
-     * Validation:
-     *   1. Booking exists and belongs to tenant
-     *   2. Booking is in 'confirmed' status
-     *   3. No active un-expired token already exists (reissue returns existing)
-     *
-     * Returns the raw token once — it is never stored and cannot be retrieved again.
-     */
     async issue(dto, tenantId, actorId) {
         const booking = await this.bookingRepository.findById(dto.bookingId, tenantId);
         if (!booking)
@@ -52,10 +41,9 @@ let QrGenerationService = QrGenerationService_1 = class QrGenerationService {
             throw new common_1.UnprocessableEntityException(`QR tokens can only be issued for confirmed bookings — status: ${booking.status}`);
         }
         const purpose = dto.purpose ?? 'booking_checkin';
-        const ttlMinutes = dto.ttlMinutes ?? 1_440; // 24 h default
+        const ttlMinutes = dto.ttlMinutes ?? 1_440;
         const maxUses = dto.maxUses ?? 1;
         const expiresAt = qr_utils_1.QrUtils.expiresAt(ttlMinutes);
-        // Revoke any existing active token for this booking (re-issue flow)
         const existing = await this.qrTokenRepository.findActiveForBooking(dto.bookingId, tenantId);
         if (existing) {
             await this.qrTokenRepository.updateStatus(existing.id, tenantId, 'revoked', {
@@ -65,7 +53,6 @@ let QrGenerationService = QrGenerationService_1 = class QrGenerationService {
             });
             await this.cache.del(qr_utils_1.QrUtils.redisKey(tenantId, existing.tokenHash));
         }
-        // Generate crypto material
         const { rawToken, tokenHash } = qr_utils_1.QrUtils.generateToken(tenantId, dto.bookingId, this.secret);
         const payload = {
             tenantId,
@@ -94,7 +81,6 @@ let QrGenerationService = QrGenerationService_1 = class QrGenerationService {
             expiresAt,
             issuedById: actorId,
         });
-        // Cache token metadata for fast scan path (TTL = token TTL)
         const cacheTtlMs = ttlMinutes * 60_000;
         await this.cache.set(qr_utils_1.QrUtils.redisKey(tenantId, tokenHash), JSON.stringify({ tokenId: token.id, bookingId: dto.bookingId, expiresAt: expiresAt.getTime() }), cacheTtlMs);
         await this.logRepository.insert({
@@ -121,7 +107,6 @@ let QrGenerationService = QrGenerationService_1 = class QrGenerationService {
             maxUses,
         };
     }
-    // ── Revoke ─────────────────────────────────────────────────────────────────
     async revoke(tokenId, dto, tenantId, actorId) {
         const token = await this.qrTokenRepository.findByIdOrFail(tokenId, tenantId);
         if (token.status === 'revoked') {
@@ -146,7 +131,6 @@ let QrGenerationService = QrGenerationService_1 = class QrGenerationService {
             actorId, reason: dto.reason, timestamp: new Date().toISOString(),
         });
     }
-    // ── List ───────────────────────────────────────────────────────────────────
     async findByBooking(bookingId, tenantId) {
         const booking = await this.bookingRepository.findById(bookingId, tenantId);
         if (!booking)

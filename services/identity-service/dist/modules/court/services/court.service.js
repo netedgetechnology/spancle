@@ -50,12 +50,11 @@ const court_repository_1 = require("../repositories/court.repository");
 const branch_service_1 = require("../../branch/services/branch.service");
 const sport_service_1 = require("../../sport/services/sport.service");
 const court_events_1 = require("../events/court.events");
-/** State machine: allowed transitions from each status */
 const ALLOWED_TRANSITIONS = {
     available: ['unavailable', 'maintenance', 'retired'],
     unavailable: ['available', 'maintenance', 'retired'],
     maintenance: ['available', 'unavailable', 'retired'],
-    retired: [], // permanent — cannot be reactivated
+    retired: [],
 };
 let CourtService = CourtService_1 = class CourtService {
     constructor(courtRepository, branchService, sportService, eventEmitter) {
@@ -65,19 +64,14 @@ let CourtService = CourtService_1 = class CourtService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(CourtService_1.name);
     }
-    // ── Create ─────────────────────────────────────────────────────────────────
     async create(dto, tenantId, actorId) {
-        // Validate branch membership
         await this.assertBranchBelongsToTenant(dto.branchId, tenantId);
-        // Validate sport membership if provided
         if (dto.sportId) {
             await this.assertSportBelongsToTenant(dto.sportId, tenantId);
         }
-        // Name uniqueness per branch
         if (await this.courtRepository.isNameTakenInBranch(dto.name, dto.branchId, tenantId)) {
             throw new common_1.ConflictException(`A court named "${dto.name}" already exists in this branch`);
         }
-        // Validate operating hours format if provided
         if (dto.operatingHours) {
             this.validateOperatingHours(dto.operatingHours);
         }
@@ -110,35 +104,18 @@ let CourtService = CourtService_1 = class CourtService {
         this.logger.log(`Court created: ${court.id} "${court.name}" branch=${court.branchId} tenant=${tenantId}`);
         return court;
     }
-    // ── Bulk generation ────────────────────────────────────────────────────────
-    /**
-     * Generates multiple courts atomically in a single transaction.
-     *
-     * Naming: `{namePrefix}{separator}{number}` for each court.
-     * Skips names that already exist in the branch (idempotent).
-     *
-     * Returns:
-     *   courts:  created court entities
-     *   created: number of courts successfully created
-     *   skipped: number of names that were already taken
-     */
     async generateCourts(dto, tenantId, actorId) {
-        // Validate branch
         await this.assertBranchBelongsToTenant(dto.branchId, tenantId);
-        // Validate sport if provided
         if (dto.sportId) {
             await this.assertSportBelongsToTenant(dto.sportId, tenantId);
         }
-        // Validate operating hours
         if (dto.operatingHours) {
             this.validateOperatingHours(dto.operatingHours);
         }
-        // Pre-fetch existing names to detect collisions without DB round-trips per court
         const existingNames = await this.courtRepository.getExistingNamesForBranch(dto.branchId, tenantId);
         const separator = dto.separator ?? ' ';
         const startNumber = dto.startNumber ?? 1;
         const currentCount = await this.courtRepository.countByBranch(dto.branchId, tenantId);
-        // Build the list of courts to create
         const toCreate = [];
         let skipped = 0;
         for (let i = 0; i < dto.count; i++) {
@@ -157,7 +134,6 @@ let CourtService = CourtService_1 = class CourtService {
         if (toCreate.length === 0) {
             return { courts: [], created: 0, skipped };
         }
-        // Execute all inserts in a single transaction
         const createdCourts = await this.courtRepository['entityManager'].transaction(async (manager) => {
             const { CourtEntity: CE } = await Promise.resolve().then(() => __importStar(require('../entities/court.entity')));
             const results = [];
@@ -203,7 +179,6 @@ let CourtService = CourtService_1 = class CourtService {
             `branch=${dto.branchId} tenant=${tenantId}`);
         return { courts: createdCourts, created: createdCourts.length, skipped };
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     async findAll(tenantId, branchId, status) {
         if (branchId) {
             return this.courtRepository.findByBranch(branchId, tenantId, status);
@@ -233,24 +208,19 @@ let CourtService = CourtService_1 = class CourtService {
     async getStatusSummary(tenantId) {
         return this.courtRepository.countByStatus(tenantId);
     }
-    // ── Update ─────────────────────────────────────────────────────────────────
     async update(id, dto, tenantId, actorId) {
         const court = await this.courtRepository.findByIdOrFail(id, tenantId);
-        // Validate sport if changing
         if (dto.sportId !== undefined && dto.sportId !== null) {
             await this.assertSportBelongsToTenant(dto.sportId, tenantId);
         }
-        // Validate name uniqueness if changing
         if (dto.name && dto.name !== court.name) {
             if (await this.courtRepository.isNameTakenInBranch(dto.name, court.branchId, tenantId, id)) {
                 throw new common_1.ConflictException(`A court named "${dto.name}" already exists in this branch`);
             }
         }
-        // Validate operating hours if updating
         if (dto.operatingHours) {
             this.validateOperatingHours(dto.operatingHours);
         }
-        // Block direct status change via update — use dedicated endpoint
         if ('status' in dto && dto.status && dto.status !== court.status) {
             throw new common_1.BadRequestException('Use PATCH /courts/:id/status to change court status');
         }
@@ -275,7 +245,6 @@ let CourtService = CourtService_1 = class CourtService {
         });
         return updated;
     }
-    // ── Status transitions ─────────────────────────────────────────────────────
     async updateStatus(id, dto, tenantId, actorId) {
         const court = await this.courtRepository.findByIdOrFail(id, tenantId);
         const allowed = ALLOWED_TRANSITIONS[court.status] ?? [];
@@ -283,7 +252,6 @@ let CourtService = CourtService_1 = class CourtService {
             throw new common_1.BadRequestException(`Cannot transition court from "${court.status}" to "${dto.status}". ` +
                 `Allowed: [${allowed.join(', ') || 'none'}]`);
         }
-        // Clearing maintenance state when transitioning away
         const clearMaintenance = court.status === 'maintenance' && dto.status !== 'maintenance';
         const previousStatus = court.status;
         await this.courtRepository.updateById(id, {
@@ -309,11 +277,6 @@ let CourtService = CourtService_1 = class CourtService {
         this.logger.log(`Court status: ${id} ${previousStatus} → ${dto.status} tenant=${tenantId}`);
         return updated;
     }
-    // ── Maintenance ────────────────────────────────────────────────────────────
-    /**
-     * Sets a court into maintenance with a required reason.
-     * Dedicated endpoint for explicitness and audit clarity.
-     */
     async setMaintenance(id, dto, tenantId, actorId) {
         const court = await this.courtRepository.findByIdOrFail(id, tenantId);
         if (court.status === 'retired') {
@@ -337,7 +300,6 @@ let CourtService = CourtService_1 = class CourtService {
         this.logger.log(`Court maintenance started: ${id} tenant=${tenantId} reason="${dto.maintenanceNote}"`);
         return updated;
     }
-    // ── Delete ─────────────────────────────────────────────────────────────────
     async remove(id, tenantId, actorId) {
         const court = await this.courtRepository.findByIdOrFail(id, tenantId);
         if (court.status === 'available') {
@@ -348,7 +310,6 @@ let CourtService = CourtService_1 = class CourtService {
             tenantId, courtId: id, branchId: court.branchId, actorId,
         });
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
     async assertBranchBelongsToTenant(branchId, tenantId) {
         try {
             await this.branchService.findOne(branchId, tenantId);
@@ -365,17 +326,13 @@ let CourtService = CourtService_1 = class CourtService {
             throw new common_1.UnprocessableEntityException(`Sport ${sportId} not found in this organisation`);
         }
     }
-    /**
-     * Validates the operating hours object has all 7 days with valid time format.
-     * Times must be HH:MM and openTime must be before closeTime for open days.
-     */
     validateOperatingHours(hours) {
         const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
         for (const day of DAYS) {
             const d = hours[day];
             if (!d)
-                continue; // partial override allowed
+                continue;
             if (typeof d.openTime === 'string' && !TIME_RE.test(d.openTime)) {
                 throw new common_1.UnprocessableEntityException(`Invalid openTime for ${day}: "${d.openTime}" — must be HH:MM format`);
             }

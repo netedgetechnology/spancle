@@ -24,60 +24,27 @@ const qr_generation_service_1 = require("../services/qr-generation.service");
 const qr_validation_service_1 = require("../services/qr-validation.service");
 const qr_token_dto_1 = require("../dto/qr-token.dto");
 const common_2 = require("@nestjs/common");
-/**
- * QrController — QR token lifecycle and booking verification APIs.
- *
- * Routes:
- *   POST  /qr/issue                      Issue token for a booking
- *   POST  /qr/scan                       Scan a QR token (authenticated — staff/admin)
- *   POST  /qr/verify                     Verify token (public — smart access devices)
- *   POST  /qr/:tokenId/revoke            Revoke a specific token
- *   GET   /qr/:tokenId                   Get token metadata (no rawToken)
- *   GET   /qr/booking/:bookingId         List all tokens for a booking
- *   GET   /qr/booking/:bookingId/logs    Scan logs for a booking
- *   GET   /qr/device/:deviceId/logs      Scan logs by device ID
- *
- * RBAC:
- *   issue   → TENANT_ADMIN, TENANT_MANAGER
- *   scan    → TENANT_ADMIN, TENANT_MANAGER, COACH
- *   verify  → @Public (rate-limited at gateway)
- *   revoke  → TENANT_ADMIN, TENANT_MANAGER
- *   read    → TENANT_ADMIN, TENANT_MANAGER
- */
 let QrController = class QrController {
     constructor(generationService, validationService) {
         this.generationService = generationService;
         this.validationService = validationService;
     }
-    // ── Issue ──────────────────────────────────────────────────────────────────
     issue(dto, tenant, actor) {
         return this.generationService.issue(dto, tenant.tenantId, actor.actorId);
     }
-    // ── Scan (authenticated staff / mobile app) ────────────────────────────────
     scan(dto, tenant, actor, req) {
         const scanIp = req.headers['x-forwarded-for']
             ?.split(',')[0]?.trim() ?? req.ip ?? null;
         return this.validationService.scan(dto, tenant.tenantId, actor.actorId, scanIp);
     }
-    // ── Verify (public — smart access devices) ────────────────────────────────
-    /**
-     * Public verification endpoint — no session required.
-     * Intended for smart door controllers and kiosk terminals.
-     *
-     * Returns: { valid, bookingId, courtId, purpose, expiresAt, denialReason }
-     * Does NOT trigger check-in. Does NOT write to booking_logs.
-     * Rate-limited at the API Gateway layer.
-     */
     verify(dto, req) {
         const scanIp = req.headers['x-forwarded-for']
             ?.split(',')[0]?.trim() ?? req.ip ?? null;
         return this.validationService.verify(dto, scanIp);
     }
-    // ── Revoke ────────────────────────────────────────────────────────────────
     revoke(tokenId, dto, tenant, actor) {
         return this.generationService.revoke(tokenId, dto, tenant.tenantId, actor.actorId);
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     findOne(tokenId, tenant) {
         return this.generationService.findById(tokenId, tenant.tenantId);
     }

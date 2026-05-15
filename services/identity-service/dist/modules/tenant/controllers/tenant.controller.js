@@ -24,29 +24,10 @@ const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../../common/decorators/current-user.decorator");
 const tenant_service_1 = require("../services/tenant.service");
 const create_tenant_dto_1 = require("../dto/create-tenant.dto");
-/**
- * TenantController — tenant lifecycle management.
- *
- * Route groups:
- *   POST   /tenants          → SUPER_ADMIN only
- *   GET    /tenants          → SUPER_ADMIN only
- *   GET    /tenants/:id      → SUPER_ADMIN or self (own tenantId)
- *   PATCH  /tenants/:id      → SUPER_ADMIN or TENANT_ADMIN (own)
- *   PATCH  /tenants/:id/settings → TENANT_ADMIN (own)
- *   POST   /tenants/:id/activate   → SUPER_ADMIN only
- *   POST   /tenants/:id/suspend    → SUPER_ADMIN only
- *   POST   /tenants/:id/terminate  → SUPER_ADMIN only
- *   PATCH  /tenants/:id/tier → SUPER_ADMIN only
- *
- * Guards applied at class level:
- *   JwtAuthGuard → TenantStatusGuard → PlanLimitGuard
- * Additional guards (RolesGuard) applied per endpoint.
- */
 let TenantController = class TenantController {
     constructor(tenantService) {
         this.tenantService = tenantService;
     }
-    // ── Superadmin operations ─────────────────────────────────────────────────
     async createTenant(dto) {
         return this.tenantService.create(dto);
     }
@@ -54,9 +35,7 @@ let TenantController = class TenantController {
         return this.tenantService.findAll(page ? Number(page) : 1, limit ? Number(limit) : 20, status, tier);
     }
     async getTenant(id, user) {
-        // TENANT_ADMIN can only view their own tenant
         if (user.role !== 'SUPER_ADMIN' && user.tenantId !== id) {
-            // RolesGuard doesn't enforce scope — we do it here
             throw Object.assign(new Error('Forbidden'), { status: 403 });
         }
         return this.tenantService.getById(id);

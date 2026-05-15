@@ -18,42 +18,16 @@ const audit_interceptor_1 = require("../../../common/interceptors/audit.intercep
 const super_admin_guard_1 = require("../../admin/guards/super-admin.guard");
 const package_service_1 = require("../services/package.service");
 const create_package_dto_1 = require("../dto/create-package.dto");
-/**
- * PackageController — SaaS package definition management.
- *
- * Route groups:
- *   Public (no guard):
- *     GET  /api/v1/packages/active          → Active packages for pricing page
- *     GET  /api/v1/packages/by-slug/:slug   → Single package by slug
- *
- *   Admin (SuperAdminGuard):
- *     POST   /api/v1/packages               → Create
- *     GET    /api/v1/packages               → List all (incl. draft/archived)
- *     GET    /api/v1/packages/:id           → Single by ID
- *     PATCH  /api/v1/packages/:id           → Update
- *     DELETE /api/v1/packages/:id           → Soft delete
- *     POST   /api/v1/packages/:id/publish   → draft → active
- *     POST   /api/v1/packages/:id/deprecate → active → deprecated
- *     POST   /api/v1/packages/:id/archive   → deprecated → archived
- *     POST   /api/v1/packages/:id/clone     → Clone to new draft
- *     POST   /api/v1/packages/seed          → Seed 5 default tier packages
- */
 let PackageController = class PackageController {
     constructor(packageService) {
         this.packageService = packageService;
     }
-    // ── Public ─────────────────────────────────────────────────────────────────
-    /**
-     * Returns active packages — used by public pricing page.
-     * No authentication required.
-     */
     getActive() {
         return this.packageService.findActive();
     }
     getBySlug(slug) {
         return this.packageService.findBySlug(slug);
     }
-    // ── Admin ──────────────────────────────────────────────────────────────────
     create(dto) {
         return this.packageService.create(dto, 'system');
     }
@@ -69,7 +43,6 @@ let PackageController = class PackageController {
     remove(id) {
         return this.packageService.remove(id, 'system');
     }
-    // ── Status transitions ─────────────────────────────────────────────────────
     publish(id) {
         return this.packageService.publish(id, 'system');
     }
@@ -82,11 +55,6 @@ let PackageController = class PackageController {
     clone(id, body) {
         return this.packageService.clone(id, body.slug, 'system');
     }
-    // ── Seed ───────────────────────────────────────────────────────────────────
-    /**
-     * Seeds the 5 default tier packages from DEFAULT_PLAN_LIMITS.
-     * Idempotent — existing tiers are skipped.
-     */
     seed() {
         return this.packageService.seedDefaults('system');
     }

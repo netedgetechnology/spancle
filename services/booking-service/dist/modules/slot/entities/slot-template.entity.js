@@ -11,30 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotTemplateEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * SlotTemplateEntity — a reusable schedule pattern for a court.
- *
- * A template defines WHEN to generate slots, not the slots themselves.
- * SlotGeneratorService.generateFromTemplate() reads the template and
- * creates SlotEntity rows for the requested date range.
- *
- * One template per court is typical, but a court can have multiple
- * templates for different season schedules (summer/winter hours).
- * Only one template should be active (isActive = true) per court at a time;
- * this is enforced at service layer, not DB level, for flexibility.
- *
- * Template fields:
- *   - courtId:          the court this schedule applies to
- *   - validFrom/Until:  date range the template is in effect
- *   - recurrence:       which days of the week to generate slots
- *   - openTime/closeTime: daily window within which slots are created
- *   - durationMins:     duration of each slot (e.g. 60 = 1-hour slots)
- *   - bufferMins:       gap between slots (e.g. 15 for cleaning time)
- *   - maxAdvanceDays:   how far ahead to pre-generate (default: 30)
- *   - autoPublish:      if true, generated slots start as 'available' immediately
- *
- * Table: slot_templates
- */
 let SlotTemplateEntity = class SlotTemplateEntity {
 };
 exports.SlotTemplateEntity = SlotTemplateEntity;

@@ -11,26 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BlackoutEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * BlackoutEntity — a time window that prevents slot generation or booking.
- *
- * Two purposes:
- *   1. Block future slot generation (checked by SlotGeneratorService)
- *   2. Block booking on already-generated slots (checked by BookingService)
- *
- * Examples:
- *   - Christmas closure: scope=tenant, full day, Dec 25
- *   - Court maintenance: scope=court, specific datetime range
- *   - Branch refurbishment: scope=branch, full week
- *   - Tournament reservation: scope=sport, specific courts/dates
- *
- * Cancels existing 'available' slots:
- *   When isActive is set to true, SlotService optionally cancels
- *   all 'available' slots in the window (not 'booked' — those require
- *   manual intervention). Controlled by cancelExistingSlots flag.
- *
- * Table: blackouts
- */
 let BlackoutEntity = class BlackoutEntity {
 };
 exports.BlackoutEntity = BlackoutEntity;

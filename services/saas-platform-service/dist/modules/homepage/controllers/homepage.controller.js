@@ -18,39 +18,13 @@ const audit_interceptor_1 = require("../../../common/interceptors/audit.intercep
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const homepage_service_1 = require("../services/homepage.service");
 const create_homepage_section_dto_1 = require("../dto/create-homepage-section.dto");
-/**
- * HomepageController — section builder API.
- *
- * Public renderer endpoints:
- *   GET /api/v1/cms/homepage/pages/:pageId/sections/published
- *   → No auth required — called by public-website SSR
- *
- * Admin endpoints (require tenant auth via AppModule global guards):
- *   GET    /api/v1/cms/homepage/pages/:pageId/sections
- *   POST   /api/v1/cms/homepage/sections
- *   PATCH  /api/v1/cms/homepage/sections/:id
- *   DELETE /api/v1/cms/homepage/sections/:id
- *   POST   /api/v1/cms/homepage/sections/reorder
- *   POST   /api/v1/cms/homepage/sections/:id/clone
- *   POST   /api/v1/cms/homepage/pages/:pageId/publish-all
- */
 let HomepageController = class HomepageController {
     constructor(homepageService) {
         this.homepageService = homepageService;
     }
-    // ── Public renderer endpoints ─────────────────────────────────────────────
-    /**
-     * Returns published, visible sections for a page.
-     * Consumed by public-website Next.js SSR via getStaticProps / fetch.
-     * No JWT required — tenant resolved from x-tenant-id header.
-     */
     getPublished(pageId, tenant) {
         return this.homepageService.getPublishedSections(pageId, tenant.tenantId);
     }
-    // ── Admin editor endpoints ────────────────────────────────────────────────
-    /**
-     * Returns all sections (draft + published + archived) for the admin editor.
-     */
     getAllForAdmin(pageId, tenant) {
         return this.homepageService.getAllSections(pageId, tenant.tenantId);
     }
@@ -66,23 +40,12 @@ let HomepageController = class HomepageController {
     remove(id, tenant) {
         return this.homepageService.removeSection(id, tenant.tenantId, 'system');
     }
-    /**
-     * Reorders all sections after drag-and-drop in the admin UI.
-     * Accepts the full new sorted list and updates all sortOrder values atomically.
-     */
     reorder(dto, tenant) {
         return this.homepageService.reorderSections(dto, tenant.tenantId, 'system');
     }
-    /**
-     * Clones a section — creates a draft copy with a new admin label.
-     */
     clone(id, dto, tenant) {
         return this.homepageService.cloneSection(id, dto, tenant.tenantId, 'system');
     }
-    /**
-     * Publishes all draft sections for a page in one operation.
-     * Called when the admin clicks "Go Live" / "Publish page".
-     */
     publishAll(pageId, tenant) {
         return this.homepageService
             .publishAllDrafts(pageId, tenant.tenantId, 'system')

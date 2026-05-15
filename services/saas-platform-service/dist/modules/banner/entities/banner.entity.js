@@ -12,16 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BannerEntity = void 0;
 const typeorm_1 = require("typeorm");
 const seo_fields_embed_1 = require("../../seo/embeds/seo-fields.embed");
-/**
- * BannerEntity — a CMS content banner (hero, promotional, or notification block).
- *
- * Banners are tenant-scoped and support:
- *   - Multiple placements (hero, sidebar, inline, modal, footer)
- *   - Scheduling (activeFrom / activeTo date range)
- *   - Target URL for CTA link
- *   - Sort order within placement
- *   - SEO fields for crawlable banners
- */
 let BannerEntity = class BannerEntity {
 };
 exports.BannerEntity = BannerEntity;

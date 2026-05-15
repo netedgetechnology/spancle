@@ -20,68 +20,28 @@ const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
 const branch_service_1 = require("../services/branch.service");
 const create_branch_dto_1 = require("../dto/create-branch.dto");
-/**
- * BranchController — branch management endpoints.
- *
- * All routes are behind global guards:
- *   TenantGuard, JwtAuthGuard, TenantStatusGuard
- *
- * Write operations (create, update, delete, status, manager):
- *   @Roles('TENANT_ADMIN', 'TENANT_MANAGER') — only admin and manager
- *
- * Read operations (list, single, slug):
- *   No additional role requirement — all authenticated tenant users
- *
- * Routes:
- *   POST   /api/v1/branches
- *   GET    /api/v1/branches
- *   GET    /api/v1/branches/status-summary
- *   GET    /api/v1/branches/by-slug/:slug
- *   GET    /api/v1/branches/:id
- *   PATCH  /api/v1/branches/:id
- *   PATCH  /api/v1/branches/:id/status
- *   PATCH  /api/v1/branches/:id/manager
- *   DELETE /api/v1/branches/:id
- */
 let BranchController = class BranchController {
     constructor(branchService) {
         this.branchService = branchService;
     }
-    // ── Write ──────────────────────────────────────────────────────────────────
     create(dto, tenant, actorId) {
         return this.branchService.create(dto, tenant.tenantId, actorId);
     }
     update(id, dto, tenant, actorId) {
         return this.branchService.update(id, dto, tenant.tenantId, actorId);
     }
-    /**
-     * PATCH /branches/:id/status
-     * Dedicated status transition endpoint — explicit and auditable.
-     * Prevented from reactivating archived branches.
-     */
     updateStatus(id, dto, tenant, actorId) {
         return this.branchService.updateStatus(id, dto, tenant.tenantId, actorId);
     }
-    /**
-     * PATCH /branches/:id/manager
-     * Assigns or removes the branch manager.
-     * Pass { managerUserId: null } to unassign.
-     */
     assignManager(id, dto, tenant, actorId) {
         return this.branchService.assignManager(id, dto, tenant.tenantId, actorId);
     }
     remove(id, tenant, actorId) {
         return this.branchService.remove(id, tenant.tenantId, actorId);
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     findAll(tenant, status) {
         return this.branchService.findAll(tenant.tenantId, status);
     }
-    /**
-     * GET /branches/status-summary
-     * Returns count of branches per status — used by the dashboard widget.
-     * Must be declared before /:id to avoid route shadowing.
-     */
     getStatusSummary(tenant) {
         return this.branchService.getStatusSummary(tenant.tenantId);
     }

@@ -11,23 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MediaAssetEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * MediaAssetEntity — a tenant-scoped file in the CMS media library.
- *
- * Storage is abstracted via a driver field — the same entity supports
- * local filesystem, S3, and GCS paths. The URL column always contains
- * the publicly accessible URL regardless of driver.
- *
- * Tenant isolation:
- *   - All assets are scoped to tenantId
- *   - URL paths include the tenantId prefix: /media/{tenantId}/{filename}
- *   - Direct file access must be validated against the asset's tenantId
- *
- * referenceCount:
- *   Incremented when a Page/Blog/Banner references this asset.
- *   Decremented when the reference is removed.
- *   Assets with referenceCount = 0 are candidates for GC cleanup.
- */
 let MediaAssetEntity = class MediaAssetEntity {
 };
 exports.MediaAssetEntity = MediaAssetEntity;

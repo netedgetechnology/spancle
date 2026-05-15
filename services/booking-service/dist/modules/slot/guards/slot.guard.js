@@ -9,10 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantGuard = exports.SlotGuard = void 0;
 const common_1 = require("@nestjs/common");
 const booking_guard_1 = require("../../booking/guards/booking.guard");
-/**
- * SlotGuard — extends TenantGuard.
- * Add slot-specific RBAC permission checks in Sprint 2.
- */
 let SlotGuard = class SlotGuard extends booking_guard_1.TenantGuard {
 };
 exports.SlotGuard = SlotGuard;

@@ -9,10 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantGuard = exports.PlanGuard = void 0;
 const common_1 = require("@nestjs/common");
 const tenant_guard_1 = require("../../tenant/guards/tenant.guard");
-/**
- * PlanGuard — extends TenantGuard.
- * Add plan-specific RBAC permission checks in Sprint 2.
- */
 let PlanGuard = class PlanGuard extends tenant_guard_1.TenantGuard {
 };
 exports.PlanGuard = PlanGuard;

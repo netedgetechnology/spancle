@@ -16,7 +16,6 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const branch_repository_1 = require("../repositories/branch.repository");
 const user_repository_1 = require("../../user/repositories/user.repository");
 const branch_events_1 = require("../events/branch.events");
-// Default timings applied on create when none supplied
 const DEFAULT_TIMINGS = {
     monday: { isClosed: false, openTime: '09:00', closeTime: '17:00' },
     tuesday: { isClosed: false, openTime: '09:00', closeTime: '17:00' },
@@ -33,17 +32,13 @@ let BranchService = BranchService_1 = class BranchService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(BranchService_1.name);
     }
-    // ── Create ─────────────────────────────────────────────────────────────────
     async create(dto, tenantId, actorId) {
-        // Slug uniqueness
         if (await this.branchRepository.isSlugTaken(dto.slug, tenantId)) {
             throw new common_1.ConflictException(`A branch with slug "${dto.slug}" already exists in this organisation`);
         }
-        // Manager must belong to the same tenant
         if (dto.managerUserId) {
             await this.assertManagerBelongsToTenant(dto.managerUserId, tenantId);
         }
-        // Timing validation
         const timings = dto.timings ?? DEFAULT_TIMINGS;
         this.validateTimings(timings);
         const branch = await this.branchRepository.insert({
@@ -75,7 +70,6 @@ let BranchService = BranchService_1 = class BranchService {
         this.logger.log(`Branch created: ${branch.id} slug="${branch.slug}" tenant=${tenantId}`);
         return branch;
     }
-    // ── Read ───────────────────────────────────────────────────────────────────
     async findAll(tenantId, status) {
         if (status) {
             return this.branchRepository.findByStatus(status, tenantId);
@@ -95,14 +89,11 @@ let BranchService = BranchService_1 = class BranchService {
     async getStatusSummary(tenantId) {
         return this.branchRepository.countByStatus(tenantId);
     }
-    // ── Update ─────────────────────────────────────────────────────────────────
     async update(id, dto, tenantId, actorId) {
         await this.branchRepository.findByIdOrFail(id, tenantId);
-        // Validate timing if provided
         if (dto.timings) {
             this.validateTimings(dto.timings);
         }
-        // Manager cross-tenant check
         if (dto.managerUserId !== undefined && dto.managerUserId !== null) {
             await this.assertManagerBelongsToTenant(dto.managerUserId, tenantId);
         }
@@ -110,11 +101,6 @@ let BranchService = BranchService_1 = class BranchService {
         await this.emit(branch_events_1.BranchEventNames.UPDATED, { tenantId, branchId: id, actorId });
         return updated;
     }
-    // ── Manager assignment ─────────────────────────────────────────────────────
-    /**
-     * Assigns or removes the branch manager.
-     * Setting managerUserId to null removes the current manager.
-     */
     async assignManager(id, dto, tenantId, actorId) {
         const branch = await this.branchRepository.findByIdOrFail(id, tenantId);
         if (dto.managerUserId !== null && dto.managerUserId !== undefined) {
@@ -135,10 +121,8 @@ let BranchService = BranchService_1 = class BranchService {
         });
         return updated;
     }
-    // ── Status transition ──────────────────────────────────────────────────────
     async updateStatus(id, dto, tenantId, actorId) {
         const branch = await this.branchRepository.findByIdOrFail(id, tenantId);
-        // Cannot transition an archived branch to any other state
         if (branch.status === 'archived' && dto.status !== 'archived') {
             throw new common_1.BadRequestException('An archived branch cannot be reactivated. Create a new branch instead.');
         }
@@ -155,7 +139,6 @@ let BranchService = BranchService_1 = class BranchService {
         this.logger.log(`Branch status: ${id} ${previousStatus} → ${dto.status} tenant=${tenantId}`);
         return updated;
     }
-    // ── Delete ─────────────────────────────────────────────────────────────────
     async remove(id, tenantId, actorId) {
         const branch = await this.branchRepository.findByIdOrFail(id, tenantId);
         if (branch.status === 'active') {
@@ -164,11 +147,6 @@ let BranchService = BranchService_1 = class BranchService {
         await this.branchRepository.softDelete(id, tenantId);
         await this.emit(branch_events_1.BranchEventNames.DELETED, { tenantId, branchId: id, actorId });
     }
-    // ── Private helpers ────────────────────────────────────────────────────────
-    /**
-     * Validates that the proposed manager exists and belongs to the tenant.
-     * Throws 422 if not found — prevents cross-tenant assignment.
-     */
     async assertManagerBelongsToTenant(managerUserId, tenantId) {
         const user = await this.userRepository.findByIdAndTenant(managerUserId, tenantId);
         if (!user) {
@@ -176,10 +154,6 @@ let BranchService = BranchService_1 = class BranchService {
                 'Manager must be an existing user in the same organisation.');
         }
     }
-    /**
-     * Validates that each day's openTime < closeTime (when not closed).
-     * Times are HH:MM strings; lexicographic comparison is valid for 24h format.
-     */
     validateTimings(timings) {
         const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         for (const day of DAYS) {

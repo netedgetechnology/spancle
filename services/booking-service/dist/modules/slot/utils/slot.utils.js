@@ -1,18 +1,10 @@
 "use strict";
-/**
- * SlotUtils — stateless time math helpers for the slot engine.
- * No dependencies. No side effects. Pure functions only.
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotUtils = void 0;
 class SlotUtils {
     static redisKey(tenantId, suffix) {
         return `tenant:${tenantId}:slot:${suffix}`;
     }
-    /**
-     * Chops a day window into time slots of durationMins with bufferMins gap.
-     * Returns empty array if the window is too short for one slot.
-     */
     static chopIntoSlots(date, openTime, closeTime, durationMins, bufferMins = 0) {
         const slots = [];
         const windowStart = SlotUtils.toUtcDate(date, openTime);
@@ -30,11 +22,9 @@ class SlotUtils {
         }
         return slots;
     }
-    /** Converts YYYY-MM-DD + HH:MM into a UTC Date (no tz conversion). */
     static toUtcDate(date, time) {
         return new Date(`${date}T${time}:00.000Z`);
     }
-    /** Returns the lowercase UTC day-of-week for a Date. */
     static getDayOfWeek(date) {
         const days = [
             'sunday', 'monday', 'tuesday', 'wednesday',
@@ -46,7 +36,6 @@ class SlotUtils {
         const day = date.getUTCDay();
         return day === 0 || day === 6;
     }
-    /** Iterates YYYY-MM-DD strings for every date in [startDate, endDate]. */
     static *iterateDates(startDate, endDate) {
         const current = new Date(`${startDate}T00:00:00.000Z`);
         const end = new Date(`${endDate}T00:00:00.000Z`);
@@ -68,7 +57,6 @@ class SlotUtils {
     static todayUtc() {
         return new Date().toISOString().slice(0, 10);
     }
-    /** [aStart,aEnd) overlaps [bStart,bEnd)? Touching edges = false. */
     static overlaps(aStart, aEnd, bStart, bEnd) {
         return aStart < bEnd && aEnd > bStart;
     }

@@ -14,8 +14,6 @@ exports.HolidayService = void 0;
 const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const holiday_repository_1 = require("../repositories/holiday.repository");
-// ── UK Bank Holiday seed data ─────────────────────────────────────────────────
-// Recurring: year is ignored in matching (MM-DD match only)
 const UK_SYSTEM_HOLIDAYS = [
     { name: "New Year's Day", date: '2000-01-01', isRecurring: true, countryCode: 'GB', source: 'system' },
     { name: 'Good Friday', date: '2000-04-07', isRecurring: false, countryCode: 'GB', source: 'system' },
@@ -32,7 +30,6 @@ let HolidayService = HolidayService_1 = class HolidayService {
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(HolidayService_1.name);
     }
-    // ── CRUD ───────────────────────────────────────────────────────────────────
     async create(dto, tenantId, actorId) {
         if (!dto.name?.trim())
             throw new common_1.BadRequestException('Holiday name is required');
@@ -95,11 +92,6 @@ let HolidayService = HolidayService_1 = class HolidayService {
             tenantId, holidayId: id, actorId, timestamp: new Date().toISOString(),
         });
     }
-    /**
-     * Seeds the UK system bank holidays for a tenant.
-     * Safe to call multiple times — skips dates that already exist.
-     * Returns { seeded, skipped }.
-     */
     async seedSystemHolidays(tenantId, actorId) {
         let seeded = 0;
         let skipped = 0;

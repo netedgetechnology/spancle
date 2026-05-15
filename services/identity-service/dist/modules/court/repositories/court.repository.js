@@ -61,7 +61,6 @@ let CourtRepository = class CourtRepository extends tenant_aware_repository_1.Te
         }
         return (await qb.getCount()) > 0;
     }
-    /** Returns all names currently in use for a branch — used by bulk generation */
     async getExistingNamesForBranch(branchId, tenantId) {
         const rows = await this.scopedQb('c', tenantId)
             .select('LOWER(c.name)', 'name')
@@ -88,7 +87,6 @@ let CourtRepository = class CourtRepository extends tenant_aware_repository_1.Te
         }
         return counts;
     }
-    /** Returns count of courts in maintenance across all branches */
     async countInMaintenance(tenantId) {
         return this.scopedQb('c', tenantId)
             .andWhere('c.status = :status', { status: 'maintenance' })

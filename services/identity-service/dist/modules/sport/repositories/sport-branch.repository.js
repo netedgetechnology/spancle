@@ -22,27 +22,18 @@ let SportBranchRepository = class SportBranchRepository extends tenant_aware_rep
     constructor(dataSource) {
         super(sport_branch_entity_1.SportBranchEntity, dataSource.manager);
     }
-    /**
-     * Returns all active branch mappings for a sport.
-     */
     async findBySport(sportId, tenantId) {
         return this.scopedQb('sb', tenantId)
             .andWhere('sb.sportId = :sportId', { sportId })
             .orderBy('sb.sortOrder', 'ASC')
             .getMany();
     }
-    /**
-     * Returns all active sport mappings for a branch.
-     */
     async findByBranch(branchId, tenantId) {
         return this.scopedQb('sb', tenantId)
             .andWhere('sb.branchId = :branchId', { branchId })
             .orderBy('sb.sortOrder', 'ASC')
             .getMany();
     }
-    /**
-     * Returns the branchIds currently mapped to a sport (non-deleted only).
-     */
     async getBranchIdsForSport(sportId, tenantId) {
         const rows = await this.scopedQb('sb', tenantId)
             .select('sb.branchId', 'branchId')
@@ -50,18 +41,7 @@ let SportBranchRepository = class SportBranchRepository extends tenant_aware_rep
             .getRawMany();
         return rows.map((r) => r.branchId);
     }
-    /**
-     * Replace-strategy assignment — atomically replaces the full set of
-     * branch mappings for a sport.
-     *
-     * Steps:
-     *   1. Soft-delete all existing mappings for this sport
-     *   2. Insert new mappings with sortOrder from array position
-     *
-     * Both steps operate under the tenantId scope.
-     */
     async replaceBranchMappings(sportId, branchIds, tenantId) {
-        // Step 1: soft-delete all current mappings
         await this.entityManager
             .createQueryBuilder()
             .update(sport_branch_entity_1.SportBranchEntity)
@@ -77,7 +57,6 @@ let SportBranchRepository = class SportBranchRepository extends tenant_aware_rep
             .execute();
         if (branchIds.length === 0)
             return;
-        // Step 2: insert new mappings
         const entities = branchIds.map((branchId, i) => this.entityManager.create(sport_branch_entity_1.SportBranchEntity, {
             tenantId,
             sportId,
@@ -87,10 +66,6 @@ let SportBranchRepository = class SportBranchRepository extends tenant_aware_rep
         }));
         await this.entityManager.save(sport_branch_entity_1.SportBranchEntity, entities);
     }
-    /**
-     * Soft-deletes all branch mappings for a sport.
-     * Called before sport deletion to prevent orphaned join rows.
-     */
     async deleteAllForSport(sportId, tenantId) {
         await this.entityManager
             .createQueryBuilder()

@@ -49,34 +49,17 @@ let HolidayRepository = HolidayRepository_1 = class HolidayRepository {
             .orderBy('h.date', 'ASC')
             .getMany();
     }
-    /**
-     * Checks whether a specific date (YYYY-MM-DD) is a holiday.
-     *
-     * Matching:
-     *   - Exact date match (non-recurring, or current year match)
-     *   - Recurring match: MM-DD portion matches (year ignored)
-     *
-     * Both tenant and system holidays are checked.
-     * A tenant holiday with isActive=false overrides (disables) a system one.
-     */
     async isHoliday(tenantId, date) {
-        // date format: YYYY-MM-DD
-        const monthDay = date.slice(5); // MM-DD
+        const monthDay = date.slice(5);
         const count = await this.repo
             .createQueryBuilder('h')
             .where('h.tenantId = :tenantId', { tenantId })
             .andWhere('h.isDeleted = false')
             .andWhere('h.isActive = true')
-            .andWhere(
-        // exact date match OR recurring MM-DD match
-        "(h.date = :date OR (h.isRecurring = true AND SUBSTRING(h.date::text, 6, 5) = :monthDay))", { date, monthDay })
+            .andWhere("(h.date = :date OR (h.isRecurring = true AND SUBSTRING(h.date::text, 6, 5) = :monthDay))", { date, monthDay })
             .getCount();
         return count > 0;
     }
-    /**
-     * Returns all holiday dates within a range for pre-fetching by the generator.
-     * Returns a Set of YYYY-MM-DD strings for O(1) lookup.
-     */
     async getHolidayDatesInRange(tenantId, startDate, endDate) {
         const rows = await this.repo
             .createQueryBuilder('h')
@@ -92,8 +75,7 @@ let HolidayRepository = HolidayRepository_1 = class HolidayRepository {
         for (const row of rows) {
             const rowDate = new Date(row.date);
             if (row.isRecurring) {
-                // Check every year between start and end for this MM-DD
-                const mm = row.date.slice(5); // MM-DD
+                const mm = row.date.slice(5);
                 let year = start.getFullYear();
                 while (year <= end.getFullYear()) {
                     const candidate = `${year}-${mm}`;

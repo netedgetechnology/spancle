@@ -44,33 +44,12 @@ exports.PasswordService = void 0;
 const common_1 = require("@nestjs/common");
 const bcrypt = __importStar(require("bcryptjs"));
 const constants_1 = require("@spancle/constants");
-/**
- * PasswordService — password hashing, verification and policy enforcement.
- *
- * Security contracts:
- *   - bcrypt with configurable rounds (default: PASSWORD.BCRYPT_ROUNDS = 12)
- *   - Passwords are NEVER logged at any level
- *   - Policy is enforced before hashing — not after
- *   - compareHash() is constant-time via bcrypt.compare()
- *
- * Policy rules (configurable via constants):
- *   - Minimum 8 characters
- *   - Maximum 128 characters
- *   - At least one uppercase letter
- *   - At least one lowercase letter
- *   - At least one digit
- *   - At least one special character
- *   - Not a known common password (basic blocklist)
- */
 let PasswordService = PasswordService_1 = class PasswordService {
     constructor() {
         this.logger = new common_1.Logger(PasswordService_1.name);
         this.rounds = constants_1.PASSWORD.BCRYPT_ROUNDS;
         this.minLen = constants_1.PASSWORD.MIN_LENGTH;
         this.maxLen = constants_1.PASSWORD.MAX_LENGTH;
-        /**
-         * Common passwords blocklist — extended in Sprint 2 with full HIBP integration.
-         */
         this.commonPasswords = new Set([
             'password', 'password1', 'password123',
             'qwerty123', 'qwertyuiop',
@@ -80,34 +59,19 @@ let PasswordService = PasswordService_1 = class PasswordService {
             'spancle123', 'spancle1',
         ]);
     }
-    // ── Public API ────────────────────────────────────────────────────────────
-    /**
-     * Hashes a plaintext password using bcrypt.
-     * Validates policy first — throws UnprocessableEntityException on violation.
-     */
     async hash(plaintext) {
         this.enforcePolicy(plaintext);
         return bcrypt.hash(plaintext, this.rounds);
     }
-    /**
-     * Compares a plaintext password against a bcrypt hash.
-     * Returns false (not throws) on mismatch — callers decide the response.
-     */
     async compare(plaintext, hash) {
         try {
             return await bcrypt.compare(plaintext, hash);
         }
         catch (err) {
-            // Malformed hash — treat as mismatch, log for ops visibility
             this.logger.error(`bcrypt.compare threw unexpectedly: ${String(err)}`);
             return false;
         }
     }
-    /**
-     * Validates password against all policy rules without hashing.
-     * Returns structured result — does not throw.
-     * Use enforcePolicy() when you want an exception on failure.
-     */
     validatePolicy(password) {
         const violations = [];
         if (password.length < this.minLen) {
@@ -154,10 +118,6 @@ let PasswordService = PasswordService_1 = class PasswordService {
         }
         return { valid: violations.length === 0, violations };
     }
-    /**
-     * Enforces policy and throws UnprocessableEntityException if violated.
-     * Used by hash() and called explicitly before identity creation.
-     */
     enforcePolicy(password) {
         const result = this.validatePolicy(password);
         if (!result.valid) {
@@ -170,10 +130,6 @@ let PasswordService = PasswordService_1 = class PasswordService {
             });
         }
     }
-    /**
-     * Checks if a new password is different from the current hash.
-     * Prevents reuse of the same password on change.
-     */
     async isDifferentFromCurrent(newPassword, currentHash) {
         const isSame = await this.compare(newPassword, currentHash);
         return !isSame;

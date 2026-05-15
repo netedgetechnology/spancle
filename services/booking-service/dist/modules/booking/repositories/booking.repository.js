@@ -103,10 +103,6 @@ let BookingRepository = BookingRepository_1 = class BookingRepository {
             qb.andWhere('b.id != :excludeId', { excludeId: params.excludeId });
         return qb.getMany();
     }
-    /**
-     * Finds all confirmed bookings for a user that start within the given range.
-     * Used by recurring booking generation to detect duplicates.
-     */
     async findByUserInRange(params) {
         return this.scopedQb('b', params.tenantId)
             .andWhere('b.userId = :userId', { userId: params.userId })
@@ -116,20 +112,12 @@ let BookingRepository = BookingRepository_1 = class BookingRepository {
             .andWhere('b.startsAt < :to', { to: params.to })
             .getMany();
     }
-    /**
-     * Finds all confirmed bookings that started before now and are still 'confirmed'.
-     * Called by the scheduler to mark completed bookings.
-     */
     async findPastConfirmed(tenantId, before) {
         return this.scopedQb('b', tenantId)
             .andWhere("b.status = 'confirmed'")
             .andWhere('b.endsAt < :before', { before })
             .getMany();
     }
-    /**
-     * Finds confirmed bookings where the session started but no check-in occurred.
-     * Used for no-show detection.
-     */
     async findNoShowCandidates(tenantId, gracePeriodMinutes = 30) {
         const cutoff = new Date(Date.now() - gracePeriodMinutes * 60_000);
         return this.scopedQb('b', tenantId)

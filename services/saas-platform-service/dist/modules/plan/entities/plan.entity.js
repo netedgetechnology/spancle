@@ -11,14 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlanEntity = void 0;
 const typeorm_1 = require("typeorm");
-/**
- * PlanEntity — the resolved plan assignment for a specific tenant.
- *
- * Links: Tenant → Package (via tierKey) with optional per-tenant limit overrides.
- *
- * One active plan per tenant. Created automatically when a subscription is activated.
- * Limit overrides allow enterprise-tier custom agreements (e.g. 10,000 users).
- */
 let PlanEntity = class PlanEntity {
 };
 exports.PlanEntity = PlanEntity;

@@ -17,20 +17,6 @@ exports.AdminStatsService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
-/**
- * AdminStatsService — computes cross-tenant aggregate statistics.
- *
- * Architecture notes:
- *   - All queries run directly against the database via raw SQL
- *     for performance. TypeORM ORM layer is too slow for aggregations
- *     across potentially thousands of tenants.
- *   - Sprint 1: booking and support ticket stats are stubs (return 0).
- *     Real values will come from event-driven Redis counters (Sprint 3)
- *     and a helpdesk API integration (Sprint 4).
- *   - Sprint 3: Add Redis caching with 5-minute TTL on stats response.
- *   - All monetary values are in minor units (pence/cents).
- *     Currency is hardcoded to GBP until multi-currency billing lands.
- */
 let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
     constructor(dataSource) {
         this.dataSource = dataSource;
@@ -61,14 +47,12 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
                 previousMrrMinorUnits: 0,
                 isStub: true,
             },
-            // Sprint 3: cross-service booking counters via Redis
             bookings: {
                 totalThisPeriod: 0,
                 confirmedThisPeriod: 0,
                 cancelledThisPeriod: 0,
                 isStub: true,
             },
-            // Sprint 4: helpdesk API integration
             supportTickets: {
                 open: 0,
                 pending: 0,
@@ -77,8 +61,6 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
             },
         };
     }
-    // ── Tenant aggregation ─────────────────────────────────────────────────────
-    // ── Recent tenants ────────────────────────────────────────────────────────────
     async getRecentTenants(limit) {
         const rows = await this.dataSource.query(`SELECT id, name, slug, email, status, tier,
               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt"
@@ -123,7 +105,6 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
             previousPeriod: Number(previous?.count ?? 0),
         };
     }
-    // ── Tier breakdown ─────────────────────────────────────────────────────────
     async computeTierBreakdown() {
         const rows = await this.dataSource.query(`SELECT tier, COUNT(*)::int AS count
        FROM tenants
@@ -132,7 +113,6 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
        ORDER BY count DESC`);
         return rows.map((r) => ({ tier: r.tier, count: Number(r.count) }));
     }
-    // ── Monthly trend (last N months) ─────────────────────────────────────────
     async computeMonthlyTrend(months) {
         const rows = await this.dataSource.query(`SELECT
          TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
@@ -147,22 +127,11 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
             month: r.month,
             tenantCount: Number(r.tenant_count),
             trialCount: Number(r.trial_count),
-            revenueMinorUnits: 0, // Sprint 3: billing event aggregate
+            revenueMinorUnits: 0,
         }));
     }
-    // ── Trial statistics ───────────────────────────────────────────────────────
-    /**
-     * Computes detailed trial funnel statistics.
-     *
-     * Trial window assumption: 30 days — i.e. a trial tenant created > 30 days
-     * ago and still on 'trial' status is overdue for conversion action.
-     *
-     * "Expiring soon" = trial tenants created 23–30 days ago (within 7 days
-     * of the assumed 30-day window end).
-     */
     async computeTrialStats(periodDays) {
         const [currentTrials, periodConversions, ageBucketRows] = await Promise.all([
-            // Total current trials + expiring-soon count
             this.dataSource.query(`SELECT
            COUNT(*)::int                                                    AS total,
            COUNT(*) FILTER (
@@ -171,7 +140,6 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
            )::int                                                           AS expiring_soon
          FROM tenants
          WHERE status = 'trial' AND is_deleted = false`),
-            // Conversions and expirations within the period window
             this.dataSource.query(`SELECT
            COUNT(*) FILTER (WHERE status = 'active')::int   AS converted,
            COUNT(*) FILTER (WHERE status = 'terminated')::int AS expired
@@ -179,7 +147,6 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
          WHERE is_deleted = false
            AND updated_at >= NOW() - INTERVAL '${periodDays} days'
            AND (status = 'active' OR status = 'terminated')`),
-            // Age bucket distribution for current trials
             this.dataSource.query(`SELECT
            CASE
              WHEN created_at >= NOW() - INTERVAL '7 days'  THEN '0–7 days'
@@ -227,26 +194,14 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
             ageBuckets,
         };
     }
-    // ── Subscription statistics ────────────────────────────────────────────────
-    /**
-     * Derives subscription statistics from the tenants table.
-     *
-     * "Paying subscriber" = active tenant on starter tier or above.
-     * Free-tier tenants are excluded — they have no subscription value.
-     *
-     * This is a proxy until a dedicated billing/subscriptions schema exists.
-     * All MRR values are 0 — billing integration is Sprint 3.
-     */
     async computeSubscriptionStats(periodDays) {
         const PAYING_TIERS = `('starter', 'growth', 'pro', 'enterprise')`;
         const [totals, periodChanges, tierRows] = await Promise.all([
-            // Current paying subscriber totals
             this.dataSource.query(`SELECT COUNT(*)::int AS total
          FROM tenants
          WHERE status IN ('active', 'trial')
            AND tier IN ${PAYING_TIERS}
            AND is_deleted = false`),
-            // New paying subscribers and churned in the period
             this.dataSource.query(`SELECT
            COUNT(*) FILTER (
              WHERE created_at >= NOW() - INTERVAL '${periodDays} days'
@@ -260,7 +215,6 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
            )::int  AS churned
          FROM tenants
          WHERE is_deleted = false`),
-            // Paying subscribers by tier
             this.dataSource.query(`SELECT tier, COUNT(*)::int AS count
          FROM tenants
          WHERE status IN ('active', 'trial')
@@ -282,7 +236,7 @@ let AdminStatsService = AdminStatsService_1 = class AdminStatsService {
         const byTier = tierRows.map((r) => ({
             tier: r.tier,
             count: Number(r.count),
-            mrrMinorUnits: 0, // Sprint 3: billing event aggregate
+            mrrMinorUnits: 0,
         }));
         return {
             totalPaying,

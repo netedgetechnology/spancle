@@ -17,38 +17,6 @@ const tenant_context_types_1 = require("../../modules/tenant/types/tenant-contex
 const tenant_cls_context_1 = require("../context/tenant-cls.context");
 const tenant_cache_service_1 = require("../../modules/tenant/services/tenant-cache.service");
 const tenant_service_1 = require("../../modules/tenant/services/tenant.service");
-/**
- * TenantResolverMiddleware — the full-resolution layer.
- *
- * Unlike TenantContextMiddleware (which only extracts the raw tenantId),
- * this middleware performs a complete resolution:
- *
- *   1. STRATEGY SELECTION — determines how to resolve tenant identity:
- *      a. Header   → x-tenant-id (UUID)                 [default]
- *      b. Subdomain → acme.app.spancle.io → slug lookup  [web apps]
- *      c. JWT       → tenantId extracted from access token payload
- *
- *   2. CACHE LOOKUP — checks Redis for a warm TenantContextRuntime
- *
- *   3. DATABASE FALLBACK — if cache miss, loads from PostgreSQL via TenantService
- *
- *   4. STATUS VALIDATION — active/trial tenants pass; suspended/terminated
- *      short-circuit here before any business logic runs
- *
- *   5. CONTEXT ATTACHMENT — attaches TenantContextRuntime to:
- *      a. request[TENANT_RUNTIME_KEY]  → for REQUEST-scoped DI
- *      b. TenantClsContext.run()       → for implicit async propagation
- *
- *   6. RESPONSE HEADER — sets x-tenant-id on response for tracing
- *
- * Registration order in AppModule:
- *   TenantContextMiddleware (raw extraction)
- *   → TenantResolverMiddleware (full resolution)
- *   → Guard chain (TenantGuard, JwtAuthGuard, ...)
- *
- * Routes that bypass resolution (health, metrics):
- *   Apply to all routes EXCEPT /health and /metrics.
- */
 let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolverMiddleware {
     constructor(tenantCache, tenantService) {
         this.tenantCache = tenantCache;
@@ -61,7 +29,6 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
         this.uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     }
     async use(request, response, next) {
-        // Skip resolution on infra routes
         if (this.shouldSkip(request.path)) {
             next();
             return;
@@ -72,9 +39,7 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
                 next();
                 return;
             }
-            // Cache-first resolution
             let runtime = await this.resolveFromCache(tenantIdentifier);
-            // Database fallback
             if (!runtime) {
                 runtime = await this.resolveFromDatabase(tenantIdentifier);
                 if (runtime) {
@@ -85,17 +50,13 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
                 this.logger.warn(`Tenant not found for identifier "${tenantIdentifier}" — path: ${request.path}`);
                 throw new common_1.UnauthorizedException('Tenant not found');
             }
-            // Status gate — suspended/terminated tenants get 503 not 401
             if (!(0, tenant_context_types_1.isTenantActive)(runtime)) {
                 this.logger.warn(`Blocked request for ${runtime.status} tenant: ${runtime.tenantId} — path: ${request.path}`);
                 throw new common_1.ServiceUnavailableException(`Tenant account is ${runtime.status}. Please contact support.`);
             }
-            // Attach to request object for REQUEST-scoped DI
             request[tenant_context_types_1.TENANT_RUNTIME_KEY] = runtime;
-            // Set response header for distributed tracing
             response.setHeader('x-tenant-id', runtime.tenantId);
             response.setHeader('x-tenant-slug', runtime.slug);
-            // Propagate through CLS for implicit async context
             tenant_cls_context_1.TenantClsContext.run(runtime, () => next());
         }
         catch (err) {
@@ -107,7 +68,6 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
             next(err);
         }
     }
-    // ── Strategy: identifier extraction ───────────────────────────────────────
     extractTenantIdentifier(request) {
         switch (this.strategy) {
             case constants_1.TENANT_RESOLUTION_STRATEGIES.HEADER:
@@ -120,10 +80,6 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
                 return this.extractFromHeader(request);
         }
     }
-    /**
-     * Header strategy — expects a UUID tenant ID in x-tenant-id header.
-     * Used by: API clients, internal service-to-service calls, mobile apps.
-     */
     extractFromHeader(request) {
         const value = request.headers[this.tenantHeader];
         if (!value || typeof value !== 'string')
@@ -132,36 +88,18 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
             return null;
         return value;
     }
-    /**
-     * Subdomain strategy — extracts tenant slug from the request hostname.
-     * acme.app.spancle.io → slug='acme' → resolved to tenantId via DB/cache.
-     *
-     * Used by: web portals, white-label consumer apps.
-     *
-     * Custom domains (e.g. portal.acme-sports.com) are resolved in Sprint 3
-     * via a domain routing table — currently returns null for unknown domains.
-     */
     extractFromSubdomain(request) {
         const hostname = request.hostname;
-        // Local dev override via header
         const devSlug = request.headers['x-tenant-slug'];
         if (devSlug && typeof devSlug === 'string')
             return devSlug;
         const withoutBase = hostname.replace(`.${this.baseDomain}`, '');
         if (withoutBase === hostname)
-            return null; // No subdomain match
+            return null;
         if (withoutBase === 'www' || withoutBase === 'api')
             return null;
         return withoutBase;
     }
-    /**
-     * JWT strategy — extracts tenantId from the Bearer token payload.
-     * Used by: internal service mesh, server-to-server API calls.
-     * Falls back to header strategy if token is absent or unparseable.
-     *
-     * NOTE: This does NOT verify the JWT signature — that is JwtAuthGuard's job.
-     * We only read the tenantId claim here for resolution purposes.
-     */
     extractFromJwt(request) {
         const authHeader = request.headers['authorization'];
         if (!authHeader || !authHeader.startsWith('Bearer '))
@@ -178,17 +116,13 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
             }
         }
         catch {
-            // Malformed token — fall through to next strategy
         }
         return null;
     }
-    // ── Resolution helpers ─────────────────────────────────────────────────────
     async resolveFromCache(identifier) {
-        // UUID lookup (header/JWT strategy)
         if (this.uuidPattern.test(identifier)) {
             return this.tenantCache.get(identifier);
         }
-        // Slug lookup — cache keyed by tenantId not slug, so DB required
         return null;
     }
     async resolveFromDatabase(identifier) {
@@ -198,7 +132,6 @@ let TenantResolverMiddleware = TenantResolverMiddleware_1 = class TenantResolver
                 tenant = await this.tenantService.findById(identifier);
             }
             else {
-                // Slug-based resolution (subdomain strategy)
                 tenant = await this.tenantService.findBySlug(identifier);
             }
             if (!tenant)
