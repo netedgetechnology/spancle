@@ -107,6 +107,12 @@ run_finance() {
   psql "$FINANCE_DB_URL" -f "$file" --set ON_ERROR_STOP=1 2>&1 | grep -E "NOTICE|ERROR" || true
 }
 
+run_saas() {
+  local file="$1"
+  log "  [saas]     $(basename "$file")"
+  psql "$SAAS_DB_URL" -f "$file" --set ON_ERROR_STOP=1 2>&1 | grep -E "NOTICE|ERROR" || true
+}
+
 # 00 — shared config (identity DB for extensions)
 run_identity "$SCRIPT_DIR/00_config.sql"
 
@@ -139,6 +145,9 @@ run_booking  "$SCRIPT_DIR/09_bookings.sql"
 
 # 10 — Invoices (finance DB)
 run_finance  "$SCRIPT_DIR/10_invoices.sql"
+
+# 11 — Homepage CMS sections (saas-platform DB)
+run_saas     "$SCRIPT_DIR/11_homepage_sections.sql"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 log ""
