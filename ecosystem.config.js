@@ -66,9 +66,7 @@ module.exports = {
     {
       name:               'spancle-web-public',
       cwd:                `${BASE}/apps/public-website`,
-      script:             'pnpm',
-      args:               'start',
-      interpreter:        'none',
+      script:             '.next/standalone/server.js',
       instances:          1,
       exec_mode:          'fork',
       autorestart:        true,
@@ -79,15 +77,14 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT:     3000,
+        HOSTNAME: '127.0.0.1',
       },
     },
 
     {
       name:               'spancle-web-admin',
       cwd:                `${BASE}/apps/superadmin-portal`,
-      script:             'pnpm',
-      args:               'start',
-      interpreter:        'none',
+      script:             '.next/standalone/server.js',
       instances:          1,
       exec_mode:          'fork',
       autorestart:        true,
@@ -98,15 +95,14 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT:     3001,
+        HOSTNAME: '127.0.0.1',
       },
     },
 
     {
       name:               'spancle-web-tenant',
       cwd:                `${BASE}/apps/tenant-portal`,
-      script:             'pnpm',
-      args:               'start',
-      interpreter:        'none',
+      script:             '.next/standalone/server.js',
       instances:          1,
       exec_mode:          'fork',
       autorestart:        true,
@@ -117,15 +113,14 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT:     3002,
+        HOSTNAME: '127.0.0.1',
       },
     },
 
     {
       name:               'spancle-web-booking',
       cwd:                `${BASE}/apps/consumer-booking`,
-      script:             'pnpm',
-      args:               'start',
-      interpreter:        'none',
+      script:             '.next/standalone/server.js',
       instances:          1,
       exec_mode:          'fork',
       autorestart:        true,
@@ -136,6 +131,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT:     3003,
+        HOSTNAME: '127.0.0.1',
       },
     },
 

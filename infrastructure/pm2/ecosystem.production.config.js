@@ -62,7 +62,7 @@ const productionAppOverride = {
 };
 
 const apps = base.apps.map((app) => {
-  const isNextApp = app.script === 'node_modules/.bin/next';
+  const isNextApp = typeof app.script === 'string' && app.script.includes('standalone/server.js');
   const override  = isNextApp ? productionAppOverride : productionServiceOverride;
 
   return {
