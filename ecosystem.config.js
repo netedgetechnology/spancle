@@ -84,7 +84,8 @@ module.exports = {
     {
       name:               'spancle-web-admin',
       cwd:                `${BASE}/apps/superadmin-portal`,
-      script:             '.next/standalone/server.js',
+      script:             'node_modules/.bin/next',
+      args:               'start',
       instances:          1,
       exec_mode:          'fork',
       autorestart:        true,

@@ -1,6 +1,41 @@
-import Link from 'next/link';
+import Link                         from 'next/link';
+import { SectionRenderer }          from '@/components/sections/section-renderer';
+import { fetchPublishedSections }   from '@/lib/homepage.api';
 
-export default function HomePage(): React.ReactElement {
+export const dynamic = 'force-dynamic';
+
+/**
+ * Public website root page.
+ *
+ * Attempts to load CMS homepage sections from the API.
+ * Falls back to a static branded page if the API is unavailable
+ * or no sections are published yet.
+ */
+export default async function HomePage(): Promise<React.ReactElement> {
+  const tenantId = process.env['NEXT_PUBLIC_TENANT_ID'] ?? '';
+  const pageId   = process.env['NEXT_PUBLIC_HOMEPAGE_PAGE_ID'] ?? '';
+
+  let sections: Awaited<ReturnType<typeof fetchPublishedSections>> = [];
+
+  if (tenantId && pageId) {
+    try {
+      sections = await fetchPublishedSections(pageId, tenantId);
+    } catch {
+      // API unavailable — render static fallback below
+    }
+  }
+
+  if (sections.length > 0) {
+    return (
+      <main id="main-content">
+        {sections.map((section) => (
+          <SectionRenderer key={section.id} section={section} />
+        ))}
+      </main>
+    );
+  }
+
+  // ── Static fallback ────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col items-center justify-center px-4 text-center">
       <div className="max-w-2xl mx-auto space-y-8">
