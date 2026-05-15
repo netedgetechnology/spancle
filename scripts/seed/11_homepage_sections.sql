@@ -45,7 +45,7 @@ VALUES (
     "eyebrowText":  "Now in Early Access",
     "bgColor":      "#0ea5e9",
     "textScheme":   "light",
-    "layout":       "centered",
+    "layout":       "split",
     "overlayOpacity": 0.4,
     "primaryCta": {
       "label":       "Start Free Trial",
@@ -365,7 +365,7 @@ VALUES (
     "body":         "Start your 14-day free trial today. No credit card required.",
     "eyebrowText":  "Get started for free",
     "bgStyle":      "brand",
-    "layout":       "centered",
+    "layout":       "split",
     "overlayOpacity": 0.6,
     "primaryCta": {
       "label":       "Start Free Trial",
