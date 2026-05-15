@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
  * or no sections are published yet.
  */
 export default async function HomePage(): Promise<React.ReactElement> {
-  const tenantId = process.env['NEXT_PUBLIC_TENANT_ID'] ?? '';
-  const pageId   = process.env['NEXT_PUBLIC_HOMEPAGE_PAGE_ID'] ?? '';
+  const tenantId = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
+  const pageId   = process.env['NEXT_PUBLIC_HOMEPAGE_ID'] ?? '';
 
   let sections: Awaited<ReturnType<typeof fetchPublishedSections>> = [];
 
