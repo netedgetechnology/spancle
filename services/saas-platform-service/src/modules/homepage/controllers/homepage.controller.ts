@@ -9,13 +9,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Query,
+  Req,
   UseInterceptors,
 } from '@nestjs/common';
-import { AuditInterceptor } from '../../../common/interceptors/audit.interceptor';
-import { TenantCtx } from '../../../common/decorators/tenant.decorator';
+import type { Request } from 'express';
+import { AuditInterceptor }  from '../../../common/interceptors/audit.interceptor';
+import { TenantCtx }         from '../../../common/decorators/tenant.decorator';
 import type { TenantContext } from '../../../common/decorators/tenant.decorator';
-import { HomepageService } from '../services/homepage.service';
+import { HomepageService }   from '../services/homepage.service';
 import {
   CreateHomepageSectionDto,
   UpdateHomepageSectionDto,
@@ -27,12 +28,13 @@ import type { HomepageSectionEntity } from '../entities/homepage-section.entity'
 /**
  * HomepageController — section builder API.
  *
- * Public renderer endpoints:
+ * Public renderer endpoint (no JWT):
  *   GET /api/v1/cms/homepage/pages/:pageId/sections/published
- *   → No auth required — called by public-website SSR
+ *   Tenant resolved from: request.tenant?.tenantId → request.tenantId → x-tenant-id header
  *
  * Admin endpoints (require tenant auth via AppModule global guards):
  *   GET    /api/v1/cms/homepage/pages/:pageId/sections
+ *   GET    /api/v1/cms/homepage/sections/:id
  *   POST   /api/v1/cms/homepage/sections
  *   PATCH  /api/v1/cms/homepage/sections/:id
  *   DELETE /api/v1/cms/homepage/sections/:id
@@ -45,19 +47,25 @@ import type { HomepageSectionEntity } from '../entities/homepage-section.entity'
 export class HomepageController {
   constructor(private readonly homepageService: HomepageService) {}
 
-  // ── Public renderer endpoints ─────────────────────────────────────────────
+  // ── Public renderer endpoint ──────────────────────────────────────────────
 
   /**
    * Returns published, visible sections for a page.
-   * Consumed by public-website Next.js SSR via getStaticProps / fetch.
-   * No JWT required — tenant resolved from x-tenant-id header.
+   * Consumed by public-website Next.js SSR.
+   * No JWT required — tenant resolved from request or x-tenant-id header.
    */
   @Get('pages/:pageId/sections/published')
   getPublished(
     @Param('pageId', ParseUUIDPipe) pageId: string,
-    @TenantCtx() tenant: TenantContext,
+    @Req() req: Request & { tenant?: TenantContext; tenantId?: string },
   ): Promise<HomepageSectionEntity[]> {
-    return this.homepageService.getPublishedSections(pageId, tenant.tenantId);
+    const tenantId =
+      req.tenant?.tenantId ??
+      req.tenantId ??
+      (req.headers['x-tenant-id'] as string | undefined) ??
+      '';
+
+    return this.homepageService.getPublishedSections(pageId, tenantId);
   }
 
   // ── Admin editor endpoints ────────────────────────────────────────────────
@@ -110,7 +118,6 @@ export class HomepageController {
 
   /**
    * Reorders all sections after drag-and-drop in the admin UI.
-   * Accepts the full new sorted list and updates all sortOrder values atomically.
    */
   @Post('sections/reorder')
   @HttpCode(HttpStatus.OK)
@@ -136,7 +143,6 @@ export class HomepageController {
 
   /**
    * Publishes all draft sections for a page in one operation.
-   * Called when the admin clicks "Go Live" / "Publish page".
    */
   @Post('pages/:pageId/publish-all')
   @HttpCode(HttpStatus.OK)

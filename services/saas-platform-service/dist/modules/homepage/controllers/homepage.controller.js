@@ -22,8 +22,12 @@ let HomepageController = class HomepageController {
     constructor(homepageService) {
         this.homepageService = homepageService;
     }
-    getPublished(pageId, tenant) {
-        return this.homepageService.getPublishedSections(pageId, tenant.tenantId);
+    getPublished(pageId, req) {
+        const tenantId = req.tenant?.tenantId ??
+            req.tenantId ??
+            req.headers['x-tenant-id'] ??
+            '';
+        return this.homepageService.getPublishedSections(pageId, tenantId);
     }
     getAllForAdmin(pageId, tenant) {
         return this.homepageService.getAllSections(pageId, tenant.tenantId);
@@ -56,7 +60,7 @@ exports.HomepageController = HomepageController;
 __decorate([
     (0, common_1.Get)('pages/:pageId/sections/published'),
     __param(0, (0, common_1.Param)('pageId', common_1.ParseUUIDPipe)),
-    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
