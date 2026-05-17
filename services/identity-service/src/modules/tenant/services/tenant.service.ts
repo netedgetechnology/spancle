@@ -135,6 +135,11 @@ export class TenantService {
     };
   }
 
+
+  async isSlugTaken(slug: string): Promise<boolean> {
+    return this.tenantRepository.isSlugTaken(slug);
+  }
+
   async findAll(
     page = 1, limit = 20,
     status?: TenantStatus, tier?: TenantTier,

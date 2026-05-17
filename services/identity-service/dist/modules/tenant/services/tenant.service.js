@@ -85,6 +85,9 @@ let TenantService = TenantService_1 = class TenantService {
             redirectUrl: `https://${tenant.slug}.spancle.com`,
         };
     }
+    async isSlugTaken(slug) {
+        return this.tenantRepository.isSlugTaken(slug);
+    }
     async findAll(page = 1, limit = 20, status, tier) {
         return this.tenantRepository.findAllTenants(page, limit, status, tier);
     }

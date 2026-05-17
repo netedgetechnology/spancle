@@ -6,6 +6,7 @@ const common_types_1 = require("./common.types");
 exports.TenantStatusSchema = zod_1.z.enum(['pending', 'active', 'suspended', 'terminated', 'trial']);
 exports.TenantTierSchema = zod_1.z.enum(['free', 'starter', 'growth', 'pro', 'enterprise']);
 exports.TenantSettingsSchema = zod_1.z.object({
+    ownerName: zod_1.z.string().optional(),
     timezone: zod_1.z.string().default('UTC'),
     locale: zod_1.z.string().default('en-GB'),
     currency: zod_1.z.string().length(3).default('GBP'),

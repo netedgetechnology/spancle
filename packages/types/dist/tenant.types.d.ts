@@ -5,6 +5,7 @@ export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 export declare const TenantTierSchema: z.ZodEnum<["free", "starter", "growth", "pro", "enterprise"]>;
 export type TenantTier = z.infer<typeof TenantTierSchema>;
 export declare const TenantSettingsSchema: z.ZodObject<{
+    ownerName: z.ZodOptional<z.ZodString>;
     timezone: z.ZodDefault<z.ZodString>;
     locale: z.ZodDefault<z.ZodString>;
     currency: z.ZodDefault<z.ZodString>;
@@ -20,8 +21,10 @@ export declare const TenantSettingsSchema: z.ZodObject<{
     allowPublicBookings: boolean;
     requireMfa: boolean;
     maxSessionDurationMs: number;
+    ownerName?: string | undefined;
 }, {
     currency?: string | undefined;
+    ownerName?: string | undefined;
     timezone?: string | undefined;
     locale?: string | undefined;
     dateFormat?: string | undefined;
@@ -59,6 +62,7 @@ export declare const CreateTenantSchema: z.ZodObject<{
         state?: string | undefined;
     }>>;
     settings: z.ZodOptional<z.ZodObject<{
+        ownerName: z.ZodOptional<z.ZodOptional<z.ZodString>>;
         timezone: z.ZodOptional<z.ZodDefault<z.ZodString>>;
         locale: z.ZodOptional<z.ZodDefault<z.ZodString>>;
         currency: z.ZodOptional<z.ZodDefault<z.ZodString>>;
@@ -68,6 +72,7 @@ export declare const CreateTenantSchema: z.ZodObject<{
         maxSessionDurationMs: z.ZodOptional<z.ZodDefault<z.ZodNumber>>;
     }, "strip", z.ZodTypeAny, {
         currency?: string | undefined;
+        ownerName?: string | undefined;
         timezone?: string | undefined;
         locale?: string | undefined;
         dateFormat?: string | undefined;
@@ -76,6 +81,7 @@ export declare const CreateTenantSchema: z.ZodObject<{
         maxSessionDurationMs?: number | undefined;
     }, {
         currency?: string | undefined;
+        ownerName?: string | undefined;
         timezone?: string | undefined;
         locale?: string | undefined;
         dateFormat?: string | undefined;
@@ -99,6 +105,7 @@ export declare const CreateTenantSchema: z.ZodObject<{
     } | undefined;
     settings?: {
         currency?: string | undefined;
+        ownerName?: string | undefined;
         timezone?: string | undefined;
         locale?: string | undefined;
         dateFormat?: string | undefined;
@@ -122,6 +129,7 @@ export declare const CreateTenantSchema: z.ZodObject<{
     } | undefined;
     settings?: {
         currency?: string | undefined;
+        ownerName?: string | undefined;
         timezone?: string | undefined;
         locale?: string | undefined;
         dateFormat?: string | undefined;

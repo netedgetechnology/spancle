@@ -17,6 +17,12 @@ class TenantSettingsDto {
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(100),
+    __metadata("design:type", String)
+], TenantSettingsDto.prototype, "ownerName", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], TenantSettingsDto.prototype, "timezone", void 0);
 __decorate([

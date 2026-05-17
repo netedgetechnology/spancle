@@ -20,6 +20,11 @@ import { Type, Transform } from 'class-transformer';
 class TenantSettingsDto {
   @IsString()
   @IsOptional()
+  @MaxLength(100)
+  ownerName?: string;
+
+  @IsString()
+  @IsOptional()
   timezone?: string;
 
   @IsString()

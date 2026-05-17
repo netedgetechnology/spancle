@@ -103,11 +103,12 @@ export interface TenantDetail {
 
 export interface CreateTenantFormData {
   // Core
-  name:     string;
-  slug:     string;
-  email:    string;
-  phone:    string;
-  tier:     TenantTier;
+  name:      string;
+  slug:      string;
+  ownerName: string;
+  email:     string;
+  phone:     string;
+  tier:      TenantTier;
 
   // Location / regional
   region:   string;   // country code
@@ -232,3 +233,9 @@ export const DEFAULT_PAYOUT: PayoutDetails = {
 };
 
 export const DEFAULT_THEME: TenantTheme = {};
+
+export const RESERVED_SLUGS = new Set([
+  'www', 'api', 'admin', 'manage', 'booking', 'book', 'app', 'tenant',
+  'support', 'help', 'mail', 'smtp', 'db', 'db1', 'staging', 'test', 'dev',
+  'static', 'cdn', 'assets', 'ns1', 'ns2', 'ftp', 'status',
+]);

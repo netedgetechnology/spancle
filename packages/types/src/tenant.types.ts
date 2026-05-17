@@ -9,6 +9,7 @@ export const TenantTierSchema = z.enum(['free', 'starter', 'growth', 'pro', 'ent
 export type TenantTier = z.infer<typeof TenantTierSchema>;
 
 export const TenantSettingsSchema = z.object({
+  ownerName:           z.string().optional(),
   timezone:            z.string().default('UTC'),
   locale:              z.string().default('en-GB'),
   currency:            z.string().length(3).default('GBP'),
