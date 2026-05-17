@@ -8,10 +8,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const core_1 = require("@nestjs/core");
 const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const throttler_1 = require("@nestjs/throttler");
+const jwt_auth_guard_1 = require("./common/guards/jwt-auth.guard");
 const tenant_module_1 = require("./modules/tenant/tenant.module");
 const package_module_1 = require("./modules/package/package.module");
 const subscription_module_1 = require("./modules/subscription/subscription.module");
@@ -53,6 +55,9 @@ exports.AppModule = AppModule = __decorate([
                 }),
             }),
             tenant_module_1.TenantModule, package_module_1.PackageModule, subscription_module_1.SubscriptionModule, plan_module_1.PlanModule, cms_module_1.CmsModule, admin_module_1.AdminModule,
+        ],
+        providers: [
+            { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },
         ],
     })
 ], AppModule);

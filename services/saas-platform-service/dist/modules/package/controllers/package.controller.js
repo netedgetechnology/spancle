@@ -16,6 +16,7 @@ exports.PackageController = void 0;
 const common_1 = require("@nestjs/common");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
 const super_admin_guard_1 = require("../../admin/guards/super-admin.guard");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const package_service_1 = require("../services/package.service");
 const create_package_dto_1 = require("../dto/create-package.dto");
 let PackageController = class PackageController {
@@ -62,12 +63,14 @@ let PackageController = class PackageController {
 exports.PackageController = PackageController;
 __decorate([
     (0, common_1.Get)('active'),
+    (0, roles_decorator_1.Public)(),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PackageController.prototype, "getActive", null);
 __decorate([
     (0, common_1.Get)('by-slug/:slug'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, common_1.Param)('slug')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),

@@ -107,6 +107,34 @@ export class TenantService {
     return entity;
   }
 
+
+  /**
+   * Resolves a tenant by slug or admin email.
+   * Used by the tenant finder at www.spancle.com/login.
+   * Returns minimal public data only — no sensitive fields.
+   */
+  async resolveTenant(
+    q: string,
+  ): Promise<{ slug: string; name: string; redirectUrl: string } | null> {
+    const q_lower = q.toLowerCase().trim();
+
+    // Try slug first
+    let tenant = await this.tenantRepository.findBySlug(q_lower);
+
+    // Then try email
+    if (!tenant) {
+      tenant = await this.tenantRepository.findByEmail(q_lower);
+    }
+
+    if (!tenant || tenant.isDeleted) return null;
+
+    return {
+      slug:        tenant.slug,
+      name:        tenant.name,
+      redirectUrl: `https://${tenant.slug}.spancle.com`,
+    };
+  }
+
   async findAll(
     page = 1, limit = 20,
     status?: TenantStatus, tier?: TenantTier,

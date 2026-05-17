@@ -312,7 +312,7 @@ sudo certbot --nginx \
   -d spancle.io \
   -d www.spancle.io \
   -d api.spancle.io \
-  -d admin.spancle.io \
+  -d manage.spancle.com \
   -d app.spancle.io \
   -d book.spancle.io
 

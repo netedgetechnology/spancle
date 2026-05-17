@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HomepageController = void 0;
 const common_1 = require("@nestjs/common");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const homepage_service_1 = require("../services/homepage.service");
 const create_homepage_section_dto_1 = require("../dto/create-homepage-section.dto");
@@ -59,6 +60,7 @@ let HomepageController = class HomepageController {
 exports.HomepageController = HomepageController;
 __decorate([
     (0, common_1.Get)('pages/:pageId/sections/published'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, common_1.Param)('pageId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),

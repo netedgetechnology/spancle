@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BlogController = void 0;
 const common_1 = require("@nestjs/common");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const blog_service_1 = require("../services/blog.service");
 const create_blog_post_dto_1 = require("../dto/create-blog-post.dto");
@@ -99,6 +100,7 @@ __decorate([
 ], BlogController.prototype, "findAllPosts", null);
 __decorate([
     (0, common_1.Get)('posts/featured'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, tenant_decorator_1.TenantCtx)()),
     __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
@@ -117,6 +119,7 @@ __decorate([
 ], BlogController.prototype, "searchPosts", null);
 __decorate([
     (0, common_1.Get)('posts/by-slug/:slug'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, common_1.Param)('slug')),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
@@ -185,6 +188,7 @@ __decorate([
 ], BlogController.prototype, "createCategory", null);
 __decorate([
     (0, common_1.Get)('categories'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),

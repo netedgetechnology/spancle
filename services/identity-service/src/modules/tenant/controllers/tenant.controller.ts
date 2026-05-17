@@ -19,7 +19,7 @@ import { JwtAuthGuard }           from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard }             from '../../../common/guards/roles.guard';
 import { TenantStatusGuard }      from '../guards/tenant-status.guard';
 import { PlanLimitGuard }         from '../guards/plan-limit.guard';
-import { Roles }                  from '../../../common/decorators/roles.decorator';
+import { Roles, Public }                  from '../../../common/decorators/roles.decorator';
 import { CurrentUser }            from '../../../common/decorators/current-user.decorator';
 import type { JwtPayload }        from '@spancle/types';
 import { TenantService }          from '../services/tenant.service';

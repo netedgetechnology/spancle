@@ -14,6 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuditInterceptor } from '../../../common/interceptors/audit.interceptor';
+import { Public } from '../../../common/decorators/roles.decorator';
 import { TenantCtx } from '../../../common/decorators/tenant.decorator';
 import type { TenantContext } from '../../../common/decorators/tenant.decorator';
 import { PageService } from '../services/page.service';
@@ -67,6 +68,7 @@ export class PageController {
    * Returns 404 if no homepage page has been set for this tenant.
    */
   @Get('homepage')
+  @Public()
   findHomepage(
     @TenantCtx() tenant: TenantContext,
   ): Promise<PageEntity> {
@@ -74,6 +76,7 @@ export class PageController {
   }
 
     @Get('by-slug/:slug')
+  @Public()
   findBySlug(
     @Param('slug') slug: string,
     @TenantCtx() tenant: TenantContext,

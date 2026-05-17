@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PageController = void 0;
 const common_1 = require("@nestjs/common");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const page_service_1 = require("../services/page.service");
 const create_page_dto_1 = require("../dto/create-page.dto");
@@ -66,6 +67,7 @@ __decorate([
 ], PageController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('homepage'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -73,6 +75,7 @@ __decorate([
 ], PageController.prototype, "findHomepage", null);
 __decorate([
     (0, common_1.Get)('by-slug/:slug'),
+    (0, roles_decorator_1.Public)(),
     __param(0, (0, common_1.Param)('slug')),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),

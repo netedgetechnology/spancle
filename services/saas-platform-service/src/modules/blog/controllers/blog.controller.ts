@@ -14,6 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuditInterceptor } from '../../../common/interceptors/audit.interceptor';
+import { Public } from '../../../common/decorators/roles.decorator';
 import { TenantCtx } from '../../../common/decorators/tenant.decorator';
 import type { TenantContext } from '../../../common/decorators/tenant.decorator';
 import { BlogService } from '../services/blog.service';
@@ -94,6 +95,7 @@ export class BlogController {
    * Must be declared before /:id to avoid route shadowing.
    */
   @Get('posts/featured')
+  @Public()
   findFeaturedPosts(
     @TenantCtx() tenant: TenantContext,
     @Query('limit') limit?: string,
@@ -126,6 +128,7 @@ export class BlogController {
   }
 
   @Get('posts/by-slug/:slug')
+  @Public()
   findPostBySlug(
     @Param('slug') slug: string,
     @TenantCtx() tenant: TenantContext,
@@ -223,6 +226,7 @@ export class BlogController {
    * Returns categories with published post count per category.
    */
   @Get('categories')
+  @Public()
   findAllCategories(@TenantCtx() tenant: TenantContext) {
     return this.blogService.getCategoriesWithCounts(tenant.tenantId);
   }

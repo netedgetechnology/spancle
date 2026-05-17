@@ -115,7 +115,7 @@ module.exports = {
         PORT:                3001,
         HOSTNAME:            '127.0.0.1',
         NEXTAUTH_SECRET:     'replace_with_secret',
-        NEXTAUTH_URL:        'https://admin.example.com',
+        NEXTAUTH_URL:        'https://manage.example.com',
         NEXT_PUBLIC_API_URL: 'https://api.example.com',
       },
     },

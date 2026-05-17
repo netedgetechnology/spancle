@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { AuditInterceptor } from '../../../common/interceptors/audit.interceptor';
 import { SuperAdminGuard }  from '../../admin/guards/super-admin.guard';
+import { Public }           from '../../../common/decorators/roles.decorator';
 import { PackageService }   from '../services/package.service';
 import { CreatePackageDto, UpdatePackageDto } from '../dto/create-package.dto';
 import type { PackageEntity } from '../entities/package.entity';
@@ -51,11 +52,13 @@ export class PackageController {
    * No authentication required.
    */
   @Get('active')
+  @Public()
   getActive(): Promise<PackageEntity[]> {
     return this.packageService.findActive();
   }
 
   @Get('by-slug/:slug')
+  @Public()
   getBySlug(@Param('slug') slug: string): Promise<PackageEntity> {
     return this.packageService.findBySlug(slug);
   }

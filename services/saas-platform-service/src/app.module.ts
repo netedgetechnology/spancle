@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
 
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantModule }       from './modules/tenant/tenant.module';
 import { PackageModule }      from './modules/package/package.module';
 import { SubscriptionModule }  from './modules/subscription/subscription.module';
@@ -46,6 +48,11 @@ import { AdminModule }          from './modules/admin/admin.module';
     }),
 
     TenantModule, PackageModule, SubscriptionModule, PlanModule, CmsModule, AdminModule,
+  ],
+  providers: [
+    // Global JWT auth guard — enforces authentication on all CMS admin endpoints.
+    // Routes marked @Public() bypass this guard (public website rendering).
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}

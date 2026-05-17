@@ -4,33 +4,64 @@ import { getToken } from 'next-auth/jwt';
 /**
  * tenant-portal middleware — Edge guard with tenant resolution.
  *
- * Tenant strategy: subdomain extraction.
- *   acme.app.spancle.io -> tenantSlug = 'acme'
+ * Tenant slug resolution order:
+ *   1. x-tenant-slug header  (set by Nginx from wildcard regex capture)
+ *   2. x-custom-domain header (set by Nginx for custom tenant domains)
+ *   3. Subdomain extraction from hostname:
+ *      - acme.spancle.com          → slug = 'acme'
+ *      - acme.app.spancle.io       → slug = 'acme'  (legacy, transition)
+ *      - localhost:3002             → slug from x-tenant-slug header only
  *
- * Rules:
- * 1. Resolve tenantSlug from subdomain or x-tenant-slug header (local dev).
- * 2. All protected routes require session.
- * 3. Session tenantSlug must match resolved slug — cross-tenant breach prevention.
+ * Reserved slugs are rejected — they are Spancle infrastructure, not tenants.
  */
+
+const RESERVED_SLUGS = new Set([
+  'www', 'manage', 'admin', 'api', 'booking', 'book',
+  'mail', 'ftp', 'smtp', 'ns1', 'ns2', 'staging', 'dev',
+  'cdn', 'static', 'assets', 'status', 'help', 'support',
+]);
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname, hostname } = request.nextUrl;
 
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api/auth')) {
+  // Pass-through for static assets and NextAuth internal routes
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon') ||
+    pathname.startsWith('/api/auth')
+  ) {
     return NextResponse.next();
   }
 
-  const tenantSlug = request.headers.get('x-tenant-slug') ?? extractSubdomain(hostname);
+  // Resolve tenant slug
+  const tenantSlug =
+    request.headers.get('x-tenant-slug') ??
+    extractSubdomain(hostname);
 
-  if (!tenantSlug) {
-    return NextResponse.redirect(new URL('/no-tenant', request.url));
+  // Custom domain support — when nginx sets X-Custom-Domain, skip slug check
+  const customDomain = request.headers.get('x-custom-domain');
+
+  if (!tenantSlug && !customDomain) {
+    return NextResponse.redirect(new URL('https://www.spancle.com'));
   }
 
-  if (pathname.startsWith('/login') || pathname.startsWith('/unauthorized')) {
+  // Reject reserved infrastructure slugs
+  if (tenantSlug && RESERVED_SLUGS.has(tenantSlug.toLowerCase())) {
+    return NextResponse.redirect(new URL('https://www.spancle.com'));
+  }
+
+  // Public routes within tenant portal — allow without session
+  if (
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/unauthorized') ||
+    pathname.startsWith('/no-tenant')
+  ) {
     const response = NextResponse.next();
-    response.headers.set('x-tenant-slug', tenantSlug);
+    if (tenantSlug) response.headers.set('x-tenant-slug', tenantSlug);
     return response;
   }
 
+  // Require session for all other routes
   const token = await getToken({ req: request, secret: process.env['NEXTAUTH_SECRET'] });
 
   if (!token) {
@@ -39,20 +70,36 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(url);
   }
 
-  if (token['tenantSlug'] !== tenantSlug) {
+  // Cross-tenant protection: session must match resolved slug
+  if (tenantSlug && token['tenantSlug'] !== tenantSlug) {
     return NextResponse.redirect(new URL('/unauthorized', request.url));
   }
 
   const response = NextResponse.next();
   response.headers.set('x-tenant-id', token['tenantId'] as string);
-  response.headers.set('x-tenant-slug', tenantSlug);
+  if (tenantSlug) response.headers.set('x-tenant-slug', tenantSlug);
   return response;
 }
 
+/**
+ * Extracts tenant slug from hostname.
+ *
+ * Supports two patterns:
+ *   acme.spancle.com      → 'acme'   (production wildcard)
+ *   acme.app.spancle.io   → 'acme'   (legacy, keep during transition)
+ */
 function extractSubdomain(hostname: string): string | null {
-  const base = process.env['NEXT_PUBLIC_BASE_DOMAIN'] ?? 'app.spancle.io';
-  const sub = hostname.replace(`.${base}`, '');
-  return sub !== hostname ? sub : null;
+  // Production: acme.spancle.com
+  const prodBase  = process.env['NEXT_PUBLIC_BASE_DOMAIN'] ?? 'spancle.com';
+  const prodMatch = hostname.replace(`.${prodBase}`, '');
+  if (prodMatch !== hostname && !prodMatch.includes('.')) return prodMatch;
+
+  // Legacy: acme.app.spancle.io
+  const legacyBase  = 'app.spancle.io';
+  const legacyMatch = hostname.replace(`.${legacyBase}`, '');
+  if (legacyMatch !== hostname && !legacyMatch.includes('.')) return legacyMatch;
+
+  return null;
 }
 
 export const config = {

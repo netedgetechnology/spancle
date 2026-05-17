@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuditInterceptor }  from '../../../common/interceptors/audit.interceptor';
+import { Public }         from '../../../common/decorators/roles.decorator';
 import { TenantCtx }         from '../../../common/decorators/tenant.decorator';
 import type { TenantContext } from '../../../common/decorators/tenant.decorator';
 import { HomepageService }   from '../services/homepage.service';
@@ -55,6 +56,7 @@ export class HomepageController {
    * No JWT required — tenant resolved from request or x-tenant-id header.
    */
   @Get('pages/:pageId/sections/published')
+  @Public()
   getPublished(
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Req() req: Request & { tenant?: TenantContext; tenantId?: string },

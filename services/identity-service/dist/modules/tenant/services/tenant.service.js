@@ -71,6 +71,20 @@ let TenantService = TenantService_1 = class TenantService {
         this.logger.log(`Tenant created: ${entity.id} (${entity.slug})`);
         return entity;
     }
+    async resolveTenant(q) {
+        const q_lower = q.toLowerCase().trim();
+        let tenant = await this.tenantRepository.findBySlug(q_lower);
+        if (!tenant) {
+            tenant = await this.tenantRepository.findByEmail(q_lower);
+        }
+        if (!tenant || tenant.isDeleted)
+            return null;
+        return {
+            slug: tenant.slug,
+            name: tenant.name,
+            redirectUrl: `https://${tenant.slug}.spancle.com`,
+        };
+    }
     async findAll(page = 1, limit = 20, status, tier) {
         return this.tenantRepository.findAllTenants(page, limit, status, tier);
     }
