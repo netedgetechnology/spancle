@@ -42,12 +42,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const customDomain = request.headers.get('x-custom-domain');
 
   if (!tenantSlug && !customDomain) {
-    return NextResponse.redirect(new URL('https://www.spancle.com'));
+    return NextResponse.redirect(new URL('/no-tenant', request.url));
   }
 
   // Reject reserved infrastructure slugs
   if (tenantSlug && RESERVED_SLUGS.has(tenantSlug.toLowerCase())) {
-    return NextResponse.redirect(new URL('https://www.spancle.com'));
+    return NextResponse.redirect(new URL('/no-tenant', request.url));
   }
 
   // Public routes within tenant portal — allow without session
