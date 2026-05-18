@@ -91,18 +91,34 @@ export class IdentityRepository {
   }
 
   /**
-   * Resolves the system role for an identity by joining to the user and role tables.
-   * Returns null if no role is assigned — caller defaults to 'VIEWER'.
+   * Resolves the system role for an identity by joining identities → users.
    *
-   * TODO: Join to user → role in Sprint 2 when UserModule is wired.
+   * Conditions enforced:
+   *   - identity.id      = identityId
+   *   - identity.tenant_id = tenantId
+   *   - identity.is_active = true
+   *   - user exists and is not deleted
+   *
+   * Returns null if no matching active identity/user found — caller defaults to 'VIEWER'.
    */
   async getRoleForIdentity(
     identityId: string,
-    _tenantId:  string,
+    tenantId:   string,
   ): Promise<string | null> {
-    // Placeholder — returns null until UserModule role join is implemented
-    this.logger.debug(`getRoleForIdentity called for ${identityId} — returning null (Sprint 2)`);
-    return null;
+    const row = await this.repo
+      .createQueryBuilder('i')
+      .select('u.role', 'role')
+      .innerJoin(
+        'users',
+        'u',
+        'u.id = i.user_id AND u.tenant_id = i.tenant_id AND u.is_deleted = false',
+      )
+      .where('i.id = :identityId',   { identityId })
+      .andWhere('i.tenant_id = :tenantId', { tenantId })
+      .andWhere('i.is_active = true')
+      .getRawOne<{ role: string | null }>();
+
+    return row?.role ?? null;
   }
 
   async updateLastLogin(id: string, tenantId: string): Promise<void> {

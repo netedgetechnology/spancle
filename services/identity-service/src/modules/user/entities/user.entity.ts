@@ -9,10 +9,12 @@ import {
 } from 'typeorm';
 
 /**
- * SystemRole values for tenant-level users.
+ * SystemRole values — all platform and tenant-level roles.
+ * SUPER_ADMIN is reserved for Spancle platform operators (platform tenant only).
  * TENANT_ADMIN is the role assigned to the user created during onboarding.
  */
 export type UserRole =
+  | 'SUPER_ADMIN'
   | 'TENANT_ADMIN'
   | 'TENANT_MANAGER'
   | 'TENANT_STAFF'
@@ -48,7 +50,7 @@ export class UserEntity {
    */
   @Column({
     type:    'enum',
-    enum:    ['TENANT_ADMIN', 'TENANT_MANAGER', 'TENANT_STAFF', 'VIEWER', 'COACH', 'PLAYER'],
+    enum:    ['SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_MANAGER', 'TENANT_STAFF', 'VIEWER', 'COACH', 'PLAYER'],
     default: 'VIEWER',
   })
   role!: UserRole;

@@ -70,8 +70,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO users (
   id,
   tenant_id,
-  first_name,
-  last_name,
+  name,
   email,
   role,
   is_deleted,
@@ -80,16 +79,17 @@ INSERT INTO users (
 ) VALUES (
   '00000000-0000-0000-0000-000000000010',
   '00000000-0000-0000-0000-000000000001',
-  'Platform',
-  'Admin',
-  'superadmin@spancle.io',
+  'Platform Admin',
+  'superadmin@spancle.com',
   'SUPER_ADMIN',
   false,
   NOW(),
   NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
+  name       = EXCLUDED.name,
   email      = EXCLUDED.email,
+  role       = 'SUPER_ADMIN',
   updated_at = NOW();
 
 -- ── 4. Superadmin identity (credentials) ─────────────────────────────────────
@@ -110,7 +110,7 @@ INSERT INTO identities (
   '00000000-0000-0000-0000-000000000012',
   '00000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000010',
-  'superadmin@spancle.io',
+  'superadmin@spancle.com',
   '$2a$12$pccC/y0MirtIChH8fp/JweLSeM2FAcDq2iA8NfiQNoaejDlIGci1m',
   true,
   true,

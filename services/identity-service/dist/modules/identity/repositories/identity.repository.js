@@ -58,9 +58,16 @@ let IdentityRepository = IdentityRepository_1 = class IdentityRepository {
             passwordChangedAt: new Date(),
         });
     }
-    async getRoleForIdentity(identityId, _tenantId) {
-        this.logger.debug(`getRoleForIdentity called for ${identityId} — returning null (Sprint 2)`);
-        return null;
+    async getRoleForIdentity(identityId, tenantId) {
+        const row = await this.repo
+            .createQueryBuilder('i')
+            .select('u.role', 'role')
+            .innerJoin('users', 'u', 'u.id = i.user_id AND u.tenant_id = i.tenant_id AND u.is_deleted = false')
+            .where('i.id = :identityId', { identityId })
+            .andWhere('i.tenant_id = :tenantId', { tenantId })
+            .andWhere('i.is_active = true')
+            .getRawOne();
+        return row?.role ?? null;
     }
     async updateLastLogin(id, tenantId) {
         await this.repo.update({ id, tenantId }, { lastLoginAt: new Date() });

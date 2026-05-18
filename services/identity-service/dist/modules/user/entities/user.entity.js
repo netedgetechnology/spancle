@@ -34,7 +34,7 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['TENANT_ADMIN', 'TENANT_MANAGER', 'TENANT_STAFF', 'VIEWER', 'COACH', 'PLAYER'],
+        enum: ['SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_MANAGER', 'TENANT_STAFF', 'VIEWER', 'COACH', 'PLAYER'],
         default: 'VIEWER',
     }),
     __metadata("design:type", String)
