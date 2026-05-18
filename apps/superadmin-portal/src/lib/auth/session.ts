@@ -1,3 +1,4 @@
+import { authOptions } from './options';
 import { getServerSession } from 'next-auth';
 
 /**
@@ -5,7 +6,7 @@ import { getServerSession } from 'next-auth';
  * For Client Components: use useSession() hook instead.
  */
 export async function getServerAuthSession() {
-  return getServerSession();
+  return getServerSession(authOptions);
 }
 
 /**
@@ -14,7 +15,7 @@ export async function getServerAuthSession() {
  */
 export async function requireServerSession() {
   const { redirect } = await import('next/navigation');
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
   return session;
 }
