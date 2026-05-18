@@ -115,10 +115,16 @@ export class IdentityRepository {
       )
       .where('i.id = :identityId',   { identityId })
       .andWhere('i.tenant_id = :tenantId', { tenantId })
-      .andWhere('i.is_active = true')
+      .andWhere('i.is_active = :active', { active: true })
       .getRawOne<{ role: string | null }>();
 
-    return row?.role ?? null;
+    const role = row?.role ?? null;
+    if (role) {
+      this.logger.debug(`getRoleForIdentity: identity=${identityId} → role=${role}`);
+    } else {
+      this.logger.warn(`getRoleForIdentity: no active identity/user for id=${identityId} tenant=${tenantId}`);
+    }
+    return role;
   }
 
   async updateLastLogin(id: string, tenantId: string): Promise<void> {

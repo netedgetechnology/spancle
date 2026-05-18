@@ -65,9 +65,16 @@ let IdentityRepository = IdentityRepository_1 = class IdentityRepository {
             .innerJoin('users', 'u', 'u.id = i.user_id AND u.tenant_id = i.tenant_id AND u.is_deleted = false')
             .where('i.id = :identityId', { identityId })
             .andWhere('i.tenant_id = :tenantId', { tenantId })
-            .andWhere('i.is_active = true')
+            .andWhere('i.is_active = :active', { active: true })
             .getRawOne();
-        return row?.role ?? null;
+        const role = row?.role ?? null;
+        if (role) {
+            this.logger.debug(`getRoleForIdentity: identity=${identityId} → role=${role}`);
+        }
+        else {
+            this.logger.warn(`getRoleForIdentity: no active identity/user for id=${identityId} tenant=${tenantId}`);
+        }
+        return role;
     }
     async updateLastLogin(id, tenantId) {
         await this.repo.update({ id, tenantId }, { lastLoginAt: new Date() });
