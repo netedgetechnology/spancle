@@ -49,9 +49,14 @@ export class TenantRepository extends TenantAwareRepository<TenantEntity> {
    * Used during signup to enforce unique email constraint.
    */
   async findByEmail(email: string): Promise<TenantEntity | null> {
+    // Exclude terminated tenants — they should not block email reuse
     return this.entityManager
       .getRepository(TenantEntity)
-      .findOne({ where: { email, isDeleted: false } });
+      .createQueryBuilder('t')
+      .where('t.email = :email', { email })
+      .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere('t.status != :terminated', { terminated: 'terminated' })
+      .getOne();
   }
 
   /**
@@ -113,14 +118,16 @@ export class TenantRepository extends TenantAwareRepository<TenantEntity> {
 
   /**
    * Checks if a slug is already taken (case-insensitive).
-   * Used during tenant creation to enforce uniqueness.
+   * Ignores terminated tenants — they should not block slug reuse.
+   * Used during tenant creation and slug availability check.
    */
   async isSlugTaken(slug: string, excludeId?: string): Promise<boolean> {
     const qb = this.entityManager
       .getRepository(TenantEntity)
       .createQueryBuilder('t')
       .where('LOWER(t.slug) = LOWER(:slug)', { slug })
-      .andWhere('t.isDeleted = :isDeleted', { isDeleted: false });
+      .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere('t.status != :terminated', { terminated: 'terminated' });
 
     if (excludeId) {
       qb.andWhere('t.id != :excludeId', { excludeId });

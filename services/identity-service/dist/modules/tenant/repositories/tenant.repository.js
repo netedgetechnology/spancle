@@ -35,7 +35,11 @@ let TenantRepository = class TenantRepository extends tenant_aware_repository_1.
     async findByEmail(email) {
         return this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
-            .findOne({ where: { email, isDeleted: false } });
+            .createQueryBuilder('t')
+            .where('t.email = :email', { email })
+            .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+            .andWhere('t.status != :terminated', { terminated: 'terminated' })
+            .getOne();
     }
     async findAllTenants(page = 1, limit = 20, status, tier) {
         const qb = this.entityManager
@@ -71,7 +75,8 @@ let TenantRepository = class TenantRepository extends tenant_aware_repository_1.
             .getRepository(tenant_entity_1.TenantEntity)
             .createQueryBuilder('t')
             .where('LOWER(t.slug) = LOWER(:slug)', { slug })
-            .andWhere('t.isDeleted = :isDeleted', { isDeleted: false });
+            .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+            .andWhere('t.status != :terminated', { terminated: 'terminated' });
         if (excludeId) {
             qb.andWhere('t.id != :excludeId', { excludeId });
         }
