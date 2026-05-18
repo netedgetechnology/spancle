@@ -1,4 +1,5 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { ToastProvider }   from '@/components/ui/toast';
 
 interface DashboardRouteLayoutProps {
   children: React.ReactNode;
@@ -12,8 +13,10 @@ const NAV_ITEMS = [
 
 export default function DashboardRouteLayout({ children }: DashboardRouteLayoutProps): React.ReactElement {
   return (
-    <DashboardLayout navItems={NAV_ITEMS} pageTitle="Platform Administration">
-      {children}
-    </DashboardLayout>
+    <ToastProvider>
+      <DashboardLayout navItems={NAV_ITEMS} pageTitle="Platform Administration">
+        {children}
+      </DashboardLayout>
+    </ToastProvider>
   );
 }

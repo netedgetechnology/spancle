@@ -8,6 +8,7 @@ import {
   checkSlugAvailable, parseBackendErrors,
 } from '@/lib/tenants.api';
 import { cn } from '@/lib/utils/cn';
+import { useToast } from '@/components/ui/toast';
 import type { TenantDetail, CreateTenantFormData } from '@/types/tenant-detail.types';
 import {
   DEFAULT_MODULES, DEFAULT_COMMISSION, DEFAULT_INVOICE,
@@ -99,6 +100,7 @@ interface TenantFormProps { mode: 'create' | 'edit'; tenant?: TenantDetail; }
 export function TenantForm({ mode, tenant }: TenantFormProps): React.ReactElement {
   const router = useRouter();
   const qc     = useQueryClient();
+  const { addToast } = useToast();
   const isEdit = mode === 'edit';
 
   const [form, setForm] = useState<CreateTenantFormData & { ownerName: string }>({
@@ -197,14 +199,21 @@ export function TenantForm({ mode, tenant }: TenantFormProps): React.ReactElemen
     },
     onSuccess: (saved) => {
       void qc.invalidateQueries({ queryKey: tenantKeys.all() });
-      setSuccessMsg(isEdit ? 'Tenant updated successfully.' : 'Tenant created successfully.');
-      setTimeout(() => router.push(`/tenants/${saved.id}`), 1000);
+      if (isEdit) {
+        addToast('Tenant updated successfully.', 'success');
+        setSuccessMsg('Tenant updated successfully.');
+      } else {
+        // Redirect to list with success message in query param
+        router.push(`/tenants?success=${encodeURIComponent(`Tenant '${saved.name}' created successfully.`)}`);
+      }
     },
     onError: (err: unknown) => {
       const parsed = parseBackendErrors(err);
       const { _general, ...fields } = parsed;
       if (Object.keys(fields).length > 0) setFieldErrors((e) => ({ ...e, ...fields }));
-      setGeneralError(_general ?? 'Something went wrong. Please check the form and try again.');
+      const msg = _general ?? 'Something went wrong. Please check the form and try again.';
+      setGeneralError(msg);
+      addToast(msg, 'error');
     },
   });
 

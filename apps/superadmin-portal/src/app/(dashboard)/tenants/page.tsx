@@ -1,9 +1,13 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { TenantTable } from '@/components/tenants/tenant-table';
 
 export default function TenantsPage(): React.ReactElement {
+  const searchParams = useSearchParams();
+  const successMsg   = searchParams.get('success') ?? undefined;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
@@ -22,7 +26,7 @@ export default function TenantsPage(): React.ReactElement {
         </Link>
       </div>
 
-      <TenantTable />
+      <TenantTable initialSuccessMessage={successMsg} />
     </div>
   );
 }
