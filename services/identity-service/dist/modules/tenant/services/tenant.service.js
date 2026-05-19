@@ -56,7 +56,7 @@ let TenantService = TenantService_1 = class TenantService {
             email: dto.email,
             phone: dto.phone ?? null,
             tier: dto.tier ?? 'trial',
-            status: 'pending',
+            status: 'active',
             settings: mergedSettings,
             isDeleted: false,
         }));

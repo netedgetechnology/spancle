@@ -88,7 +88,7 @@ export class TenantService {
             email:     dto.email,
             phone:     dto.phone ?? null,
             tier:      dto.tier ?? 'trial',
-            status:    'pending',
+            status:    'active',  // SUPER_ADMIN-created tenants are active immediately
             settings:  mergedSettings,
             isDeleted: false,
           }),
