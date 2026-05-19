@@ -15,8 +15,11 @@ export const dynamic = 'force-dynamic';
  * or no sections are published yet.
  */
 export default async function HomePage(): Promise<React.ReactElement> {
-  const tenantId = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
-  const pageId   = process.env['NEXT_PUBLIC_HOMEPAGE_ID'] ?? '';
+  // Server-only env vars — read at request time (not baked in at build).
+  // Set CMS_TENANT_ID and CMS_HOMEPAGE_PAGE_ID in the PM2 environment for
+  // spancle-web-public. Without them the page falls back to the static shell.
+  const tenantId = process.env['CMS_TENANT_ID'] ?? '';
+  const pageId   = process.env['CMS_HOMEPAGE_PAGE_ID'] ?? '';
 
   let sections: Awaited<ReturnType<typeof fetchPublishedSections>> = [];
 

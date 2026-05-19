@@ -56,7 +56,9 @@ export function getSectionPayload<T extends SectionType>(
 
 // ── Server-side fetch (Next.js RSC / page.tsx) ────────────────────────────────
 
-const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3002';
+// Server-only env var — not NEXT_PUBLIC so it is read at request time, not baked in at build.
+// Falls back to the internal saas-platform-service address.
+const API_BASE = process.env['CMS_API_URL'] ?? 'http://127.0.0.1:4002';
 
 /**
  * Fetches published sections for a page from the saas-platform-service.
