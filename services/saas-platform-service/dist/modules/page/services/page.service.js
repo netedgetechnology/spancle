@@ -61,6 +61,12 @@ let PageService = PageService_1 = class PageService {
             throw new common_1.NotFoundException('No homepage has been configured for this tenant');
         return page;
     }
+    async findPublishedBySlug(slug, tenantId) {
+        const page = await this.pageRepository.findPublishedBySlug(slug, tenantId);
+        if (!page)
+            throw new common_1.NotFoundException(`Page "${slug}" not found or not published`);
+        return page;
+    }
     async findBySlug(slug, tenantId) {
         const page = await this.pageRepository.findBySlug(slug, tenantId);
         if (!page)

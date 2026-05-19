@@ -77,11 +77,12 @@ export class PageController {
 
     @Get('by-slug/:slug')
   @Public()
-  findBySlug(
+  findBySlugPublic(
     @Param('slug') slug: string,
     @TenantCtx() tenant: TenantContext,
   ): Promise<PageEntity> {
-    return this.pageService.findBySlug(slug, tenant.tenantId);
+    // Public renderer — only returns published pages. Drafts/archived → 404.
+    return this.pageService.findPublishedBySlug(slug, tenant.tenantId);
   }
 
   @Get(':id')

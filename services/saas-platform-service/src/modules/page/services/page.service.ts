@@ -79,7 +79,18 @@ export class PageService {
     return page;
   }
 
-    async findBySlug(slug: string, tenantId: string): Promise<PageEntity> {
+  
+  /**
+   * Public renderer — returns page only if status='published' and not deleted.
+   * Throws NotFoundException for drafts/archived/missing — becomes 404 to client.
+   */
+  async findPublishedBySlug(slug: string, tenantId: string): Promise<PageEntity> {
+    const page = await this.pageRepository.findPublishedBySlug(slug, tenantId);
+    if (!page) throw new NotFoundException(`Page "${slug}" not found or not published`);
+    return page;
+  }
+
+  async findBySlug(slug: string, tenantId: string): Promise<PageEntity> {
     const page = await this.pageRepository.findBySlug(slug, tenantId);
     if (!page) throw new NotFoundException(`Page with slug "${slug}" not found`);
     return page;

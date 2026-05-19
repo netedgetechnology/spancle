@@ -12,6 +12,19 @@ export class PageRepository extends TenantAwareRepository<PageEntity> {
     super(PageEntity, dataSource.manager);
   }
 
+
+  /**
+   * Finds a published, non-deleted page by slug.
+   * Returns null for drafts, archived, scheduled, or deleted pages.
+   * Used by the public website renderer.
+   */
+  async findPublishedBySlug(slug: string, tenantId: string): Promise<PageEntity | null> {
+    return this.scopedQb('p', tenantId)
+      .andWhere('p.slug = :slug', { slug })
+      .andWhere('p.status = :status', { status: 'published' })
+      .getOne();
+  }
+
   async findBySlug(slug: string, tenantId: string): Promise<PageEntity | null> {
     return this.scopedQb('p', tenantId)
       .andWhere('p.slug = :slug', { slug })

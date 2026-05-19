@@ -32,8 +32,8 @@ let PageController = class PageController {
     findHomepage(tenant) {
         return this.pageService.findHomepage(tenant.tenantId);
     }
-    findBySlug(slug, tenant) {
-        return this.pageService.findBySlug(slug, tenant.tenantId);
+    findBySlugPublic(slug, tenant) {
+        return this.pageService.findPublishedBySlug(slug, tenant.tenantId);
     }
     findOne(id, tenant) {
         return this.pageService.findOne(id, tenant.tenantId);
@@ -81,7 +81,7 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
-], PageController.prototype, "findBySlug", null);
+], PageController.prototype, "findBySlugPublic", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),

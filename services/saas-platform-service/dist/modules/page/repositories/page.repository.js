@@ -22,6 +22,12 @@ let PageRepository = class PageRepository extends tenant_aware_repository_1.Tena
     constructor(dataSource) {
         super(page_entity_1.PageEntity, dataSource.manager);
     }
+    async findPublishedBySlug(slug, tenantId) {
+        return this.scopedQb('p', tenantId)
+            .andWhere('p.slug = :slug', { slug })
+            .andWhere('p.status = :status', { status: 'published' })
+            .getOne();
+    }
     async findBySlug(slug, tenantId) {
         return this.scopedQb('p', tenantId)
             .andWhere('p.slug = :slug', { slug })
