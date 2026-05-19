@@ -36,9 +36,7 @@ let PageService = PageService_1 = class PageService {
             lastEditedBy: actorId,
             publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
             status: dto.status ?? 'draft',
-            seo: dto.seo
-                ? Object.assign(new (require('../../seo/embeds/seo-fields.embed').SeoFieldsEmbed)(), dto.seo)
-                : new (require('../../seo/embeds/seo-fields.embed').SeoFieldsEmbed)(),
+            seo: dto.seo ?? {},
         }, tenantId);
         await this.eventEmitter.emitAsync(page_events_1.PageEventNames.CREATED, {
             tenantId, pageId: entity.id, actorId, slug: entity.slug,

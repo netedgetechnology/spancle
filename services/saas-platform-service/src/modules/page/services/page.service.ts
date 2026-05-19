@@ -41,9 +41,7 @@ export class PageService {
         lastEditedBy:   actorId,
         publishedAt:    dto.publishedAt ? new Date(dto.publishedAt) : null,
         status:         dto.status ?? 'draft',
-        seo:            dto.seo
-          ? Object.assign(new (require('../../seo/embeds/seo-fields.embed').SeoFieldsEmbed)(), dto.seo)
-          : new (require('../../seo/embeds/seo-fields.embed').SeoFieldsEmbed)(),
+        seo:            dto.seo ?? {},
       } as unknown as Parameters<typeof this.pageRepository.insert>[0],
       tenantId,
     );

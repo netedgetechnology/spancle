@@ -7,7 +7,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { SeoFieldsEmbed } from '../../seo/embeds/seo-fields.embed';
 
 export type PageStatus = 'draft' | 'published' | 'archived' | 'scheduled';
 
@@ -97,8 +96,8 @@ export class PageEntity {
   lastEditedBy!: string | null;
 
   // ── SEO ────────────────────────────────────────────────────────────────────
-  @Column(() => SeoFieldsEmbed)
-  seo!: SeoFieldsEmbed;
+  @Column({ type: 'jsonb', nullable: true, default: {} })
+  seo!: Record<string, unknown> | null;
 
   // ── Soft delete ────────────────────────────────────────────────────────────
   @Column({ name: 'is_deleted', type: 'boolean', default: false })

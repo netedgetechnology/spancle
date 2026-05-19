@@ -11,7 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PageEntity = void 0;
 const typeorm_1 = require("typeorm");
-const seo_fields_embed_1 = require("../../seo/embeds/seo-fields.embed");
 let PageEntity = class PageEntity {
 };
 exports.PageEntity = PageEntity;
@@ -81,8 +80,8 @@ __decorate([
     __metadata("design:type", Object)
 ], PageEntity.prototype, "lastEditedBy", void 0);
 __decorate([
-    (0, typeorm_1.Column)(() => seo_fields_embed_1.SeoFieldsEmbed),
-    __metadata("design:type", seo_fields_embed_1.SeoFieldsEmbed)
+    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true, default: {} }),
+    __metadata("design:type", Object)
 ], PageEntity.prototype, "seo", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'is_deleted', type: 'boolean', default: false }),
