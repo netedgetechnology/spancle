@@ -83,6 +83,46 @@ export class TenantController {
     );
   }
 
+  // ── Public / unauthenticated static routes ────────────────────────────────
+  // MUST be declared before @Get(':id') — NestJS matches routes top-to-bottom
+  // and 'slug-available' or 'resolve' would otherwise be swallowed by ParseUUIDPipe.
+
+  /**
+   * GET /tenants/slug-available?slug=<slug>
+   *
+   * Returns whether a slug is available for registration.
+   * Ignores terminated tenants — they do not block reuse.
+   * @Public — called from the superadmin UI before auth is established.
+   */
+  @Get('slug-available')
+  @Public()
+  async checkSlugAvailable(
+    @Query('slug') slug: string,
+  ): Promise<{ available: boolean; slug: string }> {
+    if (!slug || slug.trim().length < 2) {
+      return { available: false, slug: slug ?? '' };
+    }
+    const taken = await this.tenantService.isSlugTaken(slug.toLowerCase().trim());
+    return { available: !taken, slug: slug.toLowerCase().trim() };
+  }
+
+  /**
+   * GET /tenants/resolve?q=<slug_or_email>
+   *
+   * Tenant finder — used by www.spancle.com/login.
+   * Returns { slug, name, redirectUrl } for routing to tenant portal.
+   * Ignores terminated tenants.
+   * @Public — no authentication required.
+   */
+  @Get('resolve')
+  @Public()
+  async resolve(
+    @Query('q') q: string,
+  ): Promise<{ slug: string; name: string; redirectUrl: string } | null> {
+    if (!q || q.trim().length < 2) return null;
+    return this.tenantService.resolveTenant(q.trim());
+  }
+
   @Get(':id')
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')

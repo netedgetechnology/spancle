@@ -34,6 +34,18 @@ let TenantController = class TenantController {
     async listTenants(page, limit, status, tier) {
         return this.tenantService.findAll(page ? Number(page) : 1, limit ? Number(limit) : 20, status, tier);
     }
+    async checkSlugAvailable(slug) {
+        if (!slug || slug.trim().length < 2) {
+            return { available: false, slug: slug ?? '' };
+        }
+        const taken = await this.tenantService.isSlugTaken(slug.toLowerCase().trim());
+        return { available: !taken, slug: slug.toLowerCase().trim() };
+    }
+    async resolve(q) {
+        if (!q || q.trim().length < 2)
+            return null;
+        return this.tenantService.resolveTenant(q.trim());
+    }
     async getTenant(id, user) {
         if (user.role !== 'SUPER_ADMIN' && user.tenantId !== id) {
             throw Object.assign(new Error('Forbidden'), { status: 403 });
@@ -88,6 +100,22 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], TenantController.prototype, "listTenants", null);
+__decorate([
+    (0, common_1.Get)('slug-available'),
+    (0, roles_decorator_1.Public)(),
+    __param(0, (0, common_1.Query)('slug')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TenantController.prototype, "checkSlugAvailable", null);
+__decorate([
+    (0, common_1.Get)('resolve'),
+    (0, roles_decorator_1.Public)(),
+    __param(0, (0, common_1.Query)('q')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TenantController.prototype, "resolve", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
