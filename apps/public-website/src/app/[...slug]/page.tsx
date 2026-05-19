@@ -1,6 +1,8 @@
 import { notFound }             from 'next/navigation';
 import type { Metadata }        from 'next';
 import { SectionRenderer }      from '@/components/sections/section-renderer';
+import { PublicHeader }         from '@/components/layout/public-header';
+import { PublicFooter }         from '@/components/layout/public-footer';
 import { fetchPublishedSections, fetchPageBySlug } from '@/lib/homepage.api';
 
 export const dynamic = 'force-dynamic';
@@ -9,17 +11,15 @@ interface PageProps {
   params: { slug: string[] };
 }
 
-// Tenant for www.spancle.com public website — server-only env var, read at request time
-const PUBLIC_TENANT_ID = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
-
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  // Read env inside function — not at module scope — so it is evaluated per-request
+  const tenantId = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
   const slug     = params.slug.join('/');
-  const tenantId = PUBLIC_TENANT_ID;
-  if (!tenantId) return { title: slug };
+  if (!tenantId) return { title: 'Page not found' };
 
   try {
     const page = await fetchPageBySlug(slug, tenantId);
-    if (!page) return { title: slug };
+    if (!page) return { title: 'Page not found', robots: 'noindex' };
     const seo = (page.seo ?? {}) as Record<string, string>;
     return {
       title:       seo['metaTitle']       || page.title,
@@ -28,29 +28,32 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       alternates:  seo['canonicalUrl'] ? { canonical: seo['canonicalUrl'] } : undefined,
     };
   } catch {
-    return { title: slug };
+    return { title: 'Page not found', robots: 'noindex' };
   }
 }
 
 export default async function CmsPage({ params }: PageProps): Promise<React.ReactElement> {
+  // Read env inside function — evaluated per-request, not baked at module scope
+  const tenantId = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
   const slug     = params.slug.join('/');
-  const tenantId = PUBLIC_TENANT_ID;
 
   if (!tenantId) notFound();
 
-  // Resolve page
   const page = await fetchPageBySlug(slug, tenantId);
   if (!page) notFound();
 
-  // Fetch published sections for this page
   const sections = await fetchPublishedSections(page.id, tenantId);
   if (sections.length === 0) notFound();
 
   return (
-    <main id="main-content">
-      {sections.map((section) => (
-        <SectionRenderer key={section.id} section={section} />
-      ))}
-    </main>
+    <div className="flex min-h-screen flex-col bg-white">
+      <PublicHeader />
+      <main id="main-content" className="flex-1">
+        {sections.map((section) => (
+          <SectionRenderer key={section.id} section={section} />
+        ))}
+      </main>
+      <PublicFooter />
+    </div>
   );
 }

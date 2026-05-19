@@ -131,7 +131,7 @@ export async function fetchPageBySlug(
   const url = `${API_BASE}/api/v1/cms/pages/by-slug/${encodeURIComponent(slug)}`;
   const res = await fetch(url, {
     headers: { 'x-tenant-id': tenantId, 'Content-Type': 'application/json' },
-    next:    { revalidate: 60 },
+    cache:   'no-store',  // must not cache 404 responses — force real-time lookup
   });
   if (!res.ok) return null;
   return res.json() as Promise<{ id: string; title: string; seo?: Record<string, unknown> }>;
