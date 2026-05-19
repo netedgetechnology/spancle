@@ -119,3 +119,21 @@ export async function fetchAllSections(
 
   return response.json() as Promise<HomepageSection[]>;
 }
+
+/**
+ * Fetches a published CMS page by slug (public — no auth required).
+ * Returns null if the page does not exist, is not published, or is deleted.
+ */
+export async function fetchPageBySlug(
+  slug:     string,
+  tenantId: string,
+): Promise<{ id: string; title: string; seo?: Record<string, unknown> } | null> {
+  const url = `${API_BASE}/api/v1/cms/pages/by-slug/${encodeURIComponent(slug)}`;
+  const res = await fetch(url, {
+    headers: { 'x-tenant-id': tenantId, 'Content-Type': 'application/json' },
+    next:    { revalidate: 60 },
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<{ id: string; title: string; seo?: Record<string, unknown> }>;
+}
+
