@@ -121,6 +121,36 @@ export class TenantRepository extends TenantAwareRepository<TenantEntity> {
    * Ignores terminated tenants — they should not block slug reuse.
    * Used during tenant creation and slug availability check.
    */
+  /**
+   * Resolves a tenant by slug or email — ACTIVE ONLY.
+   * Used by the public tenant finder (www.spancle.com/login).
+   * Pending, suspended, and terminated tenants return null.
+   */
+  async findActiveBySlugOrEmail(
+    q: string,
+  ): Promise<TenantEntity | null> {
+    const repo = this.entityManager.getRepository(TenantEntity);
+
+    // Try slug match first
+    const bySlug = await repo
+      .createQueryBuilder('t')
+      .where('LOWER(t.slug) = LOWER(:q)', { q })
+      .andWhere('t.status = :status', { status: 'active' })
+      .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+
+    if (bySlug) return bySlug;
+
+    // Fallback: email match
+    return repo
+      .createQueryBuilder('t')
+      .where('LOWER(t.email) = LOWER(:q)', { q })
+      .andWhere('t.status = :status', { status: 'active' })
+      .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+  }
+
+
   async isSlugTaken(slug: string, excludeId?: string): Promise<boolean> {
     const qb = this.entityManager
       .getRepository(TenantEntity)

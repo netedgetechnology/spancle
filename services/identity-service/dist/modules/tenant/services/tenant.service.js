@@ -72,12 +72,8 @@ let TenantService = TenantService_1 = class TenantService {
         return entity;
     }
     async resolveTenant(q) {
-        const q_lower = q.toLowerCase().trim();
-        let tenant = await this.tenantRepository.findBySlug(q_lower);
-        if (!tenant) {
-            tenant = await this.tenantRepository.findByEmail(q_lower);
-        }
-        if (!tenant || tenant.isDeleted)
+        const tenant = await this.tenantRepository.findActiveBySlugOrEmail(q.toLowerCase().trim());
+        if (!tenant)
             return null;
         return {
             slug: tenant.slug,

@@ -116,17 +116,9 @@ export class TenantService {
   async resolveTenant(
     q: string,
   ): Promise<{ slug: string; name: string; redirectUrl: string } | null> {
-    const q_lower = q.toLowerCase().trim();
+    const tenant = await this.tenantRepository.findActiveBySlugOrEmail(q.toLowerCase().trim());
 
-    // Try slug first
-    let tenant = await this.tenantRepository.findBySlug(q_lower);
-
-    // Then try email
-    if (!tenant) {
-      tenant = await this.tenantRepository.findByEmail(q_lower);
-    }
-
-    if (!tenant || tenant.isDeleted) return null;
+    if (!tenant) return null;
 
     return {
       slug:        tenant.slug,

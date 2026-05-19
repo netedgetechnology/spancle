@@ -70,6 +70,23 @@ let TenantRepository = class TenantRepository extends tenant_aware_repository_1.
     async findOwnSettings(tenantId) {
         return this.findRawById(tenantId);
     }
+    async findActiveBySlugOrEmail(q) {
+        const repo = this.entityManager.getRepository(tenant_entity_1.TenantEntity);
+        const bySlug = await repo
+            .createQueryBuilder('t')
+            .where('LOWER(t.slug) = LOWER(:q)', { q })
+            .andWhere('t.status = :status', { status: 'active' })
+            .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+            .getOne();
+        if (bySlug)
+            return bySlug;
+        return repo
+            .createQueryBuilder('t')
+            .where('LOWER(t.email) = LOWER(:q)', { q })
+            .andWhere('t.status = :status', { status: 'active' })
+            .andWhere('t.isDeleted = :isDeleted', { isDeleted: false })
+            .getOne();
+    }
     async isSlugTaken(slug, excludeId) {
         const qb = this.entityManager
             .getRepository(tenant_entity_1.TenantEntity)
