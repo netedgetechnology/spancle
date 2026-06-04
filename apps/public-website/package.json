@@ -11,7 +11,8 @@
     "lint": "next lint --max-warnings=0",
     "lint:fix": "next lint --fix",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf .next out"
+    "clean": "rimraf .next out",
+    "postbuild": "mkdir -p .next/standalone/apps/public-website/.next && rm -rf .next/standalone/apps/public-website/.next/static && cp -a .next/static .next/standalone/apps/public-website/.next/ && mkdir -p .next/standalone/apps/public-website/public && cp -a public/. .next/standalone/apps/public-website/public/ 2>/dev/null || true"
   },
   "dependencies": {
     "next": "^14.2.5",

@@ -6,9 +6,10 @@ interface DashboardRouteLayoutProps {
 }
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'Tenants',   href: '/tenants'   },
-  { label: 'Packages',  href: '/packages'  },
+  { label: 'Dashboard',   href: '/dashboard'   },
+  { label: 'Tenants',     href: '/tenants'     },
+  { label: 'Packages',    href: '/packages'    },
+  { label: 'Website CMS', href: '/website-cms' },
 ];
 
 export default function DashboardRouteLayout({ children }: DashboardRouteLayoutProps): React.ReactElement {

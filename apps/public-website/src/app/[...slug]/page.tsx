@@ -1,4 +1,5 @@
 import { notFound }             from 'next/navigation';
+import { unstable_noStore }     from 'next/cache';
 import type { Metadata }        from 'next';
 import { SectionRenderer }      from '@/components/sections/section-renderer';
 import { PublicHeader }         from '@/components/layout/public-header';
@@ -12,14 +13,14 @@ interface PageProps {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  // Read env inside function — not at module scope — so it is evaluated per-request
+  unstable_noStore();
   const tenantId = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
   const slug     = params.slug.join('/');
-  if (!tenantId) return { title: 'Page not found' };
+  if (!tenantId) return { title: 'Page not found', robots: 'noindex,nofollow' };
 
   try {
     const page = await fetchPageBySlug(slug, tenantId);
-    if (!page) return { title: 'Page not found', robots: 'noindex' };
+    if (!page) return { title: 'Page not found', robots: 'noindex,nofollow' };
     const seo = (page.seo ?? {}) as Record<string, string>;
     return {
       title:       seo['metaTitle']       || page.title,
@@ -28,12 +29,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       alternates:  seo['canonicalUrl'] ? { canonical: seo['canonicalUrl'] } : undefined,
     };
   } catch {
-    return { title: 'Page not found', robots: 'noindex' };
+    return { title: 'Page not found', robots: 'noindex,nofollow' };
   }
 }
 
 export default async function CmsPage({ params }: PageProps): Promise<React.ReactElement> {
-  // Read env inside function — evaluated per-request, not baked at module scope
+  // Opt out of ALL caching — required for notFound() to return HTTP 404 in standalone
+  unstable_noStore();
+
   const tenantId = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
   const slug     = params.slug.join('/');
 

@@ -79,8 +79,7 @@ export async function fetchPublishedSections(
       'x-tenant-id':  tenantId,
       'Content-Type': 'application/json',
     },
-    // ISR: revalidate every 60 seconds
-    next: { revalidate: 60 },
+    cache: 'no-store',
   });
 
   if (!response.ok) {
