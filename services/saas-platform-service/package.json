@@ -32,7 +32,9 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.20",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@nestjs/jwt": "^10.2.0",
+    "@spancle/types": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.2",

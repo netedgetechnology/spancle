@@ -6,29 +6,35 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+import { JwtPayloadSchema } from '@spancle/types';
 import { IS_PUBLIC_KEY } from '../decorators/roles.decorator';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * JwtAuthGuard — saas-platform-service.
  *
- * Reads actor identity from headers set by the API gateway (nginx) after
- * JWT validation in the identity-service:
- *   x-actor-id   — authenticated user UUID
- *   x-actor-role — system role string
+ * Validates the Authorization: Bearer <JWT> header directly against
+ * JWT_SECRET — the same secret used by identity-service to issue tokens.
+ * No gateway or header-injection layer exists; this guard performs
+ * verification in-process.
  *
  * Routes marked @Public() bypass this guard entirely.
- * Authenticated user is attached to request.actor for downstream use.
+ * On success, the verified payload is attached to request.user
+ * (matches the shape expected by SuperAdminGuard and downstream guards).
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthGuard.name);
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector:    Reflector,
+    private readonly jwtService:   JwtService,
+    private readonly configService: ConfigService,
+  ) {}
 
-  canActivate(ctx: ExecutionContext): boolean {
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       ctx.getHandler(),
       ctx.getClass(),
@@ -37,22 +43,49 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const req = ctx.switchToHttp().getRequest<
-      Request & { actor?: { actorId: string; role: string } }
+      Request & { user?: { userId: string; role: string; tenantId: string } }
     >();
 
-    const actorId = req.headers['x-actor-id'];
-    const role    = req.headers['x-actor-role'];
+    const authHeader = req.headers['authorization'];
 
-    if (!actorId || typeof actorId !== 'string' || !UUID_RE.test(actorId)) {
-      this.logger.warn(`Unauthenticated request to ${req.path} — missing or invalid x-actor-id`);
+    if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+      this.logger.warn(`Unauthenticated request to ${req.path} — missing Authorization header`);
       throw new UnauthorizedException('Authentication required');
     }
 
-    req.actor = {
-      actorId,
-      role: typeof role === 'string' ? role : 'VIEWER',
-    };
+    const token = authHeader.slice('Bearer '.length).trim();
 
-    return true;
+    try {
+      const rawPayload = await this.jwtService.verifyAsync(token, {
+        secret: this.configService.getOrThrow<string>('JWT_SECRET'),
+        issuer: this.configService.get<string>('JWT_ISSUER', 'spancle-sports-os'),
+      });
+
+      const result = JwtPayloadSchema.safeParse(rawPayload);
+      if (!result.success) {
+        this.logger.warn(`JWT payload failed schema validation: ${result.error.message}`);
+        throw new UnauthorizedException('Malformed token payload');
+      }
+
+      const payload = result.data;
+
+      req.user = {
+        userId:   payload.sub,
+        role:     payload.role,
+        tenantId: payload.tenantId,
+      };
+
+      return true;
+    } catch (err) {
+      const reason =
+        err instanceof Error && err.name === 'TokenExpiredError'
+          ? 'Access token expired'
+          : err instanceof Error && err.name === 'JsonWebTokenError'
+            ? 'Invalid access token'
+            : 'Authentication required';
+
+      this.logger.warn(`Auth failed — reason: "${reason}" path: ${req.path}`);
+      throw new UnauthorizedException(reason);
+    }
   }
 }

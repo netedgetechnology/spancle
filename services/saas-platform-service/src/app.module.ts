@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { JwtModule } from '@nestjs/jwt';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantModule }       from './modules/tenant/tenant.module';
@@ -16,6 +17,20 @@ import { AdminModule }          from './modules/admin/admin.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
+
+    // JwtModule provides JwtService — used by JwtAuthGuard to verify
+    // Bearer tokens issued by identity-service. Same JWT_SECRET, no
+    // gateway/header-injection layer is involved.
+    JwtModule.registerAsync({
+      global: true,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          issuer: config.get<string>('JWT_ISSUER', 'spancle-sports-os'),
+        },
+      }),
+    }),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

@@ -13,6 +13,7 @@ const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const throttler_1 = require("@nestjs/throttler");
+const jwt_1 = require("@nestjs/jwt");
 const jwt_auth_guard_1 = require("./common/guards/jwt-auth.guard");
 const tenant_module_1 = require("./modules/tenant/tenant.module");
 const package_module_1 = require("./modules/package/package.module");
@@ -27,6 +28,16 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             config_1.ConfigModule.forRoot({ isGlobal: true, cache: true }),
+            jwt_1.JwtModule.registerAsync({
+                global: true,
+                inject: [config_1.ConfigService],
+                useFactory: (config) => ({
+                    secret: config.getOrThrow('JWT_SECRET'),
+                    signOptions: {
+                        issuer: config.get('JWT_ISSUER', 'spancle-sports-os'),
+                    },
+                }),
+            }),
             typeorm_1.TypeOrmModule.forRootAsync({
                 inject: [config_1.ConfigService],
                 useFactory: (config) => ({
