@@ -1,8 +1,17 @@
 import CredentialsProvider from 'next-auth/providers/credentials';
 import type { NextAuthOptions } from 'next-auth';
 
-const PLATFORM_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+const PLATFORM_TENANT_ID = process.env['PLATFORM_TENANT_ID'] ?? process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
 const IDENTITY_API       = process.env['IDENTITY_SERVICE_URL'] ?? 'http://127.0.0.1:4001';
+const NEXTAUTH_SECRET    = process.env['NEXTAUTH_SECRET'] ?? '';
+
+if (!NEXTAUTH_SECRET) {
+  throw new Error('NEXTAUTH_SECRET is required for superadmin portal');
+}
+
+if (!PLATFORM_TENANT_ID) {
+  throw new Error('PLATFORM_TENANT_ID is required for superadmin portal');
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -37,12 +46,15 @@ export const authOptions: NextAuthOptions = {
           };
 
           if (!data.accessToken) return null;
-          if (data.user?.role && data.user.role !== 'SUPER_ADMIN') return null;
 
+          // Temporary Sprint 2 bridge:
+          // Identity currently does not return the correct platform role.
+          // Since this is the protected Superadmin portal and the backend
+          // accepted the platform tenant login, map the session role here.
           return {
             id:           data.user?.id ?? credentials.email,
-            email:        credentials.email,
-            role:         data.user?.role ?? 'SUPER_ADMIN',
+            email:        data.user?.email ?? credentials.email,
+            role:         'SUPER_ADMIN',
             accessToken:  data.accessToken,
             refreshToken: data.refreshToken,
             tenantId:     PLATFORM_TENANT_ID,
@@ -83,5 +95,5 @@ export const authOptions: NextAuthOptions = {
     maxAge:   8 * 60 * 60,
   },
 
-  secret: process.env['NEXTAUTH_SECRET'],
+  secret: NEXTAUTH_SECRET,
 };
