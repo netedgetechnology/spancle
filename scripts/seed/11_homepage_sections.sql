@@ -20,9 +20,38 @@
 -- Idempotent: uses ON CONFLICT (id) DO UPDATE so re-running updates payloads.
 -- =============================================================================
 
--- Requires 02_demo_tenant.sql to have run first (provides tenant_id + page_id).
-\set tenant_id 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-\set page_id   'b2c3d4e5-f6a7-8901-bcde-f01234567891'
+-- Target tenant: the fixed platform tenant constant
+-- 00000000-0000-0000-0000-000000000001 (slug: spancle-platform) — the SAME
+-- constant used by scripts/seed/01_superadmin.sql and PLATFORM_TENANT_ID in
+-- apps/superadmin-portal/src/lib/auth/options.ts. Previously this file
+-- hardcoded an unrelated demo-tenant placeholder UUID
+-- (a1b2c3d4-e5f6-7890-abcd-ef1234567890) that never matched a real seeded
+-- tenant in saas-platform-service, causing the homepage to silently fail
+-- to render for the actual platform tenant. NEVER hardcode a literal here.
+\set tenant_id  '00000000-0000-0000-0000-000000000001'
+
+-- Ensures a homepage cms_pages row exists for the platform tenant, then
+-- resolves its id dynamically via \gset — never hardcode a page_id literal.
+-- \gset is psql's native way to capture a query result into a variable;
+-- far more reliable than shelling out to a second psql process.
+INSERT INTO cms_pages (
+  id, tenant_id, title, slug, status, is_homepage, is_deleted,
+  content, seo, template, sort_order, created_at, updated_at
+) VALUES (
+  gen_random_uuid(),
+  :'tenant_id',
+  'Home', 'home', 'published', true, false,
+  '{}'::jsonb,
+  '{"metaTitle":"Spancle Sports OS — Enterprise Sports Management Platform","metaDescription":"Bookings, payments, memberships and CMS — unified in one platform for sports organisations.","robots":"index,follow","canonicalUrl":"https://www.spancle.com/"}'::jsonb,
+  'default', 0, NOW(), NOW()
+)
+ON CONFLICT (tenant_id, slug) DO UPDATE SET
+  is_homepage = true, status = 'published', updated_at = NOW();
+
+SELECT id AS page_id
+FROM cms_pages
+WHERE tenant_id = :'tenant_id' AND slug = 'home'
+LIMIT 1 \gset
 
 -- ── 1. Hero Banner ────────────────────────────────────────────────────────────
 INSERT INTO cms_homepage_sections (

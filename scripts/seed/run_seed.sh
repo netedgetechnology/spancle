@@ -26,6 +26,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IDENTITY_DB_URL="${IDENTITY_DB_URL:-postgres://postgres:postgres@localhost:5432/spancle_identity}"
 BOOKING_DB_URL="${BOOKING_DB_URL:-postgres://postgres:postgres@localhost:5432/spancle_booking}"
 FINANCE_DB_URL="${FINANCE_DB_URL:-postgres://postgres:postgres@localhost:5432/spancle_finance}"
+# Was previously undefined here even though run_saas() references it below —
+# every CMS seed invocation silently used an empty/inherited value.
+SAAS_DB_URL="${SAAS_DB_URL:-postgres://postgres:postgres@localhost:5432/spancle_saas}"
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
 RESET=false
@@ -148,6 +151,9 @@ run_finance  "$SCRIPT_DIR/10_invoices.sql"
 
 # 11 — Homepage CMS sections (saas-platform DB)
 run_saas     "$SCRIPT_DIR/11_homepage_sections.sql"
+
+# 12 — Public website CMS pages: about/features/pricing/contact/book-demo/terms/privacy (saas-platform DB)
+run_saas     "$SCRIPT_DIR/12_public_website_pages.sql"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 log ""

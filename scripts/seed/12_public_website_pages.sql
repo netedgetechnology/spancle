@@ -2,7 +2,29 @@
 -- scripts/seed/12_public_website_pages.sql
 --
 -- Seeds all public website CMS pages and their sections for Spancle.
--- Target tenant: af2ef75b-9bd1-448a-86f0-1b7291fcda57
+--
+-- Target tenant: the fixed platform tenant constant
+-- 00000000-0000-0000-0000-000000000001 (slug: spancle-platform).
+--
+-- This is the SAME constant used everywhere else in the system to identify
+-- the platform's own tenant:
+--   - scripts/seed/01_superadmin.sql        (creates this tenant row)
+--   - scripts/seed/00_config.sql
+--   - scripts/migrations/001_add_super_admin_role.sql
+--   - apps/superadmin-portal/src/lib/auth/options.ts  (PLATFORM_TENANT_ID)
+--
+-- IMPORTANT — root cause of a prior bug fixed here:
+-- This seed previously hardcoded a DIFFERENT, one-off literal UUID
+-- (af2ef75b-9bd1-448a-86f0-1b7291fcda57) that was apparently copy-pasted
+-- from a query result rather than using the canonical platform tenant
+-- constant. saas-platform-service's own `tenants` table is a per-tenant
+-- data-scoping table (id != tenantId, no relation to identity-service's
+-- tenant registry) — cms_pages.tenant_id is populated directly from
+-- whatever value the caller passes via x-tenant-id, with no foreign key
+-- back to a local table. There is nothing in saas-platform-service to
+-- "look up" — the correct value is always the well-known platform
+-- constant below. NEVER swap this for any other literal or any dynamic
+-- lookup against the local `tenants` table.
 --
 -- Idempotent:
 --   - Pages:    INSERT ... ON CONFLICT (tenant_id, slug) DO UPDATE
@@ -13,10 +35,11 @@
 --   psql "$SAAS_DB_URL" -f /var/www/spancle/scripts/seed/12_public_website_pages.sql
 -- =============================================================================
 
-\set tenant_id  'af2ef75b-9bd1-448a-86f0-1b7291fcda57'
-
--- ── Helper: upsert a page ────────────────────────────────────────────────────
--- Returns the page id for use in section inserts below.
+-- Platform tenant constant — DO NOT replace with a literal copy-pasted UUID.
+-- This must always match PLATFORM_TENANT_ID in
+-- apps/superadmin-portal/src/lib/auth/options.ts and the tenant row created
+-- by scripts/seed/01_superadmin.sql.
+\set tenant_id  '00000000-0000-0000-0000-000000000001'
 
 -- ── 1. About ─────────────────────────────────────────────────────────────────
 INSERT INTO cms_pages (
@@ -320,6 +343,6 @@ LEFT JOIN cms_homepage_sections s
   AND s.status = 'published'
   AND s.is_visible = true
   AND s.is_deleted = false
-WHERE p.tenant_id = 'af2ef75b-9bd1-448a-86f0-1b7291fcda57'
+WHERE p.tenant_id = :'tenant_id'
   AND p.is_deleted = false
 ORDER BY p.sort_order;
