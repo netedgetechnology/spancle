@@ -53,7 +53,7 @@ export async function fetchTenants(params: {
   status?: TenantStatus;
   tier?:   TenantTier;
 } = {}): Promise<TenantListResponse> {
-  const res = await apiClient.get<TenantListResponse>('/api/v1/tenants', { params });
+  const res = await apiClient.get<TenantListResponse>('/tenants', { params });
   return res.data;
 }
 
@@ -61,14 +61,14 @@ export async function fetchTenants(params: {
  * Activates a suspended or pending tenant.
  */
 export async function activateTenant(tenantId: string): Promise<void> {
-  await apiClient.post(`/api/v1/tenants/${tenantId}/activate`, {});
+  await apiClient.post(`/tenants/${tenantId}/activate`, {});
 }
 
 /**
  * Suspends an active tenant.
  */
 export async function suspendTenant(tenantId: string, reason: string): Promise<void> {
-  await apiClient.post(`/api/v1/tenants/${tenantId}/suspend`, { reason });
+  await apiClient.post(`/tenants/${tenantId}/suspend`, { reason });
 }
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────

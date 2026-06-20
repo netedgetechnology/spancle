@@ -72,7 +72,7 @@ export function parseBackendErrors(err: unknown): Record<string, string> {
 }
 
 export async function checkSlugAvailable(slug: string): Promise<{ available: boolean }> {
-  const res = await apiClient.get<{ available: boolean }>('/api/v1/tenants/slug-available', {
+  const res = await apiClient.get<{ available: boolean }>('/tenants/slug-available', {
     params: { slug },
   });
   return res.data;
@@ -82,12 +82,12 @@ export async function fetchTenantList(params: TenantListParams = {}): Promise<Te
   const query = Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== '' && v !== undefined),
   );
-  const res = await apiClient.get<TenantListResponse>('/api/v1/tenants', { params: query });
+  const res = await apiClient.get<TenantListResponse>('/tenants', { params: query });
   return res.data;
 }
 
 export async function fetchTenantDetail(id: string): Promise<TenantDetail> {
-  const res = await apiClient.get<TenantDetail>(`/api/v1/tenants/${id}`);
+  const res = await apiClient.get<TenantDetail>(`/tenants/${id}`);
   return res.data;
 }
 
@@ -105,7 +105,7 @@ export async function createTenant(data: CreateTenantFormData): Promise<TenantDe
       allowPublicBookings: data.modules.booking,
     },
   };
-  const res = await apiClient.post<TenantDetail>('/api/v1/tenants', payload);
+  const res = await apiClient.post<TenantDetail>('/tenants', payload);
   return res.data;
 }
 
@@ -123,31 +123,31 @@ export async function updateTenant(id: string, data: UpdateTenantFormData): Prom
   if (data.modules   !== undefined) settingsPayload['allowPublicBookings'] = data.modules.booking;
 
   if (Object.keys(settingsPayload).length > 0) {
-    await apiClient.patch(`/api/v1/tenants/${id}/settings`, { settings: settingsPayload });
+    await apiClient.patch(`/tenants/${id}/settings`, { settings: settingsPayload });
   }
   if (Object.keys(corePayload).length > 0) {
-    await apiClient.patch(`/api/v1/tenants/${id}`, corePayload);
+    await apiClient.patch(`/tenants/${id}`, corePayload);
   }
 
   return fetchTenantDetail(id);
 }
 
 export async function changeTenantTier(id: string, tier: TenantTier): Promise<TenantDetail> {
-  const res = await apiClient.patch<TenantDetail>(`/api/v1/tenants/${id}/tier`, { tier });
+  const res = await apiClient.patch<TenantDetail>(`/tenants/${id}/tier`, { tier });
   return res.data;
 }
 
 export async function activateTenant(id: string): Promise<TenantDetail> {
-  const res = await apiClient.post<TenantDetail>(`/api/v1/tenants/${id}/activate`, {});
+  const res = await apiClient.post<TenantDetail>(`/tenants/${id}/activate`, {});
   return res.data;
 }
 
 export async function suspendTenant(id: string, reason: string): Promise<TenantDetail> {
-  const res = await apiClient.post<TenantDetail>(`/api/v1/tenants/${id}/suspend`, { reason });
+  const res = await apiClient.post<TenantDetail>(`/tenants/${id}/suspend`, { reason });
   return res.data;
 }
 
 export async function terminateTenant(id: string, reason: string): Promise<TenantDetail> {
-  const res = await apiClient.post<TenantDetail>(`/api/v1/tenants/${id}/terminate`, { reason });
+  const res = await apiClient.post<TenantDetail>(`/tenants/${id}/terminate`, { reason });
   return res.data;
 }

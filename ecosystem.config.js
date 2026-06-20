@@ -40,6 +40,7 @@ module.exports = {
         NODE_ENV:     'production',
         PORT:         4002,
         SERVICE_NAME: 'saas-platform-service',
+        CORS_ORIGINS: 'https://spancle.com,https://www.spancle.com,https://manage.spancle.com,https://api.spancle.com',
       },
     },
 
