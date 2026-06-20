@@ -27,9 +27,12 @@ const CMS_CARDS = [
       </svg>
     ),
     action: (
-      <span className="inline-flex items-center text-xs text-gray-400">
-        Coming next sprint
-      </span>
+      <Link
+        href="/website-cms/homepage"
+        className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-700"
+      >
+        Edit homepage →
+      </Link>
     ),
   },
   {
@@ -41,9 +44,12 @@ const CMS_CARDS = [
       </svg>
     ),
     action: (
-      <span className="inline-flex items-center text-xs text-gray-400">
-        Coming next sprint
-      </span>
+      <Link
+        href="/website-cms/pages"
+        className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-700"
+      >
+        Edit page SEO →
+      </Link>
     ),
   },
 ];
