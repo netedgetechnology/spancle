@@ -94,6 +94,10 @@ export default function HomepageSectionsPage(): React.ReactElement {
   console.log('[homepage-debug] pagesData:', pagesData);
   // eslint-disable-next-line no-console
   console.log('[homepage-debug] homepagePage:', homepagePage);
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] firstPage', pagesData?.data?.[0]);
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] homepagePage', homepagePage);
 
   const { data: sections, isLoading: sectionsLoading, error: sectionsError, refetch } = useQuery({
     queryKey: homepageSectionKeys.list(homepagePage?.id ?? ''),
