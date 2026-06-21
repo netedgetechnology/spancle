@@ -89,6 +89,12 @@ export default function HomepageSectionsPage(): React.ReactElement {
 
   const homepagePage = pagesData?.data.find((p) => p.isHomepage);
 
+  // TEMP DEBUG — remove after diagnosing missing sections request
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] pagesData:', pagesData);
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] homepagePage:', homepagePage);
+
   const { data: sections, isLoading: sectionsLoading, error: sectionsError, refetch } = useQuery({
     queryKey: homepageSectionKeys.list(homepagePage?.id ?? ''),
     queryFn:  () => fetchHomepageSections(homepagePage!.id),
