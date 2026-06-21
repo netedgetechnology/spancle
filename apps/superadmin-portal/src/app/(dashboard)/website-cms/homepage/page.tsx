@@ -105,6 +105,11 @@ export default function HomepageSectionsPage(): React.ReactElement {
     enabled:  !!homepagePage?.id,
   });
 
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] sections', sections);
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] sectionsError', sectionsError);
+
   const isLoading = pagesLoading || (!!homepagePage && sectionsLoading);
   const error      = pagesError || sectionsError;
 

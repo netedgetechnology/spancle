@@ -34,7 +34,14 @@ export const homepageSectionKeys = {
 
 /** Lists all sections (draft + published + archived) for the homepage editor. */
 export async function fetchHomepageSections(pageId: string): Promise<HomepageSection[]> {
-  const res = await apiClient.get<HomepageSection[]>(`/cms/homepage/pages/${pageId}/sections`);
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] fetchHomepageSections pageId', pageId);
+
+  const res = await apiClient.get(`/cms/homepage/pages/${pageId}/sections`);
+
+  // eslint-disable-next-line no-console
+  console.log('[homepage-debug] sections response', res.data);
+
   return res.data;
 }
 
