@@ -32,12 +32,23 @@ export const homepageSectionKeys = {
   list: (pageId: string) => [...homepageSectionKeys.all(), 'list', pageId] as const,
 };
 
+// The CMS pages and sections live under the platform's saas-platform tenant,
+// which may differ from the identity-service platform tenant stored in the
+// superadmin session. Override x-tenant-id for all CMS homepage calls.
+const CMS_TENANT_ID = process.env['NEXT_PUBLIC_DEFAULT_TENANT_ID'] ?? '';
+
+function cmsHeaders() {
+  return CMS_TENANT_ID ? { 'x-tenant-id': CMS_TENANT_ID } : {};
+}
+
 /** Lists all sections (draft + published + archived) for the homepage editor. */
 export async function fetchHomepageSections(pageId: string): Promise<HomepageSection[]> {
   // eslint-disable-next-line no-console
   console.log('[homepage-debug] fetchHomepageSections pageId', pageId);
 
-  const res = await apiClient.get(`/cms/homepage/pages/${pageId}/sections`);
+  const res = await apiClient.get(`/cms/homepage/pages/${pageId}/sections`, {
+    headers: cmsHeaders(),
+  });
 
   // eslint-disable-next-line no-console
   console.log('[homepage-debug] sections response', res.data);
@@ -46,7 +57,9 @@ export async function fetchHomepageSections(pageId: string): Promise<HomepageSec
 }
 
 export async function getHomepageSection(id: string): Promise<HomepageSection> {
-  const res = await apiClient.get<HomepageSection>(`/cms/homepage/sections/${id}`);
+  const res = await apiClient.get<HomepageSection>(`/cms/homepage/sections/${id}`, {
+    headers: cmsHeaders(),
+  });
   return res.data;
 }
 
@@ -61,7 +74,9 @@ export async function updateHomepageSection(
   id:      string,
   payload: HomepageSectionUpdatePayload,
 ): Promise<HomepageSection> {
-  const res = await apiClient.patch<HomepageSection>(`/cms/homepage/sections/${id}`, payload);
+  const res = await apiClient.patch<HomepageSection>(`/cms/homepage/sections/${id}`, payload, {
+    headers: cmsHeaders(),
+  });
   return res.data;
 }
 
