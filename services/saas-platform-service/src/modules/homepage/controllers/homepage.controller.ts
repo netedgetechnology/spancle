@@ -96,8 +96,9 @@ export class HomepageController {
   create(
     @Body() dto: CreateHomepageSectionDto,
     @TenantCtx() tenant: TenantContext,
+    @Req() req: Request & { user?: { userId: string } },
   ): Promise<HomepageSectionEntity> {
-    return this.homepageService.createSection(dto, tenant.tenantId, 'system');
+    return this.homepageService.createSection(dto, tenant.tenantId, req.user?.userId ?? tenant.tenantId);
   }
 
   @Patch('sections/:id')
@@ -105,8 +106,9 @@ export class HomepageController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateHomepageSectionDto,
     @TenantCtx() tenant: TenantContext,
+    @Req() req: Request & { user?: { userId: string } },
   ): Promise<HomepageSectionEntity> {
-    return this.homepageService.updateSection(id, dto, tenant.tenantId, 'system');
+    return this.homepageService.updateSection(id, dto, tenant.tenantId, req.user?.userId ?? tenant.tenantId);
   }
 
   @Delete('sections/:id')

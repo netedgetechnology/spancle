@@ -36,11 +36,11 @@ let HomepageController = class HomepageController {
     getOne(id, tenant) {
         return this.homepageService.getSection(id, tenant.tenantId);
     }
-    create(dto, tenant) {
-        return this.homepageService.createSection(dto, tenant.tenantId, 'system');
+    create(dto, tenant, req) {
+        return this.homepageService.createSection(dto, tenant.tenantId, req.user?.userId ?? tenant.tenantId);
     }
-    update(id, dto, tenant) {
-        return this.homepageService.updateSection(id, dto, tenant.tenantId, 'system');
+    update(id, dto, tenant, req) {
+        return this.homepageService.updateSection(id, dto, tenant.tenantId, req.user?.userId ?? tenant.tenantId);
     }
     remove(id, tenant) {
         return this.homepageService.removeSection(id, tenant.tenantId, 'system');
@@ -88,8 +88,9 @@ __decorate([
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_homepage_section_dto_1.CreateHomepageSectionDto, Object]),
+    __metadata("design:paramtypes", [create_homepage_section_dto_1.CreateHomepageSectionDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], HomepageController.prototype, "create", null);
 __decorate([
@@ -97,8 +98,9 @@ __decorate([
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, tenant_decorator_1.TenantCtx)()),
+    __param(3, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, create_homepage_section_dto_1.UpdateHomepageSectionDto, Object]),
+    __metadata("design:paramtypes", [String, create_homepage_section_dto_1.UpdateHomepageSectionDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], HomepageController.prototype, "update", null);
 __decorate([

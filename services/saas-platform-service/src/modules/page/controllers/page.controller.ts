@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuditInterceptor } from '../../../common/interceptors/audit.interceptor';
 import { Public } from '../../../common/decorators/roles.decorator';
 import { TenantCtx } from '../../../common/decorators/tenant.decorator';
@@ -41,9 +43,9 @@ export class PageController {
   create(
     @Body() dto: CreatePageDto,
     @TenantCtx() tenant: TenantContext,
+    @Req() req: Request & { user?: { userId: string } },
   ): Promise<PageEntity> {
-    // actorId resolved from JWT in Sprint 2 — placeholder until CurrentUser wired
-    return this.pageService.create(dto, tenant.tenantId, 'system');
+    return this.pageService.create(dto, tenant.tenantId, req.user?.userId ?? tenant.tenantId);
   }
 
   @Get()

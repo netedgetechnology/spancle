@@ -23,8 +23,8 @@ let PageController = class PageController {
     constructor(pageService) {
         this.pageService = pageService;
     }
-    create(dto, tenant) {
-        return this.pageService.create(dto, tenant.tenantId, 'system');
+    create(dto, tenant, req) {
+        return this.pageService.create(dto, tenant.tenantId, req.user?.userId ?? tenant.tenantId);
     }
     findAll(tenant, page, limit, status) {
         return this.pageService.findAll(tenant.tenantId, page ? Number(page) : 1, limit ? Number(limit) : 20, status);
@@ -51,8 +51,9 @@ __decorate([
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_page_dto_1.CreatePageDto, Object]),
+    __metadata("design:paramtypes", [create_page_dto_1.CreatePageDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], PageController.prototype, "create", null);
 __decorate([
