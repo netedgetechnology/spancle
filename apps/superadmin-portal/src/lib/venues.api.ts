@@ -40,7 +40,7 @@ export interface SportSummary {
 
 /** Fetches branches for a specific tenant — uses that tenant's ID as x-tenant-id */
 export async function fetchVenuesForTenant(tenantId: string): Promise<VenueSummary[]> {
-  const res = await apiClient.get<VenueSummary[]>('/api/v1/branches', {
+  const res = await apiClient.get<VenueSummary[]>('/branches', {
     headers: { 'x-tenant-id': tenantId },
   });
   return res.data;
@@ -48,7 +48,7 @@ export async function fetchVenuesForTenant(tenantId: string): Promise<VenueSumma
 
 export async function fetchCourtsForTenant(tenantId: string, branchId?: string): Promise<CourtSummary[]> {
   const params = branchId ? { branchId } : undefined;
-  const res = await apiClient.get<CourtSummary[]>('/api/v1/courts', {
+  const res = await apiClient.get<CourtSummary[]>('/courts', {
     headers: { 'x-tenant-id': tenantId },
     params,
   });
@@ -56,7 +56,7 @@ export async function fetchCourtsForTenant(tenantId: string, branchId?: string):
 }
 
 export async function fetchSportsForTenant(tenantId: string): Promise<SportSummary[]> {
-  const res = await apiClient.get<SportSummary[]>('/api/v1/sports', {
+  const res = await apiClient.get<SportSummary[]>('/sports', {
     headers: { 'x-tenant-id': tenantId },
   });
   return res.data;
