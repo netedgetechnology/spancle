@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { label: 'Branches',     href: '/branches'     },
   { label: 'Sports',       href: '/sports'       },
   { label: 'Courts',       href: '/courts'       },
+  { label: 'Pricing',      href: '/pricing'      },
   { label: 'Calendar',     href: '/calendar'     },
   { label: 'Blog',         href: '/blog'         },
   { label: 'Homepage',     href: '/homepage'     },

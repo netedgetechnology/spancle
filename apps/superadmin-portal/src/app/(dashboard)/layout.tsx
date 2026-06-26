@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { label: 'Tenants',     href: '/tenants'     },
   { label: 'Packages',    href: '/packages'    },
   { label: 'Website CMS', href: '/website-cms' },
+  { label: 'Venues',      href: '/venues'      },
 ];
 
 export default function DashboardRouteLayout({ children }: DashboardRouteLayoutProps): React.ReactElement {
