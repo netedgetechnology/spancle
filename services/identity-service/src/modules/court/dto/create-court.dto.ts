@@ -18,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { WeeklyTimingsDto } from '../../branch/dto/create-branch.dto';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
 
@@ -100,12 +101,15 @@ export class CreateCourtDto {
   // ── Operating hours ────────────────────────────────────────────────────────
 
   /**
-   * WeeklyTimings JSONB — court-specific hours.
-   * Omit to inherit from parent branch.
+   * Court-specific weekly operating hours.
+   * When omitted, the court inherits the parent branch's schedule.
+   * When provided, this schedule overrides the branch schedule for this court.
+   * Supports multiple sessions per day, break periods, and maintenance blocks.
    */
-  @IsObject()
   @IsOptional()
-  operatingHours?: Record<string, unknown>;
+  @ValidateNested()
+  @Type(() => WeeklyTimingsDto)
+  operatingHours?: WeeklyTimingsDto;
 
   // ── Display ────────────────────────────────────────────────────────────────
 
@@ -188,7 +192,10 @@ export class UpdateCourtDto {
 
   @IsObject()
   @IsOptional()
-  operatingHours?: Record<string, unknown> | null;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WeeklyTimingsDto)
+  operatingHours?: WeeklyTimingsDto | null;
 
   @IsInt()
   @Min(0)
@@ -302,5 +309,8 @@ export class GenerateCourtsDto {
 
   @IsObject()
   @IsOptional()
-  operatingHours?: Record<string, unknown>;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WeeklyTimingsDto)
+  operatingHours?: WeeklyTimingsDto;
 }

@@ -18,6 +18,7 @@ import type {
   GenerateCourtsDto,
 } from '../dto/create-court.dto';
 import type { CourtEntity, CourtStatus } from '../entities/court.entity';
+import type { WeeklyTimings } from '../../branch/entities/branch.entity';
 import {
   CourtEventNames,
   type CourtEventPayload,
@@ -66,7 +67,7 @@ export class CourtService {
 
     // Validate operating hours format if provided
     if (dto.operatingHours) {
-      this.validateOperatingHours(dto.operatingHours);
+      this.validateOperatingHours(dto.operatingHours as WeeklyTimings);
     }
 
     const court = await this.courtRepository.insert(
@@ -83,7 +84,7 @@ export class CourtService {
         maxBookingsConcurrent: dto.maxBookingsConcurrent ?? 1,
         dimensions:           dto.dimensions           ?? null,
         status:               dto.status               ?? 'available',
-        operatingHours:       (dto.operatingHours as unknown as CourtEntity['operatingHours']) ?? null,
+        operatingHours:       (dto.operatingHours as WeeklyTimings) ?? null,
         courtNumber:          dto.courtNumber          ?? null,
         sortOrder:            dto.sortOrder            ?? 0,
         imageUrl:             dto.imageUrl             ?? null,
@@ -135,7 +136,7 @@ export class CourtService {
 
     // Validate operating hours
     if (dto.operatingHours) {
-      this.validateOperatingHours(dto.operatingHours);
+      this.validateOperatingHours(dto.operatingHours as WeeklyTimings);
     }
 
     // Pre-fetch existing names to detect collisions without DB round-trips per court
@@ -196,7 +197,7 @@ export class CourtService {
             maxBookingsConcurrent: 1,
             dimensions:           null,
             status:               'available',
-            operatingHours:       (dto.operatingHours as unknown as CourtEntity['operatingHours']) ?? null,
+            operatingHours:       (dto.operatingHours as WeeklyTimings) ?? null,
             courtNumber:          item.courtNumber,
             sortOrder:            item.sortOrder,
             imageUrl:             null,
@@ -311,7 +312,7 @@ export class CourtService {
 
     // Validate operating hours if updating
     if (dto.operatingHours) {
-      this.validateOperatingHours(dto.operatingHours);
+      this.validateOperatingHours(dto.operatingHours as WeeklyTimings);
     }
 
     // Block direct status change via update — use dedicated endpoint
@@ -333,7 +334,7 @@ export class CourtService {
         ...(dto.capacity     !== undefined && { capacity: dto.capacity }),
         ...(dto.maxBookingsConcurrent !== undefined && { maxBookingsConcurrent: dto.maxBookingsConcurrent }),
         ...(dto.dimensions   !== undefined && { dimensions: dto.dimensions }),
-        ...(dto.operatingHours !== undefined && { operatingHours: dto.operatingHours }),
+        ...(dto.operatingHours !== undefined && { operatingHours: dto.operatingHours as WeeklyTimings }),
         ...(dto.sortOrder    !== undefined && { sortOrder: dto.sortOrder }),
         ...(dto.imageUrl     !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.amenities    !== undefined && { amenities: dto.amenities }),
@@ -502,13 +503,15 @@ export class CourtService {
   /**
    * Validates the operating hours object has all 7 days with valid time format.
    * Times must be HH:MM and openTime must be before closeTime for open days.
+   * Delegates to the same validation logic used by BranchService, including
+   * multi-session, break period, and maintenance block validation.
    */
-  private validateOperatingHours(hours: Record<string, unknown>): void {
+  private validateOperatingHours(hours: WeeklyTimings): void {
     const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
     for (const day of DAYS) {
-      const d = hours[day] as Record<string, unknown> | undefined;
+      const d = hours[day as keyof WeeklyTimings];
       if (!d) continue; // partial override allowed
 
       if (typeof d.openTime === 'string' && !TIME_RE.test(d.openTime)) {

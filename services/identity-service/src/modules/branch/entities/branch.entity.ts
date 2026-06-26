@@ -22,14 +22,62 @@ export type BranchStatus = 'active' | 'inactive' | 'suspended' | 'archived';
 // ── Timings ───────────────────────────────────────────────────────────────────
 
 /**
- * DayTiming — opening hours for a single day.
- * `isClosed: true` marks a day off regardless of time values.
+ * TimeRange — a start/end pair in HH:MM 24-hour format.
+ * Used for sessions, break periods, and maintenance blocks.
+ */
+export interface TimeRange {
+  start: string;   // HH:MM
+  end:   string;   // HH:MM
+}
+
+/**
+ * DaySession — a single bookable session within a day.
+ * A day may have multiple non-overlapping sessions
+ * (e.g. morning 06:00–12:00 and evening 16:00–22:00).
+ */
+export interface DaySession {
+  start:  string;         // HH:MM
+  end:    string;         // HH:MM
+  label?: string;         // optional human-readable label, e.g. "Morning session"
+  breaks?: TimeRange[];   // non-bookable break periods within this session
+}
+
+/**
+ * MaintenanceBlock — a recurring weekly maintenance window on a specific day.
+ * Distinct from court-level maintenance status; this represents a
+ * scheduled recurring block (e.g. every Monday 06:00–08:00 for resurfacing).
+ * One-off maintenance uses court status = 'maintenance' instead.
+ */
+export interface MaintenanceBlock {
+  start:  string;   // HH:MM
+  end:    string;   // HH:MM
+  reason: string;   // human-readable description, e.g. "Weekly resurfacing"
+}
+
+/**
+ * DayTiming — operating hours for a single day of the week.
+ *
+ * `isClosed: true` marks the entire day as closed.
+ *
+ * `sessions` defines one or more bookable time windows. When empty (and
+ * isClosed is false), the day is considered open all day with no session
+ * restrictions — the booking layer falls back to a single session using
+ * the legacy `openTime`/`closeTime` pair if sessions is omitted (backward
+ * compatible).
+ *
  * Times stored as HH:MM strings in 24-hour format (e.g. "09:00", "21:30").
+ *
+ * Backward compatibility: `openTime` and `closeTime` remain present as
+ * the primary/default session times. When `sessions` is populated, the
+ * booking engine uses sessions; when absent it uses openTime/closeTime.
+ * This allows a zero-downtime migration of existing branch records.
  */
 export interface DayTiming {
-  isClosed:  boolean;
-  openTime:  string;   // HH:MM
-  closeTime: string;   // HH:MM
+  isClosed:           boolean;
+  openTime:           string;              // HH:MM — primary/default open time
+  closeTime:          string;              // HH:MM — primary/default close time
+  sessions?:          DaySession[];        // multiple bookable windows per day
+  maintenanceBlocks?: MaintenanceBlock[];  // recurring weekly maintenance windows
 }
 
 /**

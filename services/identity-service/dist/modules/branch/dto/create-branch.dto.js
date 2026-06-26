@@ -9,9 +9,68 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BranchStatusDto = exports.AssignManagerDto = exports.UpdateBranchDto = exports.CreateBranchDto = exports.WeeklyTimingsDto = exports.DayTimingDto = void 0;
+exports.BranchStatusDto = exports.AssignManagerDto = exports.UpdateBranchDto = exports.CreateBranchDto = exports.WeeklyTimingsDto = exports.DayTimingDto = exports.MaintenanceBlockDto = exports.DaySessionDto = exports.TimeRangeDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
+const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const HH_MM_MSG = { message: 'Time must be in HH:MM 24-hour format (e.g. "09:00")' };
+class TimeRangeDto {
+}
+exports.TimeRangeDto = TimeRangeDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
+    __metadata("design:type", String)
+], TimeRangeDto.prototype, "start", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
+    __metadata("design:type", String)
+], TimeRangeDto.prototype, "end", void 0);
+class DaySessionDto {
+}
+exports.DaySessionDto = DaySessionDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
+    __metadata("design:type", String)
+], DaySessionDto.prototype, "start", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
+    __metadata("design:type", String)
+], DaySessionDto.prototype, "end", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(80),
+    __metadata("design:type", String)
+], DaySessionDto.prototype, "label", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => TimeRangeDto),
+    __metadata("design:type", Array)
+], DaySessionDto.prototype, "breaks", void 0);
+class MaintenanceBlockDto {
+}
+exports.MaintenanceBlockDto = MaintenanceBlockDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
+    __metadata("design:type", String)
+], MaintenanceBlockDto.prototype, "start", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
+    __metadata("design:type", String)
+], MaintenanceBlockDto.prototype, "end", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(200),
+    __metadata("design:type", String)
+], MaintenanceBlockDto.prototype, "reason", void 0);
 class DayTimingDto {
 }
 exports.DayTimingDto = DayTimingDto;
@@ -21,18 +80,28 @@ __decorate([
 ], DayTimingDto.prototype, "isClosed", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, {
-        message: 'openTime must be in HH:MM 24-hour format (e.g. "09:00")',
-    }),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
     __metadata("design:type", String)
 ], DayTimingDto.prototype, "openTime", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, {
-        message: 'closeTime must be in HH:MM 24-hour format (e.g. "17:00")',
-    }),
+    (0, class_validator_1.Matches)(HH_MM, HH_MM_MSG),
     __metadata("design:type", String)
 ], DayTimingDto.prototype, "closeTime", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => DaySessionDto),
+    __metadata("design:type", Array)
+], DayTimingDto.prototype, "sessions", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => MaintenanceBlockDto),
+    __metadata("design:type", Array)
+], DayTimingDto.prototype, "maintenanceBlocks", void 0);
 class WeeklyTimingsDto {
 }
 exports.WeeklyTimingsDto = WeeklyTimingsDto;

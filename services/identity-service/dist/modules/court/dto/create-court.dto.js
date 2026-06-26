@@ -11,6 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GenerateCourtsDto = exports.MaintenanceDto = exports.CourtStatusDto = exports.UpdateCourtDto = exports.CreateCourtDto = exports.SURFACE_TYPES = exports.COURT_TYPES = exports.COURT_STATUSES = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
+const create_branch_dto_1 = require("../../branch/dto/create-branch.dto");
 exports.COURT_STATUSES = ['available', 'unavailable', 'maintenance', 'retired'];
 exports.COURT_TYPES = ['indoor', 'outdoor'];
 exports.SURFACE_TYPES = [
@@ -87,9 +89,10 @@ __decorate([
     __metadata("design:type", Object)
 ], CreateCourtDto.prototype, "status", void 0);
 __decorate([
-    (0, class_validator_1.IsObject)(),
     (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", Object)
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => create_branch_dto_1.WeeklyTimingsDto),
+    __metadata("design:type", create_branch_dto_1.WeeklyTimingsDto)
 ], CreateCourtDto.prototype, "operatingHours", void 0);
 __decorate([
     (0, class_validator_1.IsInt)(),
@@ -185,6 +188,9 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsObject)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => create_branch_dto_1.WeeklyTimingsDto),
     __metadata("design:type", Object)
 ], UpdateCourtDto.prototype, "operatingHours", void 0);
 __decorate([
@@ -289,6 +295,9 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsObject)(),
     (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", Object)
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => create_branch_dto_1.WeeklyTimingsDto),
+    __metadata("design:type", create_branch_dto_1.WeeklyTimingsDto)
 ], GenerateCourtsDto.prototype, "operatingHours", void 0);
 //# sourceMappingURL=create-court.dto.js.map

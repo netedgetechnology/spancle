@@ -163,6 +163,52 @@ let BranchService = BranchService_1 = class BranchService {
             if (t.openTime >= t.closeTime) {
                 throw new common_1.UnprocessableEntityException(`Invalid timings for ${day}: openTime (${t.openTime}) must be before closeTime (${t.closeTime})`);
             }
+            if (t.sessions && t.sessions.length > 0) {
+                for (const [i, session] of t.sessions.entries()) {
+                    if (session.start >= session.end) {
+                        throw new common_1.UnprocessableEntityException(`${day} session[${i}]: start (${session.start}) must be before end (${session.end})`);
+                    }
+                    if (session.start < t.openTime || session.end > t.closeTime) {
+                        throw new common_1.UnprocessableEntityException(`${day} session[${i}] (${session.start}–${session.end}) must fall within ` +
+                            `operating hours (${t.openTime}–${t.closeTime})`);
+                    }
+                    if (session.breaks) {
+                        for (const [j, br] of session.breaks.entries()) {
+                            if (br.start >= br.end) {
+                                throw new common_1.UnprocessableEntityException(`${day} session[${i}] break[${j}]: start must be before end`);
+                            }
+                            if (br.start < session.start || br.end > session.end) {
+                                throw new common_1.UnprocessableEntityException(`${day} session[${i}] break[${j}] (${br.start}–${br.end}) ` +
+                                    `must fall within session (${session.start}–${session.end})`);
+                            }
+                        }
+                    }
+                }
+                const sorted = [...t.sessions].sort((a, b) => a.start.localeCompare(b.start));
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    const cur = sorted[i];
+                    const next = sorted[i + 1];
+                    if (cur.end > next.start) {
+                        throw new common_1.UnprocessableEntityException(`${day}: sessions overlap — session ending at ${cur.end} ` +
+                            `conflicts with session starting at ${next.start}`);
+                    }
+                }
+            }
+            if (t.maintenanceBlocks && t.maintenanceBlocks.length > 0) {
+                for (const [i, block] of t.maintenanceBlocks.entries()) {
+                    if (block.start >= block.end) {
+                        throw new common_1.UnprocessableEntityException(`${day} maintenanceBlock[${i}]: start must be before end`);
+                    }
+                }
+                const sortedBlocks = [...t.maintenanceBlocks].sort((a, b) => a.start.localeCompare(b.start));
+                for (let i = 0; i < sortedBlocks.length - 1; i++) {
+                    const cur = sortedBlocks[i];
+                    const next = sortedBlocks[i + 1];
+                    if (cur.end > next.start) {
+                        throw new common_1.UnprocessableEntityException(`${day}: maintenance blocks overlap at ${cur.end}`);
+                    }
+                }
+            }
         }
     }
     async emit(event, payload) {

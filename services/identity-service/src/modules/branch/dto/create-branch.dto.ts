@@ -23,25 +23,101 @@ import { Transform, Type } from 'class-transformer';
 
 // ── Day timing sub-DTO ────────────────────────────────────────────────────────
 
+// ── Time range sub-DTO ────────────────────────────────────────────────────────
+
+const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const HH_MM_MSG = { message: 'Time must be in HH:MM 24-hour format (e.g. "09:00")' };
+
+export class TimeRangeDto {
+  @IsString()
+  @Matches(HH_MM, HH_MM_MSG)
+  start!: string;
+
+  @IsString()
+  @Matches(HH_MM, HH_MM_MSG)
+  end!: string;
+}
+
+// ── Day session sub-DTO ───────────────────────────────────────────────────────
+
+export class DaySessionDto {
+  @IsString()
+  @Matches(HH_MM, HH_MM_MSG)
+  start!: string;
+
+  @IsString()
+  @Matches(HH_MM, HH_MM_MSG)
+  end!: string;
+
+  /** Optional human-readable label, e.g. "Morning session" */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  label?: string;
+
+  /** Non-bookable break periods within this session */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TimeRangeDto)
+  breaks?: TimeRangeDto[];
+}
+
+// ── Maintenance block sub-DTO ─────────────────────────────────────────────────
+
+export class MaintenanceBlockDto {
+  @IsString()
+  @Matches(HH_MM, HH_MM_MSG)
+  start!: string;
+
+  @IsString()
+  @Matches(HH_MM, HH_MM_MSG)
+  end!: string;
+
+  @IsString()
+  @MaxLength(200)
+  reason!: string;
+}
+
+// ── Day timing sub-DTO ────────────────────────────────────────────────────────
+
 export class DayTimingDto {
   @IsEnum([true, false])
   isClosed!: boolean;
 
   /**
-   * HH:MM 24-hour format — e.g. "09:00", "21:30"
-   * Required even when isClosed: true (preserves the time for when re-opened).
+   * HH:MM 24-hour format — primary/default open time.
+   * Required even when isClosed: true (preserves time for when re-opened).
+   * When sessions[] is also provided, the booking engine uses sessions instead.
    */
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
-    message: 'openTime must be in HH:MM 24-hour format (e.g. "09:00")',
-  })
+  @Matches(HH_MM, HH_MM_MSG)
   openTime!: string;
 
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
-    message: 'closeTime must be in HH:MM 24-hour format (e.g. "17:00")',
-  })
+  @Matches(HH_MM, HH_MM_MSG)
   closeTime!: string;
+
+  /**
+   * Optional: multiple bookable sessions per day.
+   * When omitted, a single session from openTime to closeTime is implied.
+   * Sessions must not overlap (validated at service layer).
+   */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DaySessionDto)
+  sessions?: DaySessionDto[];
+
+  /**
+   * Optional: recurring weekly maintenance windows on this day.
+   * Distinct from one-off court-level maintenance (use court status for that).
+   */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MaintenanceBlockDto)
+  maintenanceBlocks?: MaintenanceBlockDto[];
 }
 
 // ── Weekly timings sub-DTO ────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ import type {
   AssignManagerDto,
   BranchStatusDto,
 } from '../dto/create-branch.dto';
-import type { BranchEntity } from '../entities/branch.entity';
+import type { BranchEntity, WeeklyTimings } from '../entities/branch.entity';
 import {
   BranchEventNames,
   type BranchEventPayload,
@@ -63,7 +63,7 @@ export class BranchService {
 
     // Timing validation
     const timings = dto.timings ?? DEFAULT_TIMINGS;
-    this.validateTimings(timings as unknown as Record<string, { isClosed: boolean; openTime: string; closeTime: string }>);
+    this.validateTimings(timings as WeeklyTimings);
 
     const branch = await this.branchRepository.insert(
       {
@@ -145,7 +145,7 @@ export class BranchService {
 
     // Validate timing if provided
     if (dto.timings) {
-      this.validateTimings(dto.timings as unknown as Record<string, { isClosed: boolean; openTime: string; closeTime: string }>);
+      this.validateTimings(dto.timings as WeeklyTimings);
     }
 
     // Manager cross-tenant check
@@ -286,18 +286,93 @@ export class BranchService {
   /**
    * Validates that each day's openTime < closeTime (when not closed).
    * Times are HH:MM strings; lexicographic comparison is valid for 24h format.
+   *
+   * Validates:
+   *   - openTime < closeTime for the primary window
+   *   - Each session: start < end, sessions fall within primary window
+   *   - Sessions do not overlap each other
+   *   - Breaks fall within their containing session
+   *   - Maintenance blocks: start < end, do not overlap each other
    */
-  private validateTimings(timings: Record<string, { isClosed: boolean; openTime: string; closeTime: string }>): void {
-    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  private validateTimings(timings: WeeklyTimings): void {
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
     for (const day of DAYS) {
       const t = timings[day];
       if (!t || t.isClosed) continue;
 
+      // Primary window
       if (t.openTime >= t.closeTime) {
         throw new UnprocessableEntityException(
           `Invalid timings for ${day}: openTime (${t.openTime}) must be before closeTime (${t.closeTime})`,
         );
+      }
+
+      // Validate sessions
+      if (t.sessions && t.sessions.length > 0) {
+        for (const [i, session] of t.sessions.entries()) {
+          if (session.start >= session.end) {
+            throw new UnprocessableEntityException(
+              `${day} session[${i}]: start (${session.start}) must be before end (${session.end})`,
+            );
+          }
+          if (session.start < t.openTime || session.end > t.closeTime) {
+            throw new UnprocessableEntityException(
+              `${day} session[${i}] (${session.start}–${session.end}) must fall within ` +
+              `operating hours (${t.openTime}–${t.closeTime})`,
+            );
+          }
+          // Breaks must fall within session
+          if (session.breaks) {
+            for (const [j, br] of session.breaks.entries()) {
+              if (br.start >= br.end) {
+                throw new UnprocessableEntityException(
+                  `${day} session[${i}] break[${j}]: start must be before end`,
+                );
+              }
+              if (br.start < session.start || br.end > session.end) {
+                throw new UnprocessableEntityException(
+                  `${day} session[${i}] break[${j}] (${br.start}–${br.end}) ` +
+                  `must fall within session (${session.start}–${session.end})`,
+                );
+              }
+            }
+          }
+        }
+        // Sessions must not overlap
+        const sorted = [...t.sessions].sort((a, b) => a.start.localeCompare(b.start));
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const cur  = sorted[i]!;
+          const next = sorted[i + 1]!;
+          if (cur.end > next.start) {
+            throw new UnprocessableEntityException(
+              `${day}: sessions overlap — session ending at ${cur.end} ` +
+              `conflicts with session starting at ${next.start}`,
+            );
+          }
+        }
+      }
+
+      // Validate maintenance blocks
+      if (t.maintenanceBlocks && t.maintenanceBlocks.length > 0) {
+        for (const [i, block] of t.maintenanceBlocks.entries()) {
+          if (block.start >= block.end) {
+            throw new UnprocessableEntityException(
+              `${day} maintenanceBlock[${i}]: start must be before end`,
+            );
+          }
+        }
+        // Maintenance blocks must not overlap
+        const sortedBlocks = [...t.maintenanceBlocks].sort((a, b) => a.start.localeCompare(b.start));
+        for (let i = 0; i < sortedBlocks.length - 1; i++) {
+          const cur  = sortedBlocks[i]!;
+          const next = sortedBlocks[i + 1]!;
+          if (cur.end > next.start) {
+            throw new UnprocessableEntityException(
+              `${day}: maintenance blocks overlap at ${cur.end}`,
+            );
+          }
+        }
       }
     }
   }
