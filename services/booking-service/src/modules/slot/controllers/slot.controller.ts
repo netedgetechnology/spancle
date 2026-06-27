@@ -13,7 +13,8 @@ import { AvailabilityService }  from '../services/availability.service';
 import { CreateSlotDto }   from '../dto/create-slot.dto';
 import { UpdateSlotDto }   from '../dto/update-slot.dto';
 import { GenerateSlotsDto } from '../dto/generate-slots.dto';
-import { QuerySlotsDto }   from '../dto/query-slots.dto';
+import { QuerySlotsDto }           from '../dto/query-slots.dto';
+import { AvailabilityQueryDto }    from '../dto/availability-query.dto';
 
 /**
  * SlotController — slot management + generation + availability endpoints.
@@ -64,13 +65,13 @@ export class SlotController {
 
   @Get('availability')
   getAvailability(
-    @Query() query: QuerySlotsDto,
+    @Query() query: AvailabilityQueryDto,
     @TenantCtx() tenant: TenantContext,
   ) {
     return this.availabilityService.getAvailableSlots({
       tenantId:  tenant.tenantId,
-      courtId:   query.courtId!,
-      branchId:  query.branchId!,
+      courtId:   query.courtId,
+      branchId:  query.branchId,
       sportId:   query.sportId,
       from:      query.from ? new Date(query.from) : new Date(),
       to:        query.to   ? new Date(query.to)   : new Date(Date.now() + 7 * 86_400_000),

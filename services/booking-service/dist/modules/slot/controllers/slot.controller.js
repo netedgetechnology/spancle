@@ -24,6 +24,7 @@ const create_slot_dto_1 = require("../dto/create-slot.dto");
 const update_slot_dto_1 = require("../dto/update-slot.dto");
 const generate_slots_dto_1 = require("../dto/generate-slots.dto");
 const query_slots_dto_1 = require("../dto/query-slots.dto");
+const availability_query_dto_1 = require("../dto/availability-query.dto");
 let SlotController = class SlotController {
     constructor(slotService, generatorService, availabilityService) {
         this.slotService = slotService;
@@ -107,7 +108,7 @@ __decorate([
     __param(0, (0, common_1.Query)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [query_slots_dto_1.QuerySlotsDto, Object]),
+    __metadata("design:paramtypes", [availability_query_dto_1.AvailabilityQueryDto, Object]),
     __metadata("design:returntype", void 0)
 ], SlotController.prototype, "getAvailability", null);
 __decorate([
