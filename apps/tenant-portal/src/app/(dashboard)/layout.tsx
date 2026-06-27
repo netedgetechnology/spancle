@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { label: 'Courts',       href: '/courts'       },
   { label: 'Pricing',      href: '/pricing'      },
   { label: 'Rate Cards',   href: '/rate-cards'   },
+  { label: 'Book Court',   href: '/booking'      },
+  { label: 'Bookings',     href: '/bookings'     },
   { label: 'Calendar',     href: '/calendar'     },
   { label: 'Blog',         href: '/blog'         },
   { label: 'Homepage',     href: '/homepage'     },
