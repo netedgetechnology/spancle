@@ -122,6 +122,10 @@ CREATE INDEX IF NOT EXISTS idx_slots_tenant_status      ON slots (tenant_id, sta
 CREATE INDEX IF NOT EXISTS idx_slots_tenant_branch      ON slots (tenant_id, branch_id) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_slots_booking_id         ON slots (booking_id) WHERE booking_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_slots_start_end          ON slots (tenant_id, court_id, start_at, end_at) WHERE is_deleted = FALSE;
+-- Overlap query filter: (tenant_id, court_id, status, start_at, end_at) — used by countOverlapping
+CREATE INDEX IF NOT EXISTS idx_slots_overlap_check       ON slots (tenant_id, court_id, status, start_at, end_at) WHERE is_deleted = FALSE;
+-- Stale reservation expiry job: finds reserved slots past reservedUntil
+CREATE INDEX IF NOT EXISTS idx_slots_reserved_until      ON slots (tenant_id, reserved_until) WHERE status = 'reserved' AND reserved_until IS NOT NULL;
 
 -- ── blackouts ─────────────────────────────────────────────────────────────────
 
@@ -236,6 +240,10 @@ CREATE INDEX IF NOT EXISTS idx_bookings_tenant_branch  ON bookings (tenant_id, b
 CREATE INDEX IF NOT EXISTS idx_bookings_tenant_court   ON bookings (tenant_id, court_id)  WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_bookings_tenant_user    ON bookings (tenant_id, user_id)   WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_bookings_tenant_created ON bookings (tenant_id, created_at);
+-- Date-range booking list queries: starts_at for calendar/reporting
+CREATE INDEX IF NOT EXISTS idx_bookings_tenant_starts_at ON bookings (tenant_id, starts_at) WHERE is_deleted = FALSE;
+-- Overlap check for confirmed/pending bookings: (court_id, status, starts_at, ends_at)
+CREATE INDEX IF NOT EXISTS idx_bookings_overlap_check    ON bookings (tenant_id, court_id, status, starts_at, ends_at) WHERE is_deleted = FALSE;
 
 -- ── booking_logs ──────────────────────────────────────────────────────────────
 

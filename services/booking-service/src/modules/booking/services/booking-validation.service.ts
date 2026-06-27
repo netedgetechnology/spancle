@@ -18,8 +18,10 @@ export interface SlotInfo {
   status:      string;
   maxBookings: number;
   currentBookings: number;
-  resolvedPriceMinor: number | null;
-  currency:    string;
+  resolvedPriceMinor:  number | null;
+  priceOverrideMinor:  number | null;
+  effectivePriceMinor: number | null;  // priceOverrideMinor ?? resolvedPriceMinor
+  currency:            string;
 }
 
 @Injectable()
@@ -89,8 +91,10 @@ export class BookingValidationService {
         status:      slot.status,
         maxBookings: slot.maxBookings,
         currentBookings: slot.currentBookings,
-        resolvedPriceMinor: slot.resolvedPriceMinor,
-        currency:    slot.currency,
+        resolvedPriceMinor:  slot.resolvedPriceMinor,
+        priceOverrideMinor:  slot.priceOverrideMinor,
+        effectivePriceMinor: slot.priceOverrideMinor ?? slot.resolvedPriceMinor,
+        currency:            slot.currency,
       });
     }
 

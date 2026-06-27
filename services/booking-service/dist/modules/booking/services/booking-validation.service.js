@@ -53,6 +53,8 @@ let BookingValidationService = BookingValidationService_1 = class BookingValidat
                 maxBookings: slot.maxBookings,
                 currentBookings: slot.currentBookings,
                 resolvedPriceMinor: slot.resolvedPriceMinor,
+                priceOverrideMinor: slot.priceOverrideMinor,
+                effectivePriceMinor: slot.priceOverrideMinor ?? slot.resolvedPriceMinor,
                 currency: slot.currency,
             });
         }

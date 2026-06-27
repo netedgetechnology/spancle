@@ -82,8 +82,8 @@ let BookingService = BookingService_1 = class BookingService {
         const startsAt = sortedSlots[0].startAt;
         const endsAt = sortedSlots[sortedSlots.length - 1].endAt;
         const totalMins = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
-        const totalPrice = slots.every((s) => s.resolvedPriceMinor !== null)
-            ? slots.reduce((s, sl) => s + (sl.resolvedPriceMinor ?? 0), 0)
+        const totalPrice = slots.every((s) => s.effectivePriceMinor !== null)
+            ? slots.reduce((s, sl) => s + (sl.effectivePriceMinor ?? 0), 0)
             : null;
         const currency = slots[0].currency;
         const reference = booking_utils_1.BookingUtils.generateReference();
@@ -242,8 +242,8 @@ let BookingService = BookingService_1 = class BookingService {
         const newStart = sortedNew[0].startAt;
         const newEnd = sortedNew[sortedNew.length - 1].endAt;
         const newMins = newSlots.reduce((s, sl) => s + sl.durationMins, 0);
-        const newPrice = newSlots.every((s) => s.resolvedPriceMinor !== null)
-            ? newSlots.reduce((s, sl) => s + (sl.resolvedPriceMinor ?? 0), 0)
+        const newPrice = newSlots.every((s) => s.effectivePriceMinor !== null)
+            ? newSlots.reduce((s, sl) => s + (sl.effectivePriceMinor ?? 0), 0)
             : null;
         const previousSlotIds = [...booking.slotIds];
         const updated = await this.dataSource.transaction(async (manager) => {
@@ -259,14 +259,16 @@ let BookingService = BookingService_1 = class BookingService {
                     status: 'booked', bookingId: id, reservedUntil: null, updatedAt: new Date(),
                 });
             }
-            return this.bookingRepository.updateById(id, tenantId, {
+            await manager.update(booking_entity_1.BookingEntity, { id, tenantId }, {
                 slotIds: dto.newSlotIds,
                 startsAt: newStart,
                 endsAt: newEnd,
                 totalDurationMins: newMins,
                 finalPriceMinor: newPrice,
                 updatedById: actorId,
+                updatedAt: new Date(),
             });
+            return manager.findOneOrFail(booking_entity_1.BookingEntity, { where: { id, tenantId } });
         });
         await this.logRepository.insert({
             tenantId, bookingId: id, action: 'rescheduled',
