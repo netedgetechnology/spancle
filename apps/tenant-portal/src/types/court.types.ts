@@ -85,6 +85,7 @@ export interface Court {
   imageUrl:               string | null;
   amenities:              string[] | null;
   hourlyRateMinor:        number | null;
+  rateCardId:             string | null;
   isDeleted:              boolean;
   createdAt:              string;
   updatedAt:              string;
@@ -117,6 +118,7 @@ export interface CourtFormValues {
   imageUrl:              string;
   amenities:             string;
   hourlyRateMinor:       string;
+  rateCardId:            string;
 }
 
 export interface GenerateFormValues {
@@ -138,7 +140,7 @@ export const EMPTY_COURT_FORM: CourtFormValues = {
   courtType: 'indoor', surfaceType: 'hard_court',
   capacity: '', maxBookingsConcurrent: '1', dimensions: '',
   status: 'available', operatingHours: null,
-  sortOrder: 0, imageUrl: '', amenities: '', hourlyRateMinor: '',
+  sortOrder: 0, imageUrl: '', amenities: '', hourlyRateMinor: '', rateCardId: '',
 };
 
 export function courtToFormValues(court: Court): CourtFormValues {
@@ -159,6 +161,7 @@ export function courtToFormValues(court: Court): CourtFormValues {
     imageUrl:              court.imageUrl               ?? '',
     amenities:             court.amenities?.join(', ')  ?? '',
     hourlyRateMinor:       court.hourlyRateMinor        != null ? String(court.hourlyRateMinor) : '',
+    rateCardId:            court.rateCardId             ?? '',
   };
 }
 

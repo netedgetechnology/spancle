@@ -124,6 +124,11 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], CreateCourtDto.prototype, "hourlyRateMinor", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CreateCourtDto.prototype, "rateCardId", void 0);
 class UpdateCourtDto {
 }
 exports.UpdateCourtDto = UpdateCourtDto;
@@ -217,6 +222,11 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], UpdateCourtDto.prototype, "hourlyRateMinor", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], UpdateCourtDto.prototype, "rateCardId", void 0);
 class CourtStatusDto {
 }
 exports.CourtStatusDto = CourtStatusDto;

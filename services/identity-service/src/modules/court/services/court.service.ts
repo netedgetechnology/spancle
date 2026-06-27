@@ -339,6 +339,7 @@ export class CourtService {
         ...(dto.imageUrl     !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.amenities    !== undefined && { amenities: dto.amenities }),
         ...(dto.hourlyRateMinor !== undefined && { hourlyRateMinor: dto.hourlyRateMinor }),
+      ...(dto.rateCardId     !== undefined && { rateCardId: dto.rateCardId }),
       } as Parameters<typeof this.courtRepository.updateById>[1],
       tenantId,
     );

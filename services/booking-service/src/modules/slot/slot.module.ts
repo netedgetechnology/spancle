@@ -7,6 +7,10 @@ import { SlotEntity }         from './entities/slot.entity';
 import { SlotTemplateEntity } from './entities/slot-template.entity';
 import { PricingRuleEntity }  from './entities/pricing-rule.entity';
 import { BlackoutEntity }     from './entities/blackout.entity';
+import { RateCardEntity }     from './entities/rate-card.entity';
+import { RateCardRepository } from './repositories/rate-card.repository';
+import { RateCardService }    from './services/rate-card.service';
+import { RateCardController } from './controllers/rate-card.controller';
 import { HolidayEntity }      from './entities/holiday.entity';
 
 // Repositories
@@ -50,11 +54,13 @@ import { HolidayController }      from './controllers/holiday.controller';
       SlotTemplateEntity,
       PricingRuleEntity,
       BlackoutEntity,
+      RateCardEntity,
       HolidayEntity,
     ]),
     HttpModule.register({ timeout: 5_000, maxRedirects: 0 }),
   ],
   controllers: [
+    RateCardController,
     SlotController,
     SlotTemplateController,
     PricingRuleController,
@@ -62,6 +68,8 @@ import { HolidayController }      from './controllers/holiday.controller';
     HolidayController,
   ],
   providers: [
+    RateCardRepository,
+    RateCardService,
     // Repositories
     SlotRepository,
     SlotTemplateRepository,
@@ -77,6 +85,7 @@ import { HolidayController }      from './controllers/holiday.controller';
     HolidayService,
   ],
   exports: [
+    RateCardService,
     SlotService,
     AvailabilityService,
     PricingService,

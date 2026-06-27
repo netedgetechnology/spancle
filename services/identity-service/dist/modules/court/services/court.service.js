@@ -239,6 +239,7 @@ let CourtService = CourtService_1 = class CourtService {
             ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
             ...(dto.amenities !== undefined && { amenities: dto.amenities }),
             ...(dto.hourlyRateMinor !== undefined && { hourlyRateMinor: dto.hourlyRateMinor }),
+            ...(dto.rateCardId !== undefined && { rateCardId: dto.rateCardId }),
         }, tenantId);
         await this.emit(court_events_1.CourtEventNames.UPDATED, {
             tenantId, courtId: id, branchId: court.branchId, actorId,

@@ -189,6 +189,16 @@ export class CourtEntity {
   @Column({ name: 'hourly_rate_minor', type: 'int', nullable: true })
   hourlyRateMinor!: number | null;
 
+  /**
+   * Rate Card assignment — FK → rate_cards.id in booking-service.
+   * Not a DB-level FK (cross-service boundary). Validated at application layer
+   * by calling booking-service before persisting.
+   * When set, the Rate Card drives base pricing instead of hourlyRateMinor.
+   * Null = no Rate Card assigned; hourlyRateMinor is used as flat base rate.
+   */
+  @Column({ name: 'rate_card_id', type: 'uuid', nullable: true })
+  rateCardId!: string | null;
+
   @Column({ name: 'is_deleted', type: 'boolean', default: false })
   isDeleted!: boolean;
 

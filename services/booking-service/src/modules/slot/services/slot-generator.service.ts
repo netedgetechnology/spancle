@@ -330,6 +330,7 @@ export class SlotGeneratorService {
     courtType:            string;
     operatingHours:       DayTimingMap | null;
     hourlyRateMinor:      number | null;
+    rateCardId:           string | null;
     maxBookingsConcurrent: number;
     branch?: {
       timings: DayTimingMap;

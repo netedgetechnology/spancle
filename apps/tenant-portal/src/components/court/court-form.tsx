@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils/cn';
-import { BranchTimingsEditor } from '@/components/branch/branch-timings-editor';
+import { BranchTimingsEditor }   from '@/components/branch/branch-timings-editor';
+import { fetchRateCards, rateCardKeys } from '@/lib/rate-card.api';
 import { fetchBranches, branchKeys } from '@/lib/branch.api';
 import { fetchSports,   sportKeys }  from '@/lib/sport.api';
 import { DEFAULT_TIMINGS, type WeeklyTimings } from '@/types/branch.types';
@@ -44,6 +45,12 @@ export function CourtForm({
   isSaving = false,
 }: CourtFormProps): React.ReactElement {
   const isEdit = !!court;
+
+  const { data: rateCardsData } = useQuery({
+    queryKey: rateCardKeys.list({ isActive: true }),
+    queryFn:  () => fetchRateCards({ isActive: true }),
+  });
+  const rateCards = rateCardsData?.data ?? [];
 
   const [form, setForm] = useState<CourtFormValues>(
     court
@@ -291,6 +298,26 @@ export function CourtForm({
                 = {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 0 }).format(Number(form.hourlyRateMinor) / 100)}/hr
               </p>
             )}
+          </div>
+
+          {/* Rate Card assignment */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Rate Card</label>
+            <select
+              value={form.rateCardId}
+              onChange={(e) => set('rateCardId', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200 bg-white"
+            >
+              <option value="">No rate card (use hourly rate above)</option>
+              {rateCards.map((rc) => (
+                <option key={rc.id} value={rc.id}>
+                  {rc.name} ({rc.currency})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">
+              When assigned, Rate Card pricing overrides the hourly rate for this court
+            </p>
           </div>
         </div>
       </section>

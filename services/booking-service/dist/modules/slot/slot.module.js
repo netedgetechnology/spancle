@@ -14,6 +14,10 @@ const slot_entity_1 = require("./entities/slot.entity");
 const slot_template_entity_1 = require("./entities/slot-template.entity");
 const pricing_rule_entity_1 = require("./entities/pricing-rule.entity");
 const blackout_entity_1 = require("./entities/blackout.entity");
+const rate_card_entity_1 = require("./entities/rate-card.entity");
+const rate_card_repository_1 = require("./repositories/rate-card.repository");
+const rate_card_service_1 = require("./services/rate-card.service");
+const rate_card_controller_1 = require("./controllers/rate-card.controller");
 const holiday_entity_1 = require("./entities/holiday.entity");
 const slot_repository_1 = require("./repositories/slot.repository");
 const slot_template_repository_1 = require("./repositories/slot-template.repository");
@@ -42,11 +46,13 @@ exports.SlotModule = SlotModule = __decorate([
                 slot_template_entity_1.SlotTemplateEntity,
                 pricing_rule_entity_1.PricingRuleEntity,
                 blackout_entity_1.BlackoutEntity,
+                rate_card_entity_1.RateCardEntity,
                 holiday_entity_1.HolidayEntity,
             ]),
             axios_1.HttpModule.register({ timeout: 5_000, maxRedirects: 0 }),
         ],
         controllers: [
+            rate_card_controller_1.RateCardController,
             slot_controller_1.SlotController,
             slot_template_controller_1.SlotTemplateController,
             pricing_rule_controller_1.PricingRuleController,
@@ -54,6 +60,8 @@ exports.SlotModule = SlotModule = __decorate([
             holiday_controller_1.HolidayController,
         ],
         providers: [
+            rate_card_repository_1.RateCardRepository,
+            rate_card_service_1.RateCardService,
             slot_repository_1.SlotRepository,
             slot_template_repository_1.SlotTemplateRepository,
             pricing_rule_repository_1.PricingRuleRepository,
@@ -67,6 +75,7 @@ exports.SlotModule = SlotModule = __decorate([
             holiday_service_1.HolidayService,
         ],
         exports: [
+            rate_card_service_1.RateCardService,
             slot_service_1.SlotService,
             availability_service_1.AvailabilityService,
             pricing_service_1.PricingService,

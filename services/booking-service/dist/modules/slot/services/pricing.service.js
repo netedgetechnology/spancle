@@ -14,11 +14,15 @@ exports.PricingService = void 0;
 const common_1 = require("@nestjs/common");
 const pricing_rule_repository_1 = require("../repositories/pricing-rule.repository");
 const holiday_repository_1 = require("../repositories/holiday.repository");
+const rate_card_repository_1 = require("../repositories/rate-card.repository");
+const rate_card_service_1 = require("./rate-card.service");
 const slot_utils_1 = require("../utils/slot.utils");
 let PricingService = PricingService_1 = class PricingService {
-    constructor(pricingRuleRepository, holidayRepository) {
+    constructor(pricingRuleRepository, holidayRepository, rateCardService, rateCardRepository) {
         this.pricingRuleRepository = pricingRuleRepository;
         this.holidayRepository = holidayRepository;
+        this.rateCardService = rateCardService;
+        this.rateCardRepository = rateCardRepository;
         this.logger = new common_1.Logger(PricingService_1.name);
     }
     async resolve(ctx) {
@@ -37,7 +41,10 @@ let PricingService = PricingService_1 = class PricingService {
             }),
             this.holidayRepository.isHoliday(ctx.tenantId, slotDate),
         ]);
-        const proportionalBase = this.computeProportionalBase(ctx.courtHourlyRateMinor, ctx.durationMins);
+        const hourlyRateMinor = ctx.rateCardId
+            ? await this.resolveRateCardBase(ctx.rateCardId, ctx.tenantId, slotDate, dayOfWeek, ctx.startAt.getUTCHours())
+            : ctx.courtHourlyRateMinor;
+        const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
         return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
     }
     async resolveBatch(slots) {
@@ -62,7 +69,10 @@ let PricingService = PricingService_1 = class PricingService {
                 slotTime,
                 dayOfWeek,
             });
-            const proportionalBase = this.computeProportionalBase(ctx.courtHourlyRateMinor, ctx.durationMins);
+            const hourlyRateMinor = ctx.rateCardId
+                ? await this.resolveRateCardBase(ctx.rateCardId, ctx.tenantId, slotDate, dayOfWeek, ctx.startAt.getUTCHours())
+                : ctx.courtHourlyRateMinor;
+            const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
             return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
         }));
     }
@@ -161,6 +171,18 @@ let PricingService = PricingService_1 = class PricingService {
             breakdown,
         };
     }
+    async resolveRateCardBase(rateCardId, tenantId, date, dayName, hour) {
+        try {
+            const card = await this.rateCardRepository.findById(rateCardId, tenantId);
+            if (!card || !card.isActive)
+                return null;
+            return this.rateCardService.resolveBasePrice(card, date, dayName, hour);
+        }
+        catch {
+            this.logger.warn(`Rate card ${rateCardId} not found for tenant ${tenantId} — falling back to null base`);
+            return null;
+        }
+    }
     computeProportionalBase(hourlyRateMinor, durationMins) {
         if (hourlyRateMinor == null)
             return null;
@@ -247,6 +269,8 @@ exports.PricingService = PricingService;
 exports.PricingService = PricingService = PricingService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [pricing_rule_repository_1.PricingRuleRepository,
-        holiday_repository_1.HolidayRepository])
+        holiday_repository_1.HolidayRepository,
+        rate_card_service_1.RateCardService,
+        rate_card_repository_1.RateCardRepository])
 ], PricingService);
 //# sourceMappingURL=pricing.service.js.map

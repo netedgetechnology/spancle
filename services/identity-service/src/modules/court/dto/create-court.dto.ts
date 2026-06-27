@@ -137,6 +137,12 @@ export class CreateCourtDto {
   @Min(0)
   @IsOptional()
   hourlyRateMinor?: number;
+
+  /** Rate Card ID from booking-service. When set, drives base pricing for this court. */
+  @IsUUID()
+  @IsOptional()
+  rateCardId?: string | null;
+
 }
 
 // ── UpdateCourtDto ────────────────────────────────────────────────────────────
@@ -216,6 +222,12 @@ export class UpdateCourtDto {
   @Min(0)
   @IsOptional()
   hourlyRateMinor?: number;
+
+  /** Rate Card ID from booking-service. When set, drives base pricing for this court. */
+  @IsUUID()
+  @IsOptional()
+  rateCardId?: string | null;
+
 }
 
 // ── CourtStatusDto ────────────────────────────────────────────────────────────

@@ -121,6 +121,10 @@ __decorate([
     __metadata("design:type", Object)
 ], CourtEntity.prototype, "hourlyRateMinor", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'rate_card_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], CourtEntity.prototype, "rateCardId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'is_deleted', type: 'boolean', default: false }),
     __metadata("design:type", Boolean)
 ], CourtEntity.prototype, "isDeleted", void 0);

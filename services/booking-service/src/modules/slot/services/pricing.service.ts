@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PricingRuleRepository } from '../repositories/pricing-rule.repository';
 import { HolidayRepository }     from '../repositories/holiday.repository';
+import { RateCardRepository }    from '../repositories/rate-card.repository';
+import { RateCardService }       from './rate-card.service';
 import type { PricingRuleEntity } from '../entities/pricing-rule.entity';
 import { SlotUtils }              from '../utils/slot.utils';
 import type {
@@ -37,6 +39,8 @@ export interface SlotPricingContext {
   startAt:              Date;
   durationMins:         number;
   courtHourlyRateMinor: number | null;
+  /** Rate Card ID if the court has one assigned (overrides courtHourlyRateMinor for base price) */
+  rateCardId?:          string | null;
   /** Whether the booker is a member — enables member-type rules */
   isMember:             boolean;
   /** ISO-4217 currency for formatting (default: 'GBP') */
@@ -94,6 +98,8 @@ export class PricingService {
   constructor(
     private readonly pricingRuleRepository: PricingRuleRepository,
     private readonly holidayRepository:     HolidayRepository,
+    private readonly rateCardService:       RateCardService,
+    private readonly rateCardRepository:    RateCardRepository,
   ) {}
 
   // ── Single slot resolution ─────────────────────────────────────────────────
@@ -116,10 +122,11 @@ export class PricingService {
       this.holidayRepository.isHoliday(ctx.tenantId, slotDate),
     ]);
 
-    const proportionalBase = this.computeProportionalBase(
-      ctx.courtHourlyRateMinor, ctx.durationMins,
-    );
+    const hourlyRateMinor = ctx.rateCardId
+      ? await this.resolveRateCardBase(ctx.rateCardId, ctx.tenantId, slotDate, dayOfWeek, ctx.startAt.getUTCHours())
+      : ctx.courtHourlyRateMinor;
 
+    const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
     return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
   }
 
@@ -169,10 +176,11 @@ export class PricingService {
           dayOfWeek,
         });
 
-        const proportionalBase = this.computeProportionalBase(
-          ctx.courtHourlyRateMinor, ctx.durationMins,
-        );
+        const hourlyRateMinor = ctx.rateCardId
+          ? await this.resolveRateCardBase(ctx.rateCardId, ctx.tenantId, slotDate, dayOfWeek, ctx.startAt.getUTCHours())
+          : ctx.courtHourlyRateMinor;
 
+        const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
         return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
       }),
     );
@@ -318,6 +326,27 @@ export class PricingService {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /**
+   * Resolves the hourly rate from a Rate Card for a specific date/hour.
+   * Returns null if card not found (falls back gracefully to 0 base).
+   */
+  private async resolveRateCardBase(
+    rateCardId: string,
+    tenantId:   string,
+    date:       string,
+    dayName:    string,
+    hour:       number,
+  ): Promise<number | null> {
+    try {
+      const card = await this.rateCardRepository.findById(rateCardId, tenantId);
+      if (!card || !card.isActive) return null;
+      return this.rateCardService.resolveBasePrice(card, date, dayName, hour);
+    } catch {
+      this.logger.warn(`Rate card ${rateCardId} not found for tenant ${tenantId} — falling back to null base`);
+      return null;
+    }
+  }
 
   private computeProportionalBase(
     hourlyRateMinor: number | null,
