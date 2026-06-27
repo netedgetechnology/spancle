@@ -215,9 +215,11 @@ export class PricingService {
       this.holidayRepository.isHoliday(tenantId, slotDate),
     ]);
 
-    const proportionalBase = this.computeProportionalBase(
-      dto.courtHourlyRateMinor ?? null, dto.durationMins,
-    );
+    const hourlyRateMinor = dto.rateCardId
+      ? await this.resolveRateCardBase(dto.rateCardId, tenantId, slotDate, dayOfWeek, startAt.getUTCHours())
+      : (dto.courtHourlyRateMinor ?? null);
+
+    const proportionalBase = this.computeProportionalBase(hourlyRateMinor, dto.durationMins);
 
     const result = this.runPipeline(
       matchingRules,

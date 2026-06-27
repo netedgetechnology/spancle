@@ -61,6 +61,15 @@ export class PricingPreviewDto {
   courtHourlyRateMinor?: number | null;
 
   /**
+   * Rate Card ID assigned to the court (from booking-service).
+   * When provided, Rate Card pricing takes priority over courtHourlyRateMinor.
+   * Pass the court's rateCardId if one is assigned.
+   */
+  @IsUUID()
+  @IsOptional()
+  rateCardId?: string | null;
+
+  /**
    * Whether the hypothetical booker is a member.
    * When true, member-type pricing rules are included in the pipeline.
    * Default: false.

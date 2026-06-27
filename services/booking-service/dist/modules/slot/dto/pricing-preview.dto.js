@@ -44,6 +44,11 @@ __decorate([
     __metadata("design:type", Object)
 ], PricingPreviewDto.prototype, "courtHourlyRateMinor", void 0);
 __decorate([
+    (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], PricingPreviewDto.prototype, "rateCardId", void 0);
+__decorate([
     (0, class_validator_1.IsBoolean)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Boolean)

@@ -46,8 +46,8 @@ function DayHourGrid({
     onChange([...next.entries()].map(([h, p]) => ({ hour: h, priceMinor: p })));
   };
 
-  // Business hours 6–23 as rows in groups of 6
-  const hours = Array.from({ length: 18 }, (_, i) => i + 6);
+  // Full 24-hour grid 0–23
+  const hours = Array.from({ length: 24 }, (_, i) => i);
 
   return (
     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
@@ -119,9 +119,9 @@ function DateOverrideRow({
       </div>
       {!override.allDay && (
         <div>
-          <p className="text-[10px] text-gray-400 mb-1.5">Per-hour prices for this date (6:00–23:00)</p>
+          <p className="text-[10px] text-gray-400 mb-1.5">Per-hour prices for this date (00:00–23:00)</p>
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
-            {Array.from({ length: 18 }, (_, i) => i + 6).map((h) => {
+            {Array.from({ length: 24 }, (_, i) => i).map((h) => {
               const slot = (override.hourlySlots ?? []).find((s) => s.hour === h);
               const setHour = (val: string) => {
                 const minor = displayToMinor(val);
