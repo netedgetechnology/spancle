@@ -22,10 +22,33 @@ export const STATUS_CONFIG: Record<BranchStatus, {
 
 // ── Timings ───────────────────────────────────────────────────────────────────
 
+/** A start/end pair in HH:MM 24-hour format */
+export interface TimeRange {
+  start: string;   // HH:MM
+  end:   string;   // HH:MM
+}
+
+/** A single bookable session window within a day */
+export interface DaySession {
+  start:   string;       // HH:MM
+  end:     string;       // HH:MM
+  label?:  string;       // optional display label
+  breaks?: TimeRange[];  // non-bookable break periods within this session
+}
+
+/** A recurring weekly maintenance block */
+export interface MaintenanceBlock {
+  start:  string;  // HH:MM
+  end:    string;  // HH:MM
+  reason: string;
+}
+
 export interface DayTiming {
-  isClosed:  boolean;
-  openTime:  string;  // HH:MM
-  closeTime: string;  // HH:MM
+  isClosed:           boolean;
+  openTime:           string;              // HH:MM — primary/default open
+  closeTime:          string;              // HH:MM — primary/default close
+  sessions?:          DaySession[];        // multiple bookable sessions per day
+  maintenanceBlocks?: MaintenanceBlock[];  // recurring weekly maintenance
 }
 
 export type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';

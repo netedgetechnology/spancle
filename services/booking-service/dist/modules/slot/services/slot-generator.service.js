@@ -107,7 +107,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
                 skip('holiday');
                 continue;
             }
-            const timeSlots = slot_utils_1.SlotUtils.chopIntoSlots(dateStr, hours.openTime, hours.closeTime, config.durationMins, config.bufferMins);
+            const timeSlots = this.generateSlotsForDay(dateStr, hours, config.durationMins, config.bufferMins);
             for (const ts of timeSlots) {
                 const isBlackedOut = blackouts.some((b) => slot_utils_1.SlotUtils.overlaps(ts.startAt, ts.endAt, b.startAt, b.endAt));
                 if (isBlackedOut) {
@@ -213,21 +213,43 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
         };
     }
     resolveHoursForDay(court, dayOfWeek, hoursOverride) {
-        if (hoursOverride)
-            return hoursOverride;
-        const courtDay = court.operatingHours?.[dayOfWeek];
-        if (courtDay) {
-            if (courtDay.isClosed)
-                return null;
-            return { openTime: courtDay.openTime, closeTime: courtDay.closeTime };
+        if (hoursOverride) {
+            return {
+                openTime: hoursOverride.openTime,
+                closeTime: hoursOverride.closeTime,
+                sessions: null,
+                maintenanceBlocks: null,
+            };
         }
-        const branchDay = court.branch?.timings?.[dayOfWeek];
-        if (branchDay) {
-            if (branchDay.isClosed)
-                return null;
-            return { openTime: branchDay.openTime, closeTime: branchDay.closeTime };
+        const day = (court.operatingHours?.[dayOfWeek] ?? court.branch?.timings?.[dayOfWeek]);
+        if (!day || day.isClosed)
+            return null;
+        return {
+            openTime: day.openTime,
+            closeTime: day.closeTime,
+            sessions: day.sessions ?? null,
+            maintenanceBlocks: day.maintenanceBlocks ?? null,
+        };
+    }
+    generateSlotsForDay(dateStr, hours, durationMins, bufferMins) {
+        const windows = hours.sessions && hours.sessions.length > 0
+            ? hours.sessions.map((s) => ({ start: s.start, end: s.end, breaks: s.breaks ?? [] }))
+            : [{ start: hours.openTime, end: hours.closeTime, breaks: [] }];
+        const maintenanceBlocks = hours.maintenanceBlocks ?? [];
+        const allSlots = [];
+        for (const window of windows) {
+            const rawSlots = slot_utils_1.SlotUtils.chopIntoSlots(dateStr, window.start, window.end, durationMins, bufferMins);
+            for (const slot of rawSlots) {
+                const inBreak = window.breaks.some((br) => slot_utils_1.SlotUtils.overlaps(slot.startAt, slot.endAt, slot_utils_1.SlotUtils.toUtcDate(dateStr, br.start), slot_utils_1.SlotUtils.toUtcDate(dateStr, br.end)));
+                if (inBreak)
+                    continue;
+                const inMaintenance = maintenanceBlocks.some((mb) => slot_utils_1.SlotUtils.overlaps(slot.startAt, slot.endAt, slot_utils_1.SlotUtils.toUtcDate(dateStr, mb.start), slot_utils_1.SlotUtils.toUtcDate(dateStr, mb.end)));
+                if (inMaintenance)
+                    continue;
+                allSlots.push(slot);
+            }
         }
-        return null;
+        return allSlots;
     }
 };
 exports.SlotGeneratorService = SlotGeneratorService;

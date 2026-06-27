@@ -22,6 +22,45 @@ import { SlotTemplateEntity } from '../entities/slot-template.entity';
 import type { GenerateSlotsDto } from '../dto/generate-slots.dto';
 import { SlotEvents }         from '../events/slot.events';
 
+// ── Operating hours types (mirrors identity-service DayTiming) ───────────────
+
+interface TimeRange {
+  start: string;
+  end:   string;
+}
+
+interface DaySession {
+  start:   string;
+  end:     string;
+  label?:  string;
+  breaks?: TimeRange[];
+}
+
+interface MaintenanceBlock {
+  start:  string;
+  end:    string;
+  reason: string;
+}
+
+interface DayTiming {
+  isClosed:           boolean;
+  openTime:           string;
+  closeTime:          string;
+  sessions?:          DaySession[];
+  maintenanceBlocks?: MaintenanceBlock[];
+}
+
+type DayTimingMap = Record<string, DayTiming>;
+
+interface ResolvedDayHours {
+  openTime:          string;
+  closeTime:         string;
+  sessions:          DaySession[] | null;
+  maintenanceBlocks: MaintenanceBlock[] | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type SkipReason =
   | 'blackout'
   | 'holiday'
@@ -172,11 +211,10 @@ export class SlotGeneratorService {
         continue;
       }
 
-      // Chop day into slots
-      const timeSlots = SlotUtils.chopIntoSlots(
+      // Generate slots for this day, honouring sessions, breaks, maintenance
+      const timeSlots = this.generateSlotsForDay(
         dateStr,
-        hours.openTime,
-        hours.closeTime,
+        hours,
         config.durationMins,
         config.bufferMins,
       );
@@ -290,11 +328,11 @@ export class SlotGeneratorService {
     sportId:              string | null;
     status:               string;
     courtType:            string;
-    operatingHours:       Record<string, { isClosed: boolean; openTime: string; closeTime: string }> | null;
+    operatingHours:       DayTimingMap | null;
     hourlyRateMinor:      number | null;
     maxBookingsConcurrent: number;
     branch?: {
-      timings: Record<string, { isClosed: boolean; openTime: string; closeTime: string }>;
+      timings: DayTimingMap;
     };
   }> {
     const identityBase = this.config.get<string>('IDENTITY_SERVICE_URL', 'http://localhost:3001');
@@ -345,32 +383,96 @@ export class SlotGeneratorService {
     };
   }
 
+  /**
+   * Resolves the operating hours for a single day.
+   * Priority: manual override > court-specific hours > branch hours
+   * Returns null when the day is closed (no slots generated).
+   * Returns a resolved DayConfig used to generate session-aware slots.
+   */
   private resolveHoursForDay(
     court: {
-      operatingHours: Record<string, { isClosed: boolean; openTime: string; closeTime: string }> | null;
-      branch?: { timings: Record<string, { isClosed: boolean; openTime: string; closeTime: string }> };
+      operatingHours: DayTimingMap | null;
+      branch?: { timings: DayTimingMap };
     },
     dayOfWeek: string,
     hoursOverride: { openTime: string; closeTime: string } | null,
-  ): { openTime: string; closeTime: string } | null {
-    // Manual override takes highest priority
-    if (hoursOverride) return hoursOverride;
-
-    // Court-specific hours
-    const courtDay = court.operatingHours?.[dayOfWeek];
-    if (courtDay) {
-      if (courtDay.isClosed) return null;
-      return { openTime: courtDay.openTime, closeTime: courtDay.closeTime };
+  ): ResolvedDayHours | null {
+    // Manual override — no session/maintenance support (simple open/close window)
+    if (hoursOverride) {
+      return {
+        openTime:         hoursOverride.openTime,
+        closeTime:        hoursOverride.closeTime,
+        sessions:         null,
+        maintenanceBlocks: null,
+      };
     }
 
-    // Branch hours fallback
-    const branchDay = court.branch?.timings?.[dayOfWeek];
-    if (branchDay) {
-      if (branchDay.isClosed) return null;
-      return { openTime: branchDay.openTime, closeTime: branchDay.closeTime };
+    const day = (court.operatingHours?.[dayOfWeek] ?? court.branch?.timings?.[dayOfWeek]) as DayTiming | undefined;
+    if (!day || day.isClosed) return null;
+
+    return {
+      openTime:          day.openTime,
+      closeTime:         day.closeTime,
+      sessions:          day.sessions     ?? null,
+      maintenanceBlocks: day.maintenanceBlocks ?? null,
+    };
+  }
+
+  /**
+   * Generates TimeSlots for a resolved day, honouring multiple sessions,
+   * break periods within sessions, and maintenance blocks.
+   *
+   * When no sessions are defined, uses the primary openTime/closeTime window
+   * as a single session (backward compatible with legacy records).
+   */
+  private generateSlotsForDay(
+    dateStr:      string,
+    hours:        ResolvedDayHours,
+    durationMins: number,
+    bufferMins:   number,
+  ): ReturnType<typeof SlotUtils.chopIntoSlots> {
+    // No session definitions — use primary window (legacy / simple mode)
+    const windows = hours.sessions && hours.sessions.length > 0
+      ? hours.sessions.map((s) => ({ start: s.start, end: s.end, breaks: s.breaks ?? [] }))
+      : [{ start: hours.openTime, end: hours.closeTime, breaks: [] }];
+
+    const maintenanceBlocks = hours.maintenanceBlocks ?? [];
+    const allSlots: ReturnType<typeof SlotUtils.chopIntoSlots> = [];
+
+    for (const window of windows) {
+      const rawSlots = SlotUtils.chopIntoSlots(
+        dateStr,
+        window.start,
+        window.end,
+        durationMins,
+        bufferMins,
+      );
+
+      for (const slot of rawSlots) {
+        // Exclude slots overlapping any break in this session
+        const inBreak = window.breaks.some((br) =>
+          SlotUtils.overlaps(
+            slot.startAt, slot.endAt,
+            SlotUtils.toUtcDate(dateStr, br.start),
+            SlotUtils.toUtcDate(dateStr, br.end),
+          ),
+        );
+        if (inBreak) continue;
+
+        // Exclude slots overlapping any maintenance block
+        const inMaintenance = maintenanceBlocks.some((mb) =>
+          SlotUtils.overlaps(
+            slot.startAt, slot.endAt,
+            SlotUtils.toUtcDate(dateStr, mb.start),
+            SlotUtils.toUtcDate(dateStr, mb.end),
+          ),
+        );
+        if (inMaintenance) continue;
+
+        allSlots.push(slot);
+      }
     }
 
-    // No hours defined — treat as closed
-    return null;
+    return allSlots;
   }
 }
