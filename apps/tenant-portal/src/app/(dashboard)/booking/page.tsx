@@ -1,26 +1,31 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { BookingLeftPanel }  from '@/components/booking/booking-left-panel';
-import { BookingTimeline }   from '@/components/booking/booking-timeline';
-import { BookingPanel }      from '@/components/booking/booking-panel';
-import { fetchBranches, branchKeys } from '@/lib/branch.api';
-import { fetchCourts, courtKeys }    from '@/lib/court.api';
-import { fetchAvailableSlots, slotKeys } from '@/lib/slot.api';
-import { fetchRateCard, rateCardKeys }   from '@/lib/rate-card.api';
-import type { Slot }  from '@/types/slot.types';
+import { useState, useCallback, useMemo }   from 'react';
+import Link                                  from 'next/link';
+import { useQuery }                          from '@tanstack/react-query';
+import { BookingLeftPanel }                  from '@/components/booking/booking-left-panel';
+import { BookingTimeline }                   from '@/components/booking/booking-timeline';
+import { BookingPanel }                      from '@/components/booking/booking-panel';
+import { BookingDrawer }                     from '@/components/booking/booking-drawer';
+import { fetchBranches, branchKeys }         from '@/lib/branch.api';
+import { fetchCourts,   courtKeys }          from '@/lib/court.api';
+import { fetchSports,   sportKeys }          from '@/lib/sport.api';
+import { fetchCalendarSlots, slotKeys }      from '@/lib/slot.api';
+import { fetchRateCard, rateCardKeys }       from '@/lib/rate-card.api';
+import type { Slot }                         from '@/types/slot.types';
+import type { RateCard }                     from '@/lib/rate-card.api';
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+function todayISO(): string { return new Date().toISOString().slice(0, 10); }
 
 export default function BookingDashboardPage(): React.ReactElement {
-  const [branchId,        setBranchId]        = useState('');
-  const [courtId,         setCourtId]          = useState('');
-  const [date,            setDate]              = useState(today());
-  const [selectedSlotIds, setSelectedSlotIds]   = useState<string[]>([]);
+  const [branchId,         setBranchId]         = useState('');
+  const [courtIdFilter,    setCourtIdFilter]     = useState('');
+  const [sportId,          setSportId]           = useState('');
+  const [date,             setDate]              = useState(todayISO());
+  const [selectedSlotIds,  setSelectedSlotIds]   = useState<string[]>([]);
+  const [drawerBookingId,  setDrawerBookingId]   = useState<string | null>(null);
+
+  // ── Data queries ───────────────────────────────────────────────────────────
 
   const { data: branches = [] } = useQuery({
     queryKey: branchKeys.list('active'),
@@ -28,34 +33,71 @@ export default function BookingDashboardPage(): React.ReactElement {
   });
 
   const { data: allCourts = [] } = useQuery({
-    queryKey: courtKeys.list(branchId ? { branchId } : {}),
-    queryFn:  () => fetchCourts(branchId ? { branchId } : undefined),
+    queryKey: courtKeys.list({ branchId, status: 'available' }),
+    queryFn:  () => fetchCourts({ branchId: branchId || undefined }),
     enabled:  !!branchId,
   });
 
   const activeCourts = allCourts.filter((c) => c.status === 'available');
-  const court     = activeCourts.find((c) => c.id === courtId) ?? null;
-  const courtName = court?.name ?? '';
 
-  const { data: slots = [], isLoading: slotsLoading, refetch } = useQuery({
-    queryKey: slotKeys.availability(courtId, date, date),
-    queryFn:  () => fetchAvailableSlots({
-      courtId,
-      branchId,
-      from: `${date}T00:00:00.000Z`,
-      to:   `${date}T23:59:59.999Z`,
-    }),
-    enabled: !!courtId && !!branchId && !!date,
+  const { data: sports = [] } = useQuery({
+    queryKey: sportKeys.list('active'),
+    queryFn:  () => fetchSports('active'),
+    enabled:  !!branchId,
+  });
+
+  // Apply court + sport filter for the timeline view
+  const visibleCourts = useMemo(() => {
+    let result = activeCourts;
+    if (sportId)       result = result.filter((c) => c.sportId === sportId);
+    if (courtIdFilter) result = result.filter((c) => c.id === courtIdFilter);
+    return result;
+  }, [activeCourts, sportId, courtIdFilter]);
+
+  // ALL slots for branch+date (all courts) — one query for the whole timeline
+  const { data: allSlots = [], isLoading: slotsLoading, refetch } = useQuery({
+    queryKey: slotKeys.calendar({ branchId, date, courtId: null, sportId: null, status: null }),
+    queryFn:  () => fetchCalendarSlots({ branchId, date, courtId: null, sportId: null, status: null }),
+    enabled:  !!branchId && !!date,
     refetchInterval: 30_000,
   });
 
-  const { data: rateCard = null } = useQuery({
-    queryKey: rateCardKeys.detail(court?.rateCardId ?? ''),
-    queryFn:  () => fetchRateCard(court!.rateCardId!),
-    enabled:  !!court?.rateCardId,
-  });
+  // Filter slots to visible courts only
+  const visibleCourtIds = useMemo(() => new Set(visibleCourts.map((c) => c.id)), [visibleCourts]);
+  const slots = useMemo(
+    () => allSlots.filter((s) => visibleCourtIds.has(s.courtId)),
+    [allSlots, visibleCourtIds],
+  );
 
-  const handleSlotClick = useCallback((slot: Slot) => {
+  // Fetch rate cards for courts that have one (deduplicated by rateCardId)
+  const distinctRateCardIds = useMemo(
+    () => [...new Set(activeCourts.map((c) => c.rateCardId).filter(Boolean))] as string[],
+    [activeCourts],
+  );
+
+  // Build a map of rateCardId → RateCard using individual queries
+  const rateCardResults = distinctRateCardIds.map((rcId) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useQuery({
+      queryKey: rateCardKeys.detail(rcId),
+      queryFn:  () => fetchRateCard(rcId),
+      enabled:  !!rcId,
+    }),
+  );
+
+  const rateCards = useMemo((): Map<string, RateCard> => {
+    const map = new Map<string, RateCard>();
+    rateCardResults.forEach((r, i) => {
+      const id = distinctRateCardIds[i];
+      if (r.data && id) map.set(id, r.data);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rateCardResults.map((r) => r.data).join(',')]);
+
+  // ── Event handlers ─────────────────────────────────────────────────────────
+
+  const handleAvailableClick = useCallback((slot: Slot) => {
     setSelectedSlotIds((prev) =>
       prev.includes(slot.id)
         ? prev.filter((id) => id !== slot.id)
@@ -63,16 +105,14 @@ export default function BookingDashboardPage(): React.ReactElement {
     );
   }, []);
 
-  const selectedSlots = slots.filter((s) => selectedSlotIds.includes(s.id));
-
-  const handleCourtChange = (id: string) => {
-    setCourtId(id);
-    setSelectedSlotIds([]);
-  };
+  const handleBookedClick = useCallback((slot: Slot) => {
+    if (slot.bookingId) setDrawerBookingId(slot.bookingId);
+  }, []);
 
   const handleBranchChange = (id: string) => {
     setBranchId(id);
-    setCourtId('');
+    setCourtIdFilter('');
+    setSportId('');
     setSelectedSlotIds([]);
   };
 
@@ -81,74 +121,81 @@ export default function BookingDashboardPage(): React.ReactElement {
     setSelectedSlotIds([]);
   };
 
+  const selectedSlots = useMemo(
+    () => slots.filter((s) => selectedSlotIds.includes(s.id)),
+    [slots, selectedSlotIds],
+  );
+
   const branchName = branches.find((b) => b.id === branchId)?.name ?? '';
 
   return (
-    <div className="flex flex-col gap-4" style={{ height: 'calc(100vh - 8rem)' }}>
-      <div className="flex-shrink-0 flex items-center justify-between">
+    <div className="flex flex-col gap-3" style={{ height: 'calc(100vh - 6rem)' }}>
+      {/* Page header */}
+      <div className="flex-shrink-0 flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Booking Dashboard</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Select a court and date, then click available slots</p>
+          <h2 className="text-base font-semibold text-gray-900">Reception Dashboard</h2>
+          <p className="text-[11px] text-gray-400">
+            {branchName
+              ? `${branchName} · ${new Date(date + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' })}`
+              : 'Select a venue to view availability'}
+          </p>
         </div>
         <Link href="/bookings"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-          View all bookings →
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors flex-shrink-0">
+          All bookings →
         </Link>
       </div>
 
-      <div className="flex-1 min-h-0 grid gap-4" style={{ gridTemplateColumns: '220px 1fr 280px' }}>
-        {/* LEFT */}
-        <div className="overflow-y-auto">
-          <BookingLeftPanel
-            branches={branches.map((b) => ({ id: b.id, name: b.name }))}
-            courts={activeCourts.map((c) => ({ id: c.id, name: c.name, rateCardId: c.rateCardId ?? null }))}
-            branchId={branchId}
-            courtId={courtId}
-            date={date}
-            onBranchChange={handleBranchChange}
-            onCourtChange={handleCourtChange}
-            onDateChange={handleDateChange}
-            onRefresh={() => void refetch()}
-            isRefreshing={slotsLoading}
-          />
-        </div>
+      {/* Three-panel layout: left 20%, center 55%, right 25% */}
+      <div className="flex-1 min-h-0 grid gap-3" style={{ gridTemplateColumns: '200px 1fr 260px' }}>
+        {/* LEFT — filters + status */}
+        <BookingLeftPanel
+          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+          courts={activeCourts.map((c) => ({ id: c.id, name: c.name, rateCardId: c.rateCardId ?? null, sportId: c.sportId ?? null }))}
+          sports={sports}
+          branchId={branchId}
+          courtId={courtIdFilter}
+          sportId={sportId}
+          date={date}
+          onBranchChange={handleBranchChange}
+          onCourtChange={(id) => { setCourtIdFilter(id); setSelectedSlotIds([]); }}
+          onSportChange={(id) => { setSportId(id); setSelectedSlotIds([]); }}
+          onDateChange={handleDateChange}
+          onRefresh={() => void refetch()}
+          isRefreshing={slotsLoading}
+          selectedCount={selectedSlotIds.length}
+          branchName={branchName}
+        />
 
-        {/* CENTER */}
-        {!courtId ? (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white text-center p-8">
-            <div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 mx-auto mb-3">
-                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                </svg>
-              </div>
-              <p className="text-sm font-medium text-gray-600">Select a venue and court</p>
-              <p className="text-xs text-gray-400 mt-1">Available slots will appear here</p>
-            </div>
-          </div>
-        ) : (
-          <BookingTimeline
-            slots={slots}
-            selectedSlotIds={selectedSlotIds}
-            onSlotClick={handleSlotClick}
-            isLoading={slotsLoading}
-            date={date}
-          />
-        )}
+        {/* CENTER — multi-court timeline */}
+        <BookingTimeline
+          slots={slots}
+          courts={visibleCourts}
+          selectedSlotIds={selectedSlotIds}
+          onAvailableClick={handleAvailableClick}
+          onBookedClick={handleBookedClick}
+          isLoading={slotsLoading && !!branchId}
+          date={date}
+        />
 
-        {/* RIGHT */}
+        {/* RIGHT — booking form */}
         <BookingPanel
           selectedSlots={selectedSlots}
+          courts={activeCourts}
           branchId={branchId}
-          courtId={courtId}
-          courtName={courtName}
           branchName={branchName}
           date={date}
-          rateCard={rateCard}
+          rateCards={rateCards}
           onClear={() => setSelectedSlotIds([])}
           onSuccess={() => { setSelectedSlotIds([]); void refetch(); }}
         />
       </div>
+
+      {/* Booking detail drawer — rendered outside panels */}
+      <BookingDrawer
+        bookingId={drawerBookingId}
+        onClose={() => setDrawerBookingId(null)}
+      />
     </div>
   );
 }
