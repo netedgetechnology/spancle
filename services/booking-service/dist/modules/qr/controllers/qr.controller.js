@@ -19,7 +19,6 @@ const current_user_decorator_1 = require("../../../common/decorators/current-use
 const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const booking_guard_1 = require("../../booking/guards/booking.guard");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
-const core_1 = require("@nestjs/core");
 const qr_generation_service_1 = require("../services/qr-generation.service");
 const qr_validation_service_1 = require("../services/qr-validation.service");
 const qr_token_dto_1 = require("../dto/qr-token.dto");
@@ -62,7 +61,7 @@ exports.QrController = QrController;
 __decorate([
     (0, common_1.Post)('issue'),
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
@@ -74,7 +73,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)('scan'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER', 'COACH'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
@@ -98,7 +97,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)(':tokenId/revoke'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('tokenId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
@@ -110,7 +109,7 @@ __decorate([
 ], QrController.prototype, "revoke", null);
 __decorate([
     (0, common_1.Get)(':tokenId'),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('tokenId', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
@@ -120,7 +119,7 @@ __decorate([
 ], QrController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Get)('booking/:bookingId'),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('bookingId', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
@@ -130,7 +129,7 @@ __decorate([
 ], QrController.prototype, "findByBooking", null);
 __decorate([
     (0, common_1.Get)('booking/:bookingId/logs'),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('bookingId', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
@@ -140,7 +139,7 @@ __decorate([
 ], QrController.prototype, "getScanLogs", null);
 __decorate([
     (0, common_1.Get)('device/:deviceId/logs'),
-    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, new booking_guard_1.RbacGuard(new core_1.Reflector())),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('deviceId')),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),

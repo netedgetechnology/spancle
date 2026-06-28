@@ -11,7 +11,7 @@ import { fetchBranches, branchKeys }         from '@/lib/branch.api';
 import { fetchCourts,   courtKeys }          from '@/lib/court.api';
 import { fetchSports,   sportKeys }          from '@/lib/sport.api';
 import { fetchCalendarSlots, slotKeys }      from '@/lib/slot.api';
-import { fetchRateCard, rateCardKeys }       from '@/lib/rate-card.api';
+import { rateCardKeys }                       from '@/lib/rate-card.api';
 import type { Slot }                         from '@/types/slot.types';
 import type { RateCard }                     from '@/lib/rate-card.api';
 
@@ -69,31 +69,19 @@ export default function BookingDashboardPage(): React.ReactElement {
     [allSlots, visibleCourtIds],
   );
 
-  // Fetch rate cards for courts that have one (deduplicated by rateCardId)
-  const distinctRateCardIds = useMemo(
-    () => [...new Set(activeCourts.map((c) => c.rateCardId).filter(Boolean))] as string[],
-    [activeCourts],
-  );
-
-  // Build a map of rateCardId → RateCard using individual queries
-  const rateCardResults = distinctRateCardIds.map((rcId) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useQuery({
-      queryKey: rateCardKeys.detail(rcId),
-      queryFn:  () => fetchRateCard(rcId),
-      enabled:  !!rcId,
-    }),
-  );
+  // Fetch all active rate cards once — build lookup map client-side.
+  // Avoids calling useQuery inside .map() (React hooks rules violation).
+  const { data: allRateCards = [] } = useQuery({
+    queryKey: rateCardKeys.list({ isActive: true }),
+    queryFn:  () => import('@/lib/rate-card.api').then((m) => m.fetchRateCards({ isActive: true })).then((r) => r.data),
+    enabled:  !!branchId,
+  });
 
   const rateCards = useMemo((): Map<string, RateCard> => {
     const map = new Map<string, RateCard>();
-    rateCardResults.forEach((r, i) => {
-      const id = distinctRateCardIds[i];
-      if (r.data && id) map.set(id, r.data);
-    });
+    for (const rc of allRateCards) map.set(rc.id, rc);
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rateCardResults.map((r) => r.data).join(',')]);
+  }, [allRateCards]);
 
   // ── Event handlers ─────────────────────────────────────────────────────────
 

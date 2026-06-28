@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -14,6 +15,15 @@ import { QrModule }      from './modules/qr/qr.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
+
+    JwtModule.registerAsync({
+      global:  true,
+      inject:  [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret:      config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: { issuer: config.get<string>('JWT_ISSUER', 'spancle-sports-os') },
+      }),
+    }),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

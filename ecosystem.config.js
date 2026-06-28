@@ -22,6 +22,11 @@ module.exports = {
         NODE_ENV:     'production',
         PORT:         4001,
         SERVICE_NAME: 'identity-service',
+        DATABASE_URL: process.env['IDENTITY_DATABASE_URL'] ?? process.env['DATABASE_URL'] ?? '',
+        JWT_SECRET:   process.env['JWT_SECRET']   ?? '',
+        JWT_ISSUER:   process.env['JWT_ISSUER']   ?? 'spancle-sports-os',
+        REDIS_HOST:   process.env['REDIS_HOST']   ?? '127.0.0.1',
+        REDIS_PORT:   process.env['REDIS_PORT']   ?? '6379',
       },
     },
 
@@ -56,9 +61,20 @@ module.exports = {
       min_uptime:         '5s',
       max_memory_restart: '512M',
       env: {
-        NODE_ENV:     'production',
-        PORT:         4003,
-        SERVICE_NAME: 'booking-service',
+        NODE_ENV:              'production',
+        PORT:                  4003,
+        SERVICE_NAME:          'booking-service',
+        // Required — loaded from server environment (set via .env or shell before pm2 start)
+        // DATABASE_URL, JWT_SECRET, JWT_ISSUER, QR_TOKEN_SECRET must be in the server env.
+        // Explicitly forwarded here so pm2 includes them on restart:
+        DATABASE_URL:          process.env['BOOKING_DATABASE_URL']   ?? '',
+        JWT_SECRET:            process.env['JWT_SECRET']             ?? '',
+        JWT_ISSUER:            process.env['JWT_ISSUER']             ?? 'spancle-sports-os',
+        IDENTITY_SERVICE_URL:  process.env['IDENTITY_SERVICE_URL']   ?? 'http://127.0.0.1:4001',
+        QR_TOKEN_SECRET:       process.env['QR_TOKEN_SECRET']        ?? '',
+        REDIS_HOST:            process.env['REDIS_HOST']             ?? '127.0.0.1',
+        REDIS_PORT:            process.env['REDIS_PORT']             ?? '6379',
+        REDIS_PASSWORD:        process.env['REDIS_PASSWORD']         ?? '',
       },
     },
 
@@ -113,9 +129,16 @@ module.exports = {
       min_uptime:         '10s',
       max_memory_restart: '768M',
       env: {
-        NODE_ENV: 'production',
-        PORT:     3002,
-        HOSTNAME: '127.0.0.1',
+        NODE_ENV:                   'production',
+        PORT:                       3002,
+        HOSTNAME:                   '127.0.0.1',
+        // NEXT_PUBLIC_* vars must also be present at BUILD time (pnpm build).
+        // These runtime values are used by SSR code paths only.
+        NEXT_PUBLIC_API_URL:        process.env['NEXT_PUBLIC_API_URL']     ?? '',
+        NEXT_PUBLIC_BOOKING_URL:    process.env['NEXT_PUBLIC_BOOKING_URL'] ?? '',
+        BOOKING_SERVICE_URL:        process.env['BOOKING_SERVICE_URL']     ?? 'http://127.0.0.1:4003',
+        NEXTAUTH_SECRET:            process.env['NEXTAUTH_SECRET']         ?? '',
+        NEXTAUTH_URL:               process.env['NEXTAUTH_URL']            ?? '',
       },
     },
 

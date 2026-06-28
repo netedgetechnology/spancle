@@ -57,7 +57,7 @@ export class QrController {
 
   @Post('issue')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   issue(
     @Body() dto: IssueQrTokenDto,
@@ -71,7 +71,7 @@ export class QrController {
 
   @Post('scan')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'COACH')
   scan(
     @Body() dto: ScanQrTokenDto,
@@ -113,7 +113,7 @@ export class QrController {
 
   @Post(':tokenId/revoke')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   revoke(
     @Param('tokenId', ParseUUIDPipe) tokenId: string,
@@ -127,7 +127,7 @@ export class QrController {
   // ── Read ───────────────────────────────────────────────────────────────────
 
   @Get(':tokenId')
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   findOne(
     @Param('tokenId', ParseUUIDPipe) tokenId: string,
@@ -137,7 +137,7 @@ export class QrController {
   }
 
   @Get('booking/:bookingId')
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   findByBooking(
     @Param('bookingId', ParseUUIDPipe) bookingId: string,
@@ -147,7 +147,7 @@ export class QrController {
   }
 
   @Get('booking/:bookingId/logs')
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   getScanLogs(
     @Param('bookingId', ParseUUIDPipe) bookingId: string,
@@ -157,7 +157,7 @@ export class QrController {
   }
 
   @Get('device/:deviceId/logs')
-  @UseGuards(TenantGuard, new RbacGuard(new Reflector()))
+  @UseGuards(TenantGuard, RbacGuard)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   getDeviceScanLogs(
     @Param('deviceId') deviceId: string,
