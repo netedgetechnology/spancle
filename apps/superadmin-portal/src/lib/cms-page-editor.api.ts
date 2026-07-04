@@ -19,7 +19,7 @@ export interface CmsPageUpdatePayload {
 }
 
 export async function getPage(pageId: string): Promise<CmsPage> {
-  const res = await apiClient.get<CmsPage>(`/cms/pages/${pageId}`);
+  const res = await apiClient.get<CmsPage>(`/api/v1/cms/pages/${pageId}`);
   return res.data;
 }
 
@@ -27,6 +27,6 @@ export async function updatePage(
   pageId:  string,
   payload: CmsPageUpdatePayload,
 ): Promise<CmsPage> {
-  const res = await apiClient.patch<CmsPage>(`/cms/pages/${pageId}`, payload);
+  const res = await apiClient.patch<CmsPage>(`/api/v1/cms/pages/${pageId}`, payload);
   return res.data;
 }

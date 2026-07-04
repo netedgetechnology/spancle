@@ -1,16 +1,9 @@
 {
-  "extends": "@spancle/tsconfig/tsconfig.base.json",
+  "extends": "../tsconfig/tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["src"]
 }

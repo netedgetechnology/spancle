@@ -22,7 +22,6 @@ export interface HttpClientConfig {
  */
 export declare class HttpClient {
     private readonly axios;
-    private readonly serviceName;
     constructor(config: HttpClientConfig);
     get<T>(path: string, ctx: RequestContext, config?: AxiosRequestConfig): Promise<T>;
     post<T>(path: string, body: unknown, ctx: RequestContext, config?: AxiosRequestConfig): Promise<T>;

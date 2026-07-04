@@ -1,23 +1,32 @@
-import type { Identity, TokenPair, LoginDto, RefreshTokenDto, CreateUserDto, User, PaginatedResult } from '@spancle/types';
+import type { Identity, TokenPair, LoginDto, RefreshTokenDto, CreateUserDto, User, Tenant, TenantSettings, CreateTenantDto, PaginatedResult } from '@spancle/types';
 import type { RequestContext } from '../core/request-context';
 /**
- * IdentityClient — typed client for identity-service.
+ * ============================================================================
+ * IdentityClient
+ * ============================================================================
  *
- * Covers: authentication, token lifecycle, user management.
- * All methods throw SpancleApiError on failure.
+ * Owns:
+ *
+ * • Authentication
+ * • Identity
+ * • Users
+ * • Platform Tenant Lifecycle
+ *
+ * This client maps directly to identity-service.
+ *
+ * ============================================================================
  */
 export declare const IdentityClient: {
     /**
-     * Authenticates a user and returns an access/refresh token pair.
-     * Does NOT require an access token in context — uses tenantId only.
+     * Login
      */
     login(dto: LoginDto, ctx: RequestContext): Promise<TokenPair>;
     /**
-     * Exchanges a refresh token for a new token pair.
+     * Refresh access token
      */
     refreshToken(dto: RefreshTokenDto, ctx: RequestContext): Promise<TokenPair>;
     /**
-     * Revokes the refresh token — invalidates the session.
+     * Logout
      */
     logout(dto: RefreshTokenDto, ctx: RequestContext): Promise<void>;
     getIdentityById(identityId: string, ctx: RequestContext): Promise<Identity>;
@@ -31,5 +40,28 @@ export declare const IdentityClient: {
     }, ctx: RequestContext): Promise<PaginatedResult<User>>;
     updateUser(userId: string, dto: Partial<CreateUserDto>, ctx: RequestContext): Promise<User>;
     deleteUser(userId: string, ctx: RequestContext): Promise<void>;
+    createTenant(dto: CreateTenantDto, ctx: RequestContext): Promise<Tenant>;
+    listTenants(params: {
+        page?: number;
+        limit?: number;
+        status?: string;
+        tier?: string;
+    }, ctx: RequestContext): Promise<PaginatedResult<Tenant>>;
+    getTenantById(tenantId: string, ctx: RequestContext): Promise<Tenant>;
+    updateTenant(tenantId: string, dto: Partial<CreateTenantDto>, ctx: RequestContext): Promise<Tenant>;
+    updateTenantSettings(tenantId: string, settings: Partial<TenantSettings>, ctx: RequestContext): Promise<Tenant>;
+    activateTenant(tenantId: string, ctx: RequestContext): Promise<Tenant>;
+    suspendTenant(tenantId: string, reason: string, ctx: RequestContext): Promise<Tenant>;
+    terminateTenant(tenantId: string, reason: string, ctx: RequestContext): Promise<void>;
+    changeTier(tenantId: string, tier: string, ctx: RequestContext): Promise<Tenant>;
+    checkSlugAvailable(slug: string, ctx: RequestContext): Promise<{
+        available: boolean;
+        slug: string;
+    }>;
+    resolveTenant(query: string, ctx: RequestContext): Promise<{
+        slug: string;
+        name: string;
+        redirectUrl: string;
+    } | null>;
 };
 //# sourceMappingURL=identity.client.d.ts.map

@@ -30,11 +30,8 @@ export interface HttpClientConfig {
  */
 export class HttpClient {
   private readonly axios: AxiosInstance;
-  private readonly serviceName: string;
 
   constructor(config: HttpClientConfig) {
-    this.serviceName = config.serviceName;
-
     this.axios = axios.create({
       baseURL:         config.baseURL,
       timeout:         config.timeoutMs ?? API_TIMEOUTS_MS.DEFAULT,

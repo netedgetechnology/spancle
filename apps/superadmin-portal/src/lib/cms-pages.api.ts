@@ -29,16 +29,16 @@ export const cmsPageKeys = {
 
 export async function fetchCmsPages(params: { page?: number; limit?: number; status?: string } = {}): Promise<CmsPagesResponse> {
   const query = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== ''));
-  const res = await apiClient.get<CmsPagesResponse>('/cms/pages', { params: query });
+  const res = await apiClient.get<CmsPagesResponse>('/api/v1/cms/pages', { params: query });
   return res.data;
 }
 
 export async function publishPage(id: string): Promise<CmsPage> {
-  const res = await apiClient.patch<CmsPage>(`/cms/pages/${id}`, { status: 'published' });
+  const res = await apiClient.patch<CmsPage>(`/api/v1/cms/pages/${id}`, { status: 'published' });
   return res.data;
 }
 
 export async function unpublishPage(id: string): Promise<CmsPage> {
-  const res = await apiClient.patch<CmsPage>(`/cms/pages/${id}`, { status: 'draft' });
+  const res = await apiClient.patch<CmsPage>(`/api/v1/cms/pages/${id}`, { status: 'draft' });
   return res.data;
 }

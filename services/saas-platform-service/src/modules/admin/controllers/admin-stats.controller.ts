@@ -23,7 +23,7 @@ import type { AdminStatsResponse } from '../dto/admin-stats.dto';
  *     Returns aggregated platform statistics for the given period window.
  *     period: number of days for "this period" comparisons (default: 30)
  */
-@Controller('admin')
+@Controller({ path: 'admin', version: '1' })
 @UseGuards(SuperAdminGuard)
 @UseInterceptors(AuditInterceptor)
 export class AdminStatsController {

@@ -4,7 +4,7 @@ import type {
   DashboardMetric,
   PaginatedResult,
 } from '@spancle/types';
-import { createHttpClient, type HttpClient } from '../core/http-client';
+import { createHttpClient } from '../core/http-client';
 import type { RequestContext } from '../core/request-context';
 
 const http = createHttpClient('reporting');

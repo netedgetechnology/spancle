@@ -34,7 +34,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AdminStatsController.prototype, "getStats", null);
 exports.AdminStatsController = AdminStatsController = __decorate([
-    (0, common_1.Controller)('admin'),
+    (0, common_1.Controller)({ path: 'admin', version: '1' }),
     (0, common_1.UseGuards)(super_admin_guard_1.SuperAdminGuard),
     (0, common_1.UseInterceptors)(audit_interceptor_1.AuditInterceptor),
     __metadata("design:paramtypes", [admin_stats_service_1.AdminStatsService])

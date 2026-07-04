@@ -23,7 +23,6 @@ const api_error_1 = require("./api-error");
  */
 class HttpClient {
     constructor(config) {
-        this.serviceName = config.serviceName;
         this.axios = axios_1.default.create({
             baseURL: config.baseURL,
             timeout: config.timeoutMs ?? constants_1.API_TIMEOUTS_MS.DEFAULT,

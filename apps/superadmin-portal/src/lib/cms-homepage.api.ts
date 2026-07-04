@@ -46,7 +46,7 @@ export async function fetchHomepageSections(pageId: string): Promise<HomepageSec
   // eslint-disable-next-line no-console
   console.log('[homepage-debug] fetchHomepageSections pageId', pageId);
 
-  const res = await apiClient.get(`/cms/homepage/pages/${pageId}/sections`, {
+  const res = await apiClient.get(`/api/v1/cms/homepage/pages/${pageId}/sections`, {
     headers: cmsHeaders(),
   });
 
@@ -57,7 +57,7 @@ export async function fetchHomepageSections(pageId: string): Promise<HomepageSec
 }
 
 export async function getHomepageSection(id: string): Promise<HomepageSection> {
-  const res = await apiClient.get<HomepageSection>(`/cms/homepage/sections/${id}`, {
+  const res = await apiClient.get<HomepageSection>(`/api/v1/cms/homepage/sections/${id}`, {
     headers: cmsHeaders(),
   });
   return res.data;
@@ -74,7 +74,7 @@ export async function updateHomepageSection(
   id:      string,
   payload: HomepageSectionUpdatePayload,
 ): Promise<HomepageSection> {
-  const res = await apiClient.patch<HomepageSection>(`/cms/homepage/sections/${id}`, payload, {
+  const res = await apiClient.patch<HomepageSection>(`/api/v1/cms/homepage/sections/${id}`, payload, {
     headers: cmsHeaders(),
   });
   return res.data;
