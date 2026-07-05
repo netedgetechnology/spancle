@@ -6,6 +6,7 @@ var SlotEvents;
     SlotEvents["CREATED"] = "spancle.slot.created";
     SlotEvents["UPDATED"] = "spancle.slot.updated";
     SlotEvents["DELETED"] = "spancle.slot.deleted";
+    SlotEvents["BULK_DELETED"] = "spancle.slot.bulk_deleted";
     SlotEvents["STATUS_CHANGED"] = "spancle.slot.status_changed";
     SlotEvents["BULK_GENERATED"] = "spancle.slot.bulk_generated";
     SlotEvents["RESERVED"] = "spancle.slot.reserved";

@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { SlotRepository }     from '../repositories/slot.repository';
 import { BlackoutRepository } from '../repositories/blackout.repository';
+import { CourtRepository }    from '../../court/repositories/court.repository';
 import type { SlotEntity }    from '../entities/slot.entity';
 
 export interface AvailabilityWindow {
@@ -25,7 +26,8 @@ export interface CourtAvailabilitySummary {
  * AvailabilityService — answers "what slots are available?" queries.
  *
  * Responsibilities:
- *   - Query available/booked slots for a court or branch on a date range
+ *   - Validate court exists and is active before returning availability
+ *   - Query available/booked slots for a court or venue on a date range
  *   - Check whether a specific time window is free (used by BookingService)
  *   - Provide utilisation summaries for the admin calendar
  *   - Filter out blackout windows from availability results
@@ -39,12 +41,29 @@ export class AvailabilityService {
   constructor(
     private readonly slotRepository:    SlotRepository,
     private readonly blackoutRepository: BlackoutRepository,
+    private readonly courtRepository:   CourtRepository,
   ) {}
 
   /**
+   * Validates court exists, is active and bookable.
+   * Called before any availability query that references a specific court.
+   */
+  private async validateCourt(courtId: string, tenantId: string): Promise<void> {
+    const court = await this.courtRepository.findByIdAndTenant(courtId, tenantId);
+    if (!court) {
+      throw new NotFoundException(`Court ${courtId} not found`);
+    }
+    if (!court.isActive) {
+      throw new BadRequestException(`Court ${courtId} is inactive`);
+    }
+    if (!court.isBookable) {
+      throw new BadRequestException(`Court ${courtId} is not accepting bookings`);
+    }
+  }
+
+  /**
    * Returns available slots for a court within a date range.
-   * Blackout windows are annotated (slots within blackouts are still returned,
-   * but hasBlackout flag is set on the day — client-side decision to show/hide).
+   * Validates the court is active and bookable before querying.
    */
   async getAvailableSlots(params: {
     tenantId:  string;
@@ -54,6 +73,7 @@ export class AvailabilityService {
     from:      Date;
     to:        Date;
   }): Promise<SlotEntity[]> {
+    await this.validateCourt(params.courtId, params.tenantId);
     return this.slotRepository.query({
       tenantId:  params.tenantId,
       courtId:   params.courtId,
@@ -72,6 +92,7 @@ export class AvailabilityService {
   async getAllSlots(params: {
     tenantId:  string;
     courtId?:  string;
+    venueId?:  string;
     branchId?: string;
     sportId?:  string;
     from:      Date;
@@ -80,10 +101,29 @@ export class AvailabilityService {
     return this.slotRepository.query({
       tenantId:  params.tenantId,
       courtId:   params.courtId,
+      venueId:   params.venueId,
       branchId:  params.branchId,
       sportId:   params.sportId,
       from:      params.from,
       to:        params.to,
+    });
+  }
+
+  /**
+   * Returns all slots for every court in a venue within a date range.
+   * Single query — caller groups by courtId for display.
+   */
+  async getVenueCalendar(params: {
+    tenantId: string;
+    venueId:  string;
+    from:     Date;
+    to:       Date;
+  }): Promise<SlotEntity[]> {
+    return this.slotRepository.findForVenueCalendar({
+      tenantId: params.tenantId,
+      venueId:  params.venueId,
+      from:     params.from,
+      to:       params.to,
     });
   }
 
@@ -106,7 +146,6 @@ export class AvailabilityService {
     endAt:     Date;
     excludeSlotId?: string;
   }): Promise<{ available: boolean; reason?: string }> {
-    // Check overlap
     const overlapCount = await this.slotRepository.countOverlapping({
       tenantId:  params.tenantId,
       courtId:   params.courtId,
@@ -119,7 +158,6 @@ export class AvailabilityService {
       return { available: false, reason: 'overlap' };
     }
 
-    // Check blackout blocks new bookings
     const isBlocked = await this.blackoutRepository.isBlocked({
       tenantId:  params.tenantId,
       courtId:   params.courtId,
@@ -147,12 +185,13 @@ export class AvailabilityService {
     from:      Date;
     to:        Date;
   }): Promise<CourtAvailabilitySummary> {
-    const allSlots = await this.slotRepository.query({
-      tenantId:  params.tenantId,
-      courtId:   params.courtId,
-      branchId:  params.branchId,
-      from:      params.from,
-      to:        params.to,
+    await this.validateCourt(params.courtId, params.tenantId);
+
+    const allSlots = await this.slotRepository.findForCourtCalendar({
+      tenantId: params.tenantId,
+      courtId:  params.courtId,
+      from:     params.from,
+      to:       params.to,
     });
 
     const counts = {
@@ -184,3 +223,33 @@ export class AvailabilityService {
     };
   }
 }
+
+export interface AvailabilityWindow {
+  courtId:   string;
+  branchId:  string;
+  date:      string;      // YYYY-MM-DD
+  slots:     SlotEntity[];
+  hasBlackout: boolean;
+}
+
+export interface CourtAvailabilitySummary {
+  courtId:          string;
+  totalSlots:       number;
+  availableSlots:   number;
+  bookedSlots:      number;
+  reservedSlots:    number;
+  unavailableSlots: number;
+  utilizationPct:   number;
+}
+
+/**
+ * AvailabilityService — answers "what slots are available?" queries.
+ *
+ * Responsibilities:
+ *   - Query available/booked slots for a court or branch on a date range
+ *   - Check whether a specific time window is free (used by BookingService)
+ *   - Provide utilisation summaries for the admin calendar
+ *   - Filter out blackout windows from availability results
+ *
+ * This service is read-only — it never mutates slots or blackouts.
+ */

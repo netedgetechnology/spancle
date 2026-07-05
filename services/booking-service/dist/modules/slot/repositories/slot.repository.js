@@ -63,6 +63,8 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
             .orderBy('s.startAt', 'ASC');
         if (params.courtId)
             qb.andWhere('s.courtId = :courtId', { courtId: params.courtId });
+        if (params.venueId)
+            qb.andWhere('s.venueId = :venueId', { venueId: params.venueId });
         if (params.branchId)
             qb.andWhere('s.branchId = :branchId', { branchId: params.branchId });
         if (params.sportId)
@@ -72,7 +74,34 @@ let SlotRepository = SlotRepository_1 = class SlotRepository {
         if (params.from)
             qb.andWhere('s.startAt >= :from', { from: params.from });
         if (params.to)
-            qb.andWhere('s.startAt < :to', { to: params.to });
+            qb.andWhere('s.endAt <= :to', { to: params.to });
+        if (params.limit)
+            qb.take(params.limit);
+        if (params.offset)
+            qb.skip(params.offset);
+        return qb.getMany();
+    }
+    async findForCourtCalendar(params) {
+        const qb = this.scopedQb('s', params.tenantId)
+            .andWhere('s.courtId = :courtId', { courtId: params.courtId })
+            .andWhere('s.startAt >= :from', { from: params.from })
+            .andWhere('s.endAt <= :to', { to: params.to })
+            .orderBy('s.startAt', 'ASC');
+        if (params.statuses?.length) {
+            qb.andWhere('s.status IN (:...statuses)', { statuses: params.statuses });
+        }
+        return qb.getMany();
+    }
+    async findForVenueCalendar(params) {
+        const qb = this.scopedQb('s', params.tenantId)
+            .andWhere('s.venueId = :venueId', { venueId: params.venueId })
+            .andWhere('s.startAt >= :from', { from: params.from })
+            .andWhere('s.endAt <= :to', { to: params.to })
+            .orderBy('s.courtId', 'ASC')
+            .addOrderBy('s.startAt', 'ASC');
+        if (params.statuses?.length) {
+            qb.andWhere('s.status IN (:...statuses)', { statuses: params.statuses });
+        }
         return qb.getMany();
     }
     async countOverlapping(params) {

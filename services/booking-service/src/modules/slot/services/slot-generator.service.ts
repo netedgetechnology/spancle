@@ -5,9 +5,6 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { EventEmitter2 }      from '@nestjs/event-emitter';
-import { HttpService }        from '@nestjs/axios';
-import { ConfigService }      from '@nestjs/config';
-import { firstValueFrom }     from 'rxjs';
 import { DataSource }         from 'typeorm';
 
 import { SlotRepository }         from '../repositories/slot.repository';
@@ -16,47 +13,19 @@ import { BlackoutRepository }     from '../repositories/blackout.repository';
 import { HolidayRepository }      from '../repositories/holiday.repository';
 import { PricingService }         from './pricing.service';
 import { SlotUtils }              from '../utils/slot.utils';
+import { CourtRepository }        from '../../court/repositories/court.repository';
+import { VenueService }           from '../../venue/services/venue.service';
 
 import { SlotEntity }         from '../entities/slot.entity';
 import { SlotTemplateEntity } from '../entities/slot-template.entity';
 import type { GenerateSlotsDto } from '../dto/generate-slots.dto';
 import { SlotEvents }         from '../events/slot.events';
 
-// ── Operating hours types (mirrors identity-service DayTiming) ───────────────
-
-interface TimeRange {
-  start: string;
-  end:   string;
-}
-
-interface DaySession {
-  start:   string;
-  end:     string;
-  label?:  string;
-  breaks?: TimeRange[];
-}
-
-interface MaintenanceBlock {
-  start:  string;
-  end:    string;
-  reason: string;
-}
-
-interface DayTiming {
-  isClosed:           boolean;
-  openTime:           string;
-  closeTime:          string;
-  sessions?:          DaySession[];
-  maintenanceBlocks?: MaintenanceBlock[];
-}
-
-type DayTimingMap = Record<string, DayTiming>;
+// ── Internal types ───────────────────────────────────────────────────────────
 
 interface ResolvedDayHours {
-  openTime:          string;
-  closeTime:         string;
-  sessions:          DaySession[] | null;
-  maintenanceBlocks: MaintenanceBlock[] | null;
+  openTime:  string;
+  closeTime: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,8 +78,8 @@ export class SlotGeneratorService {
     private readonly holidayRepository:      HolidayRepository,
     private readonly pricingService:         PricingService,
     private readonly eventEmitter:           EventEmitter2,
-    private readonly httpService:            HttpService,
-    private readonly config:                 ConfigService,
+    private readonly courtRepository:        CourtRepository,
+    private readonly venueService:           VenueService,
     private readonly dataSource:             DataSource,
   ) {}
 
@@ -129,8 +98,11 @@ export class SlotGeneratorService {
     const config = dto.templateId
       ? await this.resolveFromTemplate(dto.templateId, tenantId)
       : {
-          durationMins:  dto.durationMins ?? 60,
-          bufferMins:    dto.bufferMins   ?? 0,
+          // Use court defaults when DTO does not supply explicit values.
+          // slotDuration on CourtEntity defaults to 60 mins.
+          // bufferBefore + bufferAfter on CourtEntity default to 0 each.
+          durationMins:  dto.durationMins ?? court.slotDuration,
+          bufferMins:    dto.bufferMins   ?? (court.bufferBefore + court.bufferAfter),
           autoPublish:   dto.autoPublish  ?? true,
           skipHolidays:  dto.skipHolidays ?? false,
           skipBlackouts: dto.skipBlackouts ?? true,
@@ -238,6 +210,7 @@ export class SlotGeneratorService {
         toInsert.push({
           tenantId,
           courtId:     dto.courtId,
+          venueId:     court.venueId,
           branchId:    court.branchId,
           sportId:     court.sportId,
           startAt:     ts.startAt,
@@ -245,7 +218,7 @@ export class SlotGeneratorService {
           durationMins: config.durationMins,
           status:      config.autoPublish ? 'available' : 'unavailable',
           currency:    'GBP',
-          maxBookings: court.maxBookingsConcurrent ?? 1,
+          maxBookings: 1,
           currentBookings: 0,
           label: SlotUtils.buildLabel(court.name, ts.startAt, ts.endAt),
           templateId: dto.templateId ?? null,
@@ -270,7 +243,7 @@ export class SlotGeneratorService {
         sportId:              court.sportId ?? null,
         startAt:              s.startAt!,
         durationMins:         config.durationMins,
-        courtHourlyRateMinor: court.hourlyRateMinor ?? null,
+        courtHourlyRateMinor: court.hourlyPrice     ?? null,
         // Slot generation always prices at the non-member (public) rate.
         // Member discounts are applied at booking time when the booker
         // identity is known. Generated slots store the public base price.
@@ -299,6 +272,7 @@ export class SlotGeneratorService {
     await this.eventEmitter.emitAsync(SlotEvents.BULK_GENERATED, {
       tenantId,
       courtId:  dto.courtId,
+      venueId:  court.venueId,
       branchId: court.branchId,
       count:    created.length,
       slotIds,
@@ -321,42 +295,36 @@ export class SlotGeneratorService {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private async fetchCourtOrFail(courtId: string, tenantId: string): Promise<{
-    id:                   string;
-    name:                 string;
-    branchId:             string;
-    sportId:              string | null;
-    status:               string;
-    courtType:            string;
-    operatingHours:       DayTimingMap | null;
-    hourlyRateMinor:      number | null;
-    rateCardId:           string | null;
-    maxBookingsConcurrent: number;
-    branch?: {
-      timings: DayTimingMap;
-    };
-  }> {
-    const identityBase = this.config.get<string>('IDENTITY_SERVICE_URL', 'http://localhost:3001');
-    try {
-      const res = await firstValueFrom(
-        this.httpService.get(`${identityBase}/api/v1/courts/${courtId}`, {
-          timeout: 5_000,
-          headers: { 'x-tenant-id': tenantId, 'x-internal-service': 'booking-service' },
-        }),
-      );
-      return res.data;
-    } catch {
+  /**
+   * Loads the CourtEntity from booking-service DB and validates:
+   *   - court exists in this tenant
+   *   - court belongs to the stated venue
+   *   - court is active and bookable
+   * Throws before any slots are generated.
+   */
+  private async fetchCourtOrFail(courtId: string, tenantId: string) {
+    const court = await this.courtRepository.findByIdAndTenant(courtId, tenantId);
+    if (!court) {
       throw new UnprocessableEntityException(
-        `Court ${courtId} not found in this organisation`,
+        `Court ${courtId} not found for this organisation`,
       );
     }
+    return court;
   }
 
-  private assertCourtBookable(court: { status: string }): void {
-    if (court.status === 'maintenance' || court.status === 'retired') {
-      throw new BadRequestException(
-        `Court is ${court.status} and cannot be scheduled for new slots`,
-      );
+  private assertCourtBookable(court: {
+    isActive:  boolean;
+    isBookable: boolean;
+    isDeleted: boolean;
+  }): void {
+    if (court.isDeleted) {
+      throw new BadRequestException('Court has been deleted and cannot accept new slots');
+    }
+    if (!court.isActive) {
+      throw new BadRequestException('Court is inactive and cannot accept new slots');
+    }
+    if (!court.isBookable) {
+      throw new BadRequestException('Court is not bookable and cannot accept new slots');
     }
   }
 
@@ -385,46 +353,37 @@ export class SlotGeneratorService {
   }
 
   /**
-   * Resolves the operating hours for a single day.
-   * Priority: manual override > court-specific hours > branch hours
-   * Returns null when the day is closed (no slots generated).
-   * Returns a resolved DayConfig used to generate session-aware slots.
+   * Resolves the operating window for a day.
+   *
+   * Sources (priority order):
+   *   1. hoursOverride in the DTO  — explicit window from the caller
+   *   2. Default full-day window   — 06:00–23:00 (bookable hours convention)
+   *
+   * Operating hours (sessions, breaks, maintenance) belong to the branch in
+   * identity-service and are not replicated into booking-service.  When the
+   * caller needs hour-restricted generation they MUST supply hoursOverride.
+   * Full-day default guarantees generation still works without a cross-service
+   * call while remaining overridable.
+   *
+   * Returns null to skip a day (currently unused — all days are open by
+   * default; callers can restrict via daysOfWeek in a future DTO extension).
    */
   private resolveHoursForDay(
-    court: {
-      operatingHours: DayTimingMap | null;
-      branch?: { timings: DayTimingMap };
-    },
-    dayOfWeek: string,
+    _court:        unknown,
+    _dayOfWeek:    string,
     hoursOverride: { openTime: string; closeTime: string } | null,
   ): ResolvedDayHours | null {
-    // Manual override — no session/maintenance support (simple open/close window)
     if (hoursOverride) {
-      return {
-        openTime:         hoursOverride.openTime,
-        closeTime:        hoursOverride.closeTime,
-        sessions:         null,
-        maintenanceBlocks: null,
-      };
+      return { openTime: hoursOverride.openTime, closeTime: hoursOverride.closeTime };
     }
-
-    const day = (court.operatingHours?.[dayOfWeek] ?? court.branch?.timings?.[dayOfWeek]) as DayTiming | undefined;
-    if (!day || day.isClosed) return null;
-
-    return {
-      openTime:          day.openTime,
-      closeTime:         day.closeTime,
-      sessions:          day.sessions     ?? null,
-      maintenanceBlocks: day.maintenanceBlocks ?? null,
-    };
+    // Default: 06:00–23:00 — covers typical sports facility operating hours.
+    // Callers that need tighter windows must supply hoursOverride.
+    return { openTime: '06:00', closeTime: '23:00' };
   }
 
   /**
-   * Generates TimeSlots for a resolved day, honouring multiple sessions,
-   * break periods within sessions, and maintenance blocks.
-   *
-   * When no sessions are defined, uses the primary openTime/closeTime window
-   * as a single session (backward compatible with legacy records).
+   * Chops a resolved day window into TimeSlots of durationMins with bufferMins gap.
+   * Simple mode — no session or maintenance subdivision (those live in identity-service).
    */
   private generateSlotsForDay(
     dateStr:      string,
@@ -432,48 +391,6 @@ export class SlotGeneratorService {
     durationMins: number,
     bufferMins:   number,
   ): ReturnType<typeof SlotUtils.chopIntoSlots> {
-    // No session definitions — use primary window (legacy / simple mode)
-    const windows = hours.sessions && hours.sessions.length > 0
-      ? hours.sessions.map((s) => ({ start: s.start, end: s.end, breaks: s.breaks ?? [] }))
-      : [{ start: hours.openTime, end: hours.closeTime, breaks: [] }];
-
-    const maintenanceBlocks = hours.maintenanceBlocks ?? [];
-    const allSlots: ReturnType<typeof SlotUtils.chopIntoSlots> = [];
-
-    for (const window of windows) {
-      const rawSlots = SlotUtils.chopIntoSlots(
-        dateStr,
-        window.start,
-        window.end,
-        durationMins,
-        bufferMins,
-      );
-
-      for (const slot of rawSlots) {
-        // Exclude slots overlapping any break in this session
-        const inBreak = window.breaks.some((br) =>
-          SlotUtils.overlaps(
-            slot.startAt, slot.endAt,
-            SlotUtils.toUtcDate(dateStr, br.start),
-            SlotUtils.toUtcDate(dateStr, br.end),
-          ),
-        );
-        if (inBreak) continue;
-
-        // Exclude slots overlapping any maintenance block
-        const inMaintenance = maintenanceBlocks.some((mb) =>
-          SlotUtils.overlaps(
-            slot.startAt, slot.endAt,
-            SlotUtils.toUtcDate(dateStr, mb.start),
-            SlotUtils.toUtcDate(dateStr, mb.end),
-          ),
-        );
-        if (inMaintenance) continue;
-
-        allSlots.push(slot);
-      }
-    }
-
-    return allSlots;
+    return SlotUtils.chopIntoSlots(dateStr, hours.openTime, hours.closeTime, durationMins, bufferMins);
   }
 }

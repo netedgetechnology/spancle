@@ -13,9 +13,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotGeneratorService = void 0;
 const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
-const axios_1 = require("@nestjs/axios");
-const config_1 = require("@nestjs/config");
-const rxjs_1 = require("rxjs");
 const typeorm_1 = require("typeorm");
 const slot_repository_1 = require("../repositories/slot.repository");
 const slot_template_repository_1 = require("../repositories/slot-template.repository");
@@ -23,18 +20,20 @@ const blackout_repository_1 = require("../repositories/blackout.repository");
 const holiday_repository_1 = require("../repositories/holiday.repository");
 const pricing_service_1 = require("./pricing.service");
 const slot_utils_1 = require("../utils/slot.utils");
+const court_repository_1 = require("../../court/repositories/court.repository");
+const venue_service_1 = require("../../venue/services/venue.service");
 const slot_entity_1 = require("../entities/slot.entity");
 const slot_events_1 = require("../events/slot.events");
 let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
-    constructor(slotRepository, slotTemplateRepository, blackoutRepository, holidayRepository, pricingService, eventEmitter, httpService, config, dataSource) {
+    constructor(slotRepository, slotTemplateRepository, blackoutRepository, holidayRepository, pricingService, eventEmitter, courtRepository, venueService, dataSource) {
         this.slotRepository = slotRepository;
         this.slotTemplateRepository = slotTemplateRepository;
         this.blackoutRepository = blackoutRepository;
         this.holidayRepository = holidayRepository;
         this.pricingService = pricingService;
         this.eventEmitter = eventEmitter;
-        this.httpService = httpService;
-        this.config = config;
+        this.courtRepository = courtRepository;
+        this.venueService = venueService;
         this.dataSource = dataSource;
         this.logger = new common_1.Logger(SlotGeneratorService_1.name);
     }
@@ -44,8 +43,8 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
         const config = dto.templateId
             ? await this.resolveFromTemplate(dto.templateId, tenantId)
             : {
-                durationMins: dto.durationMins ?? 60,
-                bufferMins: dto.bufferMins ?? 0,
+                durationMins: dto.durationMins ?? court.slotDuration,
+                bufferMins: dto.bufferMins ?? (court.bufferBefore + court.bufferAfter),
                 autoPublish: dto.autoPublish ?? true,
                 skipHolidays: dto.skipHolidays ?? false,
                 skipBlackouts: dto.skipBlackouts ?? true,
@@ -123,6 +122,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
                 toInsert.push({
                     tenantId,
                     courtId: dto.courtId,
+                    venueId: court.venueId,
                     branchId: court.branchId,
                     sportId: court.sportId,
                     startAt: ts.startAt,
@@ -130,7 +130,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
                     durationMins: config.durationMins,
                     status: config.autoPublish ? 'available' : 'unavailable',
                     currency: 'GBP',
-                    maxBookings: court.maxBookingsConcurrent ?? 1,
+                    maxBookings: 1,
                     currentBookings: 0,
                     label: slot_utils_1.SlotUtils.buildLabel(court.name, ts.startAt, ts.endAt),
                     templateId: dto.templateId ?? null,
@@ -149,7 +149,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
             sportId: court.sportId ?? null,
             startAt: s.startAt,
             durationMins: config.durationMins,
-            courtHourlyRateMinor: court.hourlyRateMinor ?? null,
+            courtHourlyRateMinor: court.hourlyPrice ?? null,
             isMember: false,
             currency: 'GBP',
         })));
@@ -166,6 +166,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
         await this.eventEmitter.emitAsync(slot_events_1.SlotEvents.BULK_GENERATED, {
             tenantId,
             courtId: dto.courtId,
+            venueId: court.venueId,
             branchId: court.branchId,
             count: created.length,
             slotIds,
@@ -182,21 +183,21 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
         };
     }
     async fetchCourtOrFail(courtId, tenantId) {
-        const identityBase = this.config.get('IDENTITY_SERVICE_URL', 'http://localhost:3001');
-        try {
-            const res = await (0, rxjs_1.firstValueFrom)(this.httpService.get(`${identityBase}/api/v1/courts/${courtId}`, {
-                timeout: 5_000,
-                headers: { 'x-tenant-id': tenantId, 'x-internal-service': 'booking-service' },
-            }));
-            return res.data;
+        const court = await this.courtRepository.findByIdAndTenant(courtId, tenantId);
+        if (!court) {
+            throw new common_1.UnprocessableEntityException(`Court ${courtId} not found for this organisation`);
         }
-        catch {
-            throw new common_1.UnprocessableEntityException(`Court ${courtId} not found in this organisation`);
-        }
+        return court;
     }
     assertCourtBookable(court) {
-        if (court.status === 'maintenance' || court.status === 'retired') {
-            throw new common_1.BadRequestException(`Court is ${court.status} and cannot be scheduled for new slots`);
+        if (court.isDeleted) {
+            throw new common_1.BadRequestException('Court has been deleted and cannot accept new slots');
+        }
+        if (!court.isActive) {
+            throw new common_1.BadRequestException('Court is inactive and cannot accept new slots');
+        }
+        if (!court.isBookable) {
+            throw new common_1.BadRequestException('Court is not bookable and cannot accept new slots');
         }
     }
     async resolveFromTemplate(templateId, tenantId) {
@@ -212,44 +213,14 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
                 : null,
         };
     }
-    resolveHoursForDay(court, dayOfWeek, hoursOverride) {
+    resolveHoursForDay(_court, _dayOfWeek, hoursOverride) {
         if (hoursOverride) {
-            return {
-                openTime: hoursOverride.openTime,
-                closeTime: hoursOverride.closeTime,
-                sessions: null,
-                maintenanceBlocks: null,
-            };
+            return { openTime: hoursOverride.openTime, closeTime: hoursOverride.closeTime };
         }
-        const day = (court.operatingHours?.[dayOfWeek] ?? court.branch?.timings?.[dayOfWeek]);
-        if (!day || day.isClosed)
-            return null;
-        return {
-            openTime: day.openTime,
-            closeTime: day.closeTime,
-            sessions: day.sessions ?? null,
-            maintenanceBlocks: day.maintenanceBlocks ?? null,
-        };
+        return { openTime: '06:00', closeTime: '23:00' };
     }
     generateSlotsForDay(dateStr, hours, durationMins, bufferMins) {
-        const windows = hours.sessions && hours.sessions.length > 0
-            ? hours.sessions.map((s) => ({ start: s.start, end: s.end, breaks: s.breaks ?? [] }))
-            : [{ start: hours.openTime, end: hours.closeTime, breaks: [] }];
-        const maintenanceBlocks = hours.maintenanceBlocks ?? [];
-        const allSlots = [];
-        for (const window of windows) {
-            const rawSlots = slot_utils_1.SlotUtils.chopIntoSlots(dateStr, window.start, window.end, durationMins, bufferMins);
-            for (const slot of rawSlots) {
-                const inBreak = window.breaks.some((br) => slot_utils_1.SlotUtils.overlaps(slot.startAt, slot.endAt, slot_utils_1.SlotUtils.toUtcDate(dateStr, br.start), slot_utils_1.SlotUtils.toUtcDate(dateStr, br.end)));
-                if (inBreak)
-                    continue;
-                const inMaintenance = maintenanceBlocks.some((mb) => slot_utils_1.SlotUtils.overlaps(slot.startAt, slot.endAt, slot_utils_1.SlotUtils.toUtcDate(dateStr, mb.start), slot_utils_1.SlotUtils.toUtcDate(dateStr, mb.end)));
-                if (inMaintenance)
-                    continue;
-                allSlots.push(slot);
-            }
-        }
-        return allSlots;
+        return slot_utils_1.SlotUtils.chopIntoSlots(dateStr, hours.openTime, hours.closeTime, durationMins, bufferMins);
     }
 };
 exports.SlotGeneratorService = SlotGeneratorService;
@@ -261,8 +232,8 @@ exports.SlotGeneratorService = SlotGeneratorService = SlotGeneratorService_1 = _
         holiday_repository_1.HolidayRepository,
         pricing_service_1.PricingService,
         event_emitter_1.EventEmitter2,
-        axios_1.HttpService,
-        config_1.ConfigService,
+        court_repository_1.CourtRepository,
+        venue_service_1.VenueService,
         typeorm_1.DataSource])
 ], SlotGeneratorService);
 //# sourceMappingURL=slot-generator.service.js.map

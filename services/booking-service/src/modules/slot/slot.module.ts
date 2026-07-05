@@ -1,6 +1,5 @@
 import { Module }     from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { HttpModule }    from '@nestjs/axios';
 
 // Entities
 import { SlotEntity }         from './entities/slot.entity';
@@ -35,13 +34,18 @@ import { PricingRuleController }  from './controllers/pricing-rule.controller';
 import { BlackoutController }     from './controllers/blackout.controller';
 import { HolidayController }      from './controllers/holiday.controller';
 
+// Cross-module dependencies
+import { CourtModule } from '../court/court.module';
+
 /**
  * SlotModule — the complete slot engine.
  *
  * Entities registered: slots, slot_templates, pricing_rules, blackouts, holidays
  *
- * HttpModule: used by SlotGeneratorService to call identity-service for
- *   court + branch data (operating hours, status, rate).
+ * CourtModule: imported so SlotGeneratorService and AvailabilityService can
+ *   use CourtRepository directly (same DB) instead of calling identity-service
+ *   over HTTP.  Court validation (isActive, isBookable, tenantId) is now
+ *   enforced at the DB layer with a typed query.
  *
  * Exports SlotService and AvailabilityService so BookingModule can:
  *   - Reserve slots before confirming a booking (SlotService.reserve)
@@ -57,7 +61,7 @@ import { HolidayController }      from './controllers/holiday.controller';
       RateCardEntity,
       HolidayEntity,
     ]),
-    HttpModule.register({ timeout: 5_000, maxRedirects: 0 }),
+    CourtModule,
   ],
   controllers: [
     RateCardController,

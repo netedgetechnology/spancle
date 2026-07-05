@@ -9,7 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const axios_1 = require("@nestjs/axios");
 const slot_entity_1 = require("./entities/slot.entity");
 const slot_template_entity_1 = require("./entities/slot-template.entity");
 const pricing_rule_entity_1 = require("./entities/pricing-rule.entity");
@@ -35,6 +34,7 @@ const slot_template_controller_1 = require("./controllers/slot-template.controll
 const pricing_rule_controller_1 = require("./controllers/pricing-rule.controller");
 const blackout_controller_1 = require("./controllers/blackout.controller");
 const holiday_controller_1 = require("./controllers/holiday.controller");
+const court_module_1 = require("../court/court.module");
 let SlotModule = class SlotModule {
 };
 exports.SlotModule = SlotModule;
@@ -49,7 +49,7 @@ exports.SlotModule = SlotModule = __decorate([
                 rate_card_entity_1.RateCardEntity,
                 holiday_entity_1.HolidayEntity,
             ]),
-            axios_1.HttpModule.register({ timeout: 5_000, maxRedirects: 0 }),
+            court_module_1.CourtModule,
         ],
         controllers: [
             rate_card_controller_1.RateCardController,

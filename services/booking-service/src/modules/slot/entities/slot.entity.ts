@@ -68,6 +68,7 @@ export type SlotStatus =
 @Entity('slots')
 @Index(['tenantId', 'courtId', 'startAt'], { unique: false }) // overlap query index
 @Index(['tenantId', 'courtId', 'status'])
+@Index(['tenantId', 'venueId'])                                // venue calendar queries
 @Index(['tenantId', 'startAt', 'endAt'])                      // calendar range queries
 @Index(['tenantId', 'branchId'])
 @Index(['tenantId', 'sportId'])
@@ -84,9 +85,20 @@ export class SlotEntity {
 
   // ── Cross-service references (UUIDs, no DB FK) ─────────────────────────────
 
-  /** FK → courts.id (identity-service) — validated at creation via HTTP */
+  /**
+   * FK → courts_booking.id (booking-service, same DB).
+   * Validated via CourtRepository at slot generation time.
+   * No DB-level FK to keep soft-delete patterns flexible.
+   */
   @Column({ name: 'court_id', type: 'uuid', nullable: false })
   courtId!: string;
+
+  /**
+   * Denormalized from court.venueId for efficient venue-calendar queries.
+   * Set at generation time; immutable thereafter.
+   */
+  @Column({ name: 'venue_id', type: 'uuid', nullable: true })
+  venueId!: string | null;
 
   /** Denormalised from court for efficient branch-level queries */
   @Column({ name: 'branch_id', type: 'uuid', nullable: false })

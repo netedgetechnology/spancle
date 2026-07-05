@@ -14,13 +14,28 @@ exports.AvailabilityService = void 0;
 const common_1 = require("@nestjs/common");
 const slot_repository_1 = require("../repositories/slot.repository");
 const blackout_repository_1 = require("../repositories/blackout.repository");
+const court_repository_1 = require("../../court/repositories/court.repository");
 let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
-    constructor(slotRepository, blackoutRepository) {
+    constructor(slotRepository, blackoutRepository, courtRepository) {
         this.slotRepository = slotRepository;
         this.blackoutRepository = blackoutRepository;
+        this.courtRepository = courtRepository;
         this.logger = new common_1.Logger(AvailabilityService_1.name);
     }
+    async validateCourt(courtId, tenantId) {
+        const court = await this.courtRepository.findByIdAndTenant(courtId, tenantId);
+        if (!court) {
+            throw new common_1.NotFoundException(`Court ${courtId} not found`);
+        }
+        if (!court.isActive) {
+            throw new common_1.BadRequestException(`Court ${courtId} is inactive`);
+        }
+        if (!court.isBookable) {
+            throw new common_1.BadRequestException(`Court ${courtId} is not accepting bookings`);
+        }
+    }
     async getAvailableSlots(params) {
+        await this.validateCourt(params.courtId, params.tenantId);
         return this.slotRepository.query({
             tenantId: params.tenantId,
             courtId: params.courtId,
@@ -35,8 +50,17 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         return this.slotRepository.query({
             tenantId: params.tenantId,
             courtId: params.courtId,
+            venueId: params.venueId,
             branchId: params.branchId,
             sportId: params.sportId,
+            from: params.from,
+            to: params.to,
+        });
+    }
+    async getVenueCalendar(params) {
+        return this.slotRepository.findForVenueCalendar({
+            tenantId: params.tenantId,
+            venueId: params.venueId,
             from: params.from,
             to: params.to,
         });
@@ -66,10 +90,10 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         return { available: true };
     }
     async getCourtSummary(params) {
-        const allSlots = await this.slotRepository.query({
+        await this.validateCourt(params.courtId, params.tenantId);
+        const allSlots = await this.slotRepository.findForCourtCalendar({
             tenantId: params.tenantId,
             courtId: params.courtId,
-            branchId: params.branchId,
             from: params.from,
             to: params.to,
         });
@@ -103,6 +127,7 @@ exports.AvailabilityService = AvailabilityService;
 exports.AvailabilityService = AvailabilityService = AvailabilityService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [slot_repository_1.SlotRepository,
-        blackout_repository_1.BlackoutRepository])
+        blackout_repository_1.BlackoutRepository,
+        court_repository_1.CourtRepository])
 ], AvailabilityService);
 //# sourceMappingURL=availability.service.js.map

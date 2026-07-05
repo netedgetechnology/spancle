@@ -75,21 +75,78 @@ export class SlotRepository {
   async query(params: {
     tenantId:  string;
     courtId?:  string;
+    venueId?:  string;
     branchId?: string;
     sportId?:  string;
     from?:     Date;
     to?:       Date;
     status?:   SlotStatus;
+    /** Future pagination support — omit for full result */
+    limit?:    number;
+    offset?:   number;
   }): Promise<SlotEntity[]> {
     const qb = this.scopedQb('s', params.tenantId)
       .orderBy('s.startAt', 'ASC');
 
     if (params.courtId)  qb.andWhere('s.courtId = :courtId',   { courtId:  params.courtId  });
+    if (params.venueId)  qb.andWhere('s.venueId = :venueId',   { venueId:  params.venueId  });
     if (params.branchId) qb.andWhere('s.branchId = :branchId', { branchId: params.branchId });
     if (params.sportId)  qb.andWhere('s.sportId = :sportId',   { sportId:  params.sportId  });
     if (params.status)   qb.andWhere('s.status = :status',     { status:   params.status   });
     if (params.from)     qb.andWhere('s.startAt >= :from',     { from:     params.from     });
-    if (params.to)       qb.andWhere('s.startAt < :to',        { to:       params.to       });
+    if (params.to)       qb.andWhere('s.endAt <= :to',         { to:       params.to       });
+    if (params.limit)    qb.take(params.limit);
+    if (params.offset)   qb.skip(params.offset);
+
+    return qb.getMany();
+  }
+
+  /**
+   * Court calendar — all slots for a specific court within a date range.
+   * Optimized for the reception timeline view: ordered by startAt,
+   * no soft-deleted, no pagination (caller controls date range width).
+   */
+  async findForCourtCalendar(params: {
+    tenantId: string;
+    courtId:  string;
+    from:     Date;
+    to:       Date;
+    statuses?: SlotStatus[];
+  }): Promise<SlotEntity[]> {
+    const qb = this.scopedQb('s', params.tenantId)
+      .andWhere('s.courtId = :courtId', { courtId: params.courtId })
+      .andWhere('s.startAt >= :from',   { from:    params.from    })
+      .andWhere('s.endAt <= :to',       { to:      params.to      })
+      .orderBy('s.startAt', 'ASC');
+
+    if (params.statuses?.length) {
+      qb.andWhere('s.status IN (:...statuses)', { statuses: params.statuses });
+    }
+
+    return qb.getMany();
+  }
+
+  /**
+   * Venue calendar — all slots for every court in a venue within a date range.
+   * Single query; caller groups by courtId for display.
+   */
+  async findForVenueCalendar(params: {
+    tenantId: string;
+    venueId:  string;
+    from:     Date;
+    to:       Date;
+    statuses?: SlotStatus[];
+  }): Promise<SlotEntity[]> {
+    const qb = this.scopedQb('s', params.tenantId)
+      .andWhere('s.venueId = :venueId', { venueId: params.venueId })
+      .andWhere('s.startAt >= :from',   { from:    params.from    })
+      .andWhere('s.endAt <= :to',       { to:      params.to      })
+      .orderBy('s.courtId', 'ASC')
+      .addOrderBy('s.startAt', 'ASC');
+
+    if (params.statuses?.length) {
+      qb.andWhere('s.status IN (:...statuses)', { statuses: params.statuses });
+    }
 
     return qb.getMany();
   }

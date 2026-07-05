@@ -28,6 +28,10 @@ __decorate([
     __metadata("design:type", String)
 ], SlotEntity.prototype, "courtId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'venue_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], SlotEntity.prototype, "venueId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'branch_id', type: 'uuid', nullable: false }),
     __metadata("design:type", String)
 ], SlotEntity.prototype, "branchId", void 0);
@@ -119,6 +123,7 @@ exports.SlotEntity = SlotEntity = __decorate([
     (0, typeorm_1.Entity)('slots'),
     (0, typeorm_1.Index)(['tenantId', 'courtId', 'startAt'], { unique: false }),
     (0, typeorm_1.Index)(['tenantId', 'courtId', 'status']),
+    (0, typeorm_1.Index)(['tenantId', 'venueId']),
     (0, typeorm_1.Index)(['tenantId', 'startAt', 'endAt']),
     (0, typeorm_1.Index)(['tenantId', 'branchId']),
     (0, typeorm_1.Index)(['tenantId', 'sportId']),
