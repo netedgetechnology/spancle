@@ -41,6 +41,12 @@ let BookingController = class BookingController {
     findOne(id, tenant) {
         return this.bookingService.findOne(id, tenant.tenantId);
     }
+    reserve(id, tenant, actor) {
+        return this.bookingService.reserve(id, tenant.tenantId, actor.actorId);
+    }
+    expire(id, tenant, actor) {
+        return this.bookingService.expire(id, tenant.tenantId, actor.actorId);
+    }
     confirm(id, tenant, actor) {
         return this.bookingService.confirm(id, tenant.tenantId, actor.actorId);
     }
@@ -119,6 +125,28 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], BookingController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Patch)(':id/reserve'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], BookingController.prototype, "reserve", null);
+__decorate([
+    (0, common_1.Patch)(':id/expire'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], BookingController.prototype, "expire", null);
 __decorate([
     (0, common_1.Patch)(':id/confirm'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),

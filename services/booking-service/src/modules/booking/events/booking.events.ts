@@ -1,4 +1,5 @@
 export enum BookingEvents {
+  RESERVED             = 'spancle.booking.reserved',
   CREATED              = 'spancle.booking.created',
   CONFIRMED            = 'spancle.booking.confirmed',
   CANCELLED            = 'spancle.booking.cancelled',
@@ -8,6 +9,8 @@ export enum BookingEvents {
   RESCHEDULED          = 'spancle.booking.rescheduled',
   REFUNDED             = 'spancle.booking.refunded',
   CHECKED_IN           = 'spancle.booking.checked_in',
+  IN_PROGRESS          = 'spancle.booking.in_progress',
+  EXPIRED              = 'spancle.booking.expired',
   RECURRING_GENERATED  = 'spancle.booking.recurring_generated',
   UPDATED              = 'spancle.booking.updated',
   DELETED              = 'spancle.booking.deleted',

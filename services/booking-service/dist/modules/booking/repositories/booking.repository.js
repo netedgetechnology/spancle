@@ -39,7 +39,7 @@ let BookingRepository = BookingRepository_1 = class BookingRepository {
     async findByIdOrFail(id, tenantId) {
         const b = await this.findById(id, tenantId);
         if (!b)
-            throw new Error(`Booking ${id} not found`);
+            throw new common_1.NotFoundException(`Booking ${id} not found`);
         return b;
     }
     async findByReference(reference, tenantId) {
@@ -86,8 +86,10 @@ let BookingRepository = BookingRepository_1 = class BookingRepository {
             .groupBy('b.status')
             .getRawMany();
         const counts = {
-            pending_payment: 0, confirmed: 0, completed: 0,
+            reserved: 0, pending_payment: 0, confirmed: 0,
+            checked_in: 0, in_progress: 0, completed: 0,
             cancelled: 0, no_show: 0, refunded: 0,
+            rescheduled: 0, expired: 0,
         };
         for (const r of rows)
             counts[r.status] = Number(r.count);

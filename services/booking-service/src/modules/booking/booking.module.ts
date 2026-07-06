@@ -1,6 +1,5 @@
 import { Module }        from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { HttpModule }    from '@nestjs/axios';
 
 import { BookingEntity }         from './entities/booking.entity';
 import { BookingPaymentEntity }  from './entities/booking-payment.entity';
@@ -27,7 +26,6 @@ import { SlotModule }               from '../slot/slot.module';
       BookingRefundEntity,
       BookingLogEntity,
     ]),
-    HttpModule.register({ timeout: 5_000, maxRedirects: 0 }),
     SlotModule,
   ],
   controllers: [BookingController],

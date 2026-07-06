@@ -84,7 +84,7 @@ let BookingValidationService = BookingValidationService_1 = class BookingValidat
         return slots;
     }
     assertCancellable(booking) {
-        const cancellable = ['pending_payment', 'confirmed'];
+        const cancellable = ['reserved', 'pending_payment', 'confirmed'];
         if (!cancellable.includes(booking.status)) {
             throw new common_1.BadRequestException(`Booking cannot be cancelled — current status: ${booking.status}`);
         }
@@ -95,8 +95,9 @@ let BookingValidationService = BookingValidationService_1 = class BookingValidat
         }
     }
     assertReschedulable(booking) {
-        if (booking.status !== 'confirmed') {
-            throw new common_1.BadRequestException(`Only confirmed bookings can be rescheduled — current status: ${booking.status}`);
+        const reschedulable = ['confirmed', 'checked_in'];
+        if (!reschedulable.includes(booking.status)) {
+            throw new common_1.BadRequestException(`Only confirmed or checked-in bookings can be rescheduled — current status: ${booking.status}`);
         }
         if (booking.startsAt <= new Date()) {
             throw new common_1.BadRequestException('Cannot reschedule a booking that has already started');

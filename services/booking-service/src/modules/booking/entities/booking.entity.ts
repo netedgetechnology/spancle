@@ -13,23 +13,40 @@ import {
 /**
  * Booking lifecycle:
  *
- *   pending_payment → confirmed  (payment received)
- *   pending_payment → cancelled  (payment timed out or manually cancelled)
- *   confirmed       → completed  (session window has passed)
- *   confirmed       → cancelled  (admin or customer cancellation)
- *   confirmed       → no_show    (customer did not attend — post-session)
- *   cancelled       → refunded   (refund processed; terminal)
+ *   reserved        → pending_payment  (payment initiated)
+ *   reserved        → cancelled        (reservation expired or abandoned)
+ *   pending_payment → confirmed        (payment received)
+ *   pending_payment → cancelled        (payment timed out or manually cancelled)
+ *   pending_payment → expired          (reservation TTL elapsed — automated)
+ *   confirmed       → checked_in       (customer arrived)
+ *   confirmed       → in_progress      (session started — time-based)
+ *   confirmed       → completed        (session window has passed)
+ *   confirmed       → cancelled        (admin or customer cancellation)
+ *   confirmed       → no_show          (customer did not attend — post-session)
+ *   confirmed       → rescheduled      (moved to new slots; new booking created)
+ *   checked_in      → in_progress      (session started after check-in)
+ *   checked_in      → completed        (direct completion without in_progress)
+ *   in_progress     → completed        (session ended)
+ *   cancelled       → refunded         (refund processed; terminal)
+ *   no_show         → refunded         (partial refund; terminal)
+ *   rescheduled     → confirmed        (auto-transition of the replacement booking)
+ *   expired         → (terminal)
  *
- * State transitions are enforced in BookingService.updateStatus().
+ * State transitions are enforced in BookingService via ALLOWED_TRANSITIONS.
  * Every transition writes an immutable BookingLogEntity row.
  */
 export type BookingStatus =
+  | 'reserved'
   | 'pending_payment'
   | 'confirmed'
+  | 'checked_in'
+  | 'in_progress'
   | 'completed'
   | 'cancelled'
   | 'no_show'
-  | 'refunded';
+  | 'refunded'
+  | 'rescheduled'
+  | 'expired';
 
 // ── Booking channel ────────────────────────────────────────────────────────
 
@@ -186,7 +203,8 @@ export class BookingEntity {
 
   @Column({
     type:    'enum',
-    enum:    ['pending_payment', 'confirmed', 'completed', 'cancelled', 'no_show', 'refunded'],
+    enum:    ['reserved', 'pending_payment', 'confirmed', 'checked_in', 'in_progress',
+              'completed', 'cancelled', 'no_show', 'refunded', 'rescheduled', 'expired'],
     default: 'pending_payment',
   })
   status!: BookingStatus;
@@ -287,6 +305,15 @@ export class BookingEntity {
 
   @Column({ name: 'checked_in_at', type: 'timestamptz', nullable: true })
   checkedInAt!: Date | null;
+
+  /**
+   * Reservation expiry — set when status enters 'reserved' or 'pending_payment'.
+   * When now() > expiresAt, an automated job transitions the booking to 'expired'
+   * and releases the held slots back to 'available'.
+   * Null for confirmed / terminal-state bookings.
+   */
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
+  expiresAt!: Date | null;
 
   // ── Audit ─────────────────────────────────────────────────────────────────
 

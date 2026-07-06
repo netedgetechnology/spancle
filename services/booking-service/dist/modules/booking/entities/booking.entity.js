@@ -66,7 +66,8 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['pending_payment', 'confirmed', 'completed', 'cancelled', 'no_show', 'refunded'],
+        enum: ['reserved', 'pending_payment', 'confirmed', 'checked_in', 'in_progress',
+            'completed', 'cancelled', 'no_show', 'refunded', 'rescheduled', 'expired'],
         default: 'pending_payment',
     }),
     __metadata("design:type", String)
@@ -143,6 +144,10 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'checked_in_at', type: 'timestamptz', nullable: true }),
     __metadata("design:type", Object)
 ], BookingEntity.prototype, "checkedInAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'expires_at', type: 'timestamptz', nullable: true }),
+    __metadata("design:type", Object)
+], BookingEntity.prototype, "expiresAt", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'created_by_id', type: 'uuid', nullable: true }),
     __metadata("design:type", Object)

@@ -117,6 +117,28 @@ export class BookingController {
 
   // ── Status transitions ─────────────────────────────────────────────────────
 
+  @Patch(':id/reserve')
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
+  reserve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ) {
+    return this.bookingService.reserve(id, tenant.tenantId, actor.actorId);
+  }
+
+  @Patch(':id/expire')
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
+  expire(
+    @Param('id', ParseUUIDPipe) id: string,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ) {
+    return this.bookingService.expire(id, tenant.tenantId, actor.actorId);
+  }
+
   @Patch(':id/confirm')
   @HttpCode(HttpStatus.OK)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')

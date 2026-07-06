@@ -154,7 +154,7 @@ export class BookingValidationService {
    *   - Already completed/refunded/cancelled: reject
    */
   assertCancellable(booking: BookingEntity): void {
-    const cancellable: BookingEntity['status'][] = ['pending_payment', 'confirmed'];
+    const cancellable: BookingEntity['status'][] = ['reserved', 'pending_payment', 'confirmed'];
     if (!cancellable.includes(booking.status)) {
       throw new BadRequestException(
         `Booking cannot be cancelled — current status: ${booking.status}`,
@@ -180,9 +180,10 @@ export class BookingValidationService {
    * Only 'confirmed' bookings can be rescheduled.
    */
   assertReschedulable(booking: BookingEntity): void {
-    if (booking.status !== 'confirmed') {
+    const reschedulable: BookingEntity['status'][] = ['confirmed', 'checked_in'];
+    if (!reschedulable.includes(booking.status)) {
       throw new BadRequestException(
-        `Only confirmed bookings can be rescheduled — current status: ${booking.status}`,
+        `Only confirmed or checked-in bookings can be rescheduled — current status: ${booking.status}`,
       );
     }
     if (booking.startsAt <= new Date()) {

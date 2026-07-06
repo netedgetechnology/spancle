@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 }    from '@nestjs/event-emitter';
-import { HttpService }       from '@nestjs/axios';
 import { ConfigService }     from '@nestjs/config';
 import { DataSource }    from 'typeorm';
 
@@ -32,13 +31,21 @@ import type {
   PaymentFailedDto,
 } from '../dto/update-booking.dto';
 
+/** Reservation TTL in minutes — configurable via BOOKING_RESERVATION_TTL_MINS */
+const DEFAULT_RESERVATION_TTL_MINS = 15;
+
 const ALLOWED_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
-  pending_payment: ['confirmed', 'cancelled'],
-  confirmed:       ['completed', 'cancelled', 'no_show'],
+  reserved:        ['pending_payment', 'cancelled', 'expired'],
+  pending_payment: ['confirmed', 'cancelled', 'expired'],
+  confirmed:       ['checked_in', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled'],
+  checked_in:      ['in_progress', 'completed'],
+  in_progress:     ['completed'],
   completed:       [],
   cancelled:       ['refunded'],
-  no_show:         ['no_show', 'refunded', 'completed'],
+  no_show:         ['refunded'],
+  rescheduled:     [],
   refunded:        [],
+  expired:         [],
 };
 
 @Injectable()
@@ -52,7 +59,6 @@ export class BookingService {
     private readonly slotRepository:       SlotRepository,
     private readonly eventEmitter:         EventEmitter2,
     private readonly dataSource:           DataSource,
-    private readonly httpService:          HttpService,
     private readonly configService:        ConfigService,
   ) {}
 
@@ -184,6 +190,83 @@ export class BookingService {
 
   async getStatusSummary(tenantId: string): Promise<Record<BookingStatus, number>> {
     return this.bookingRepository.countByStatus(tenantId);
+  }
+
+  // ── Reserve ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Transitions a pending_payment booking into 'reserved' state with an expiry.
+   * Used when a slot hold is needed before payment is initiated.
+   * Slots remain 'reserved' (not released) until expiry or payment confirmation.
+   */
+  async reserve(id: string, tenantId: string, actorId: string): Promise<BookingEntity> {
+    const booking = await this.findOne(id, tenantId);
+    this.assertTransitionAllowed(booking.status, 'reserved');
+
+    const ttlMins = this.configService.get<number>(
+      'BOOKING_RESERVATION_TTL_MINS',
+      DEFAULT_RESERVATION_TTL_MINS,
+    );
+    const expiresAt = new Date(Date.now() + ttlMins * 60_000);
+
+    const updated = await this.bookingRepository.updateById(id, tenantId, {
+      status: 'reserved',
+      expiresAt,
+      updatedById: actorId,
+    });
+
+    await this.logRepository.insert({
+      tenantId, bookingId: id,
+      action: 'status_changed', actorId, actorType: 'user',
+      previousStatus: booking.status, newStatus: 'reserved',
+      note: `Reservation held until ${expiresAt.toISOString()}`,
+    });
+    await this.eventEmitter.emitAsync(BookingEvents.RESERVED, {
+      tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+    });
+
+    return updated;
+  }
+
+  // ── Expire ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Transitions a reserved/pending_payment booking to 'expired' and releases slots.
+   * Called by the scheduler when expiresAt < now().
+   * Can also be called explicitly by staff to manually expire a stale hold.
+   */
+  async expire(id: string, tenantId: string, actorId: string): Promise<BookingEntity> {
+    const booking = await this.findOne(id, tenantId);
+    this.assertTransitionAllowed(booking.status, 'expired');
+
+    const updated = await this.dataSource.transaction(async (manager) => {
+      const SlotEntity = (await import('../../slot/entities/slot.entity')).SlotEntity;
+      // Release held slots
+      for (const slotId of booking.slotIds) {
+        await manager.update(
+          SlotEntity,
+          { id: slotId, tenantId },
+          { status: 'available', bookingId: null, updatedAt: new Date() },
+        );
+      }
+      await manager.update(
+        BookingEntity,
+        { id, tenantId },
+        { status: 'expired', expiresAt: null, updatedById: actorId, updatedAt: new Date() },
+      );
+      return manager.findOneOrFail(BookingEntity, { where: { id, tenantId } });
+    });
+
+    await this.logRepository.insert({
+      tenantId, bookingId: id,
+      action: 'status_changed', actorId, actorType: 'system',
+      previousStatus: booking.status, newStatus: 'expired',
+    });
+    await this.eventEmitter.emitAsync(BookingEvents.EXPIRED, {
+      tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+    });
+
+    return updated;
   }
 
   // ── Confirm ────────────────────────────────────────────────────────────────
@@ -768,95 +851,30 @@ export class BookingService {
 
   // ── Private: void invoice on cancellation ──────────────────────────────────
 
+  /**
+   * Placeholder for Finance-service integration (out of scope for Batch 3).
+   * When finance-service is implemented, restore the HTTP call here using
+   * HttpService from @nestjs/axios and re-register HttpModule in BookingModule.
+   */
   private async voidInvoiceForBooking(
     bookingId: string,
-    tenantId:  string,
-    actorId:   string,
-    reason:    string,
+    _tenantId:  string,
+    _actorId:   string,
+    _reason:    string,
   ): Promise<void> {
-    const financeBase = this.configService.get<string>(
-      'FINANCE_SERVICE_URL', 'http://localhost:3004',
-    );
-
-    try {
-      // Find invoice by bookingId
-      const searchRes = await this.httpService.axiosRef.get(
-        `${financeBase}/api/v1/invoices`,
-        {
-          params:  { bookingId, limit: 1 },
-          headers: { 'x-tenant-id': tenantId },
-          timeout: 5_000,
-        },
-      );
-
-      const invoices: Array<{ id: string; status: string }> = searchRes.data ?? [];
-      const invoice = Array.isArray(invoices) ? invoices[0] : null;
-
-      if (!invoice) {
-        this.logger.debug(`No invoice found for booking ${bookingId} — nothing to void`);
-        return;
-      }
-
-      // Only void if not already paid/voided
-      if (['paid', 'voided', 'cancelled'].includes(invoice.status)) {
-        this.logger.debug(`Invoice ${invoice.id} already in terminal status ${invoice.status} — skipping void`);
-        return;
-      }
-
-      await this.httpService.axiosRef.patch(
-        `${financeBase}/api/v1/invoices/${invoice.id}/void`,
-        { reason: `Booking cancelled: ${reason}` },
-        { headers: { 'x-tenant-id': tenantId, 'x-actor-id': actorId }, timeout: 5_000 },
-      );
-
-      this.logger.log(`Invoice ${invoice.id} voided for cancelled booking ${bookingId}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Invoice void failed for booking ${bookingId}: ${msg} — manual correction required`,
-      );
-    }
+    this.logger.debug(`voidInvoiceForBooking: finance integration pending — booking ${bookingId}`);
   }
 
   // ── Private: auto-invoice on confirm ───────────────────────────────────────
 
+  /**
+   * Placeholder for Finance-service integration (out of scope for Batch 3).
+   */
   private async createInvoiceForBooking(
     booking:  BookingEntity,
-    tenantId: string,
-    actorId:  string,
+    _tenantId: string,
+    _actorId:  string,
   ): Promise<void> {
-    const financeBase = this.configService.get<string>(
-      'FINANCE_SERVICE_URL', 'http://localhost:3004',
-    );
-    const url = `${financeBase}/api/v1/invoices`;
-
-    const body = {
-      type:       'booking',
-      bookingId:  booking.id,
-      branchId:   booking.branchId,
-      branchCode: 'HO',
-      customerName:  booking.customerName,
-      customerEmail: booking.customerEmail,
-      lineItems: [{
-        description:   `Court booking — ${booking.reference}`,
-        quantity:      1,
-        unitPriceMinor: booking.finalPriceMinor ?? 0,
-        gstRateBps:    1800,   // 18 % default — adjust per branch GST config
-      }],
-    };
-
-    try {
-      await this.httpService.axiosRef.post(url, body, {
-        headers: { 'x-tenant-id': tenantId, 'x-actor-id': actorId },
-        timeout: 5_000,
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Auto-invoice failed for booking ${booking.id}: ${msg} — manual creation required`,
-      );
-    }
+    this.logger.debug(`createInvoiceForBooking: finance integration pending — booking ${booking.id}`);
   }
-
-
 }

@@ -9,7 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookingModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const axios_1 = require("@nestjs/axios");
 const booking_entity_1 = require("./entities/booking.entity");
 const booking_payment_entity_1 = require("./entities/booking-payment.entity");
 const booking_refund_entity_1 = require("./entities/booking-refund.entity");
@@ -32,7 +31,6 @@ exports.BookingModule = BookingModule = __decorate([
                 booking_refund_entity_1.BookingRefundEntity,
                 booking_log_entity_1.BookingLogEntity,
             ]),
-            axios_1.HttpModule.register({ timeout: 5_000, maxRedirects: 0 }),
             slot_module_1.SlotModule,
         ],
         controllers: [booking_controller_1.BookingController],

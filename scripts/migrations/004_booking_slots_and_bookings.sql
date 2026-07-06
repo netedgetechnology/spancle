@@ -345,3 +345,41 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_slots_tenant_venue
   ON slots (tenant_id, venue_id)
   WHERE venue_id IS NOT NULL AND is_deleted = FALSE;
+
+-- =============================================================================
+-- Migration 004 — Addendum: booking state machine expansion (batch 3)
+-- Adds new BookingStatus values and the expires_at column.
+-- Idempotent — DO $$ guards.
+-- =============================================================================
+
+-- Extend booking_status enum with new states
+DO $$
+BEGIN
+  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'reserved';
+  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'checked_in';
+  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'in_progress';
+  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'rescheduled';
+  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'expired';
+EXCEPTION WHEN others THEN
+  -- If ALTER TYPE fails (e.g. in a transaction) the values already exist
+  NULL;
+END $$;
+
+-- Add expires_at column to bookings
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'bookings' AND column_name = 'expires_at'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN expires_at TIMESTAMPTZ;
+    COMMENT ON COLUMN bookings.expires_at IS
+      'Reservation expiry time. When now() > expires_at the booking transitions '
+      'to expired and held slots are released. Null for confirmed/terminal bookings.';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_bookings_expires_at
+  ON bookings (tenant_id, expires_at)
+  WHERE expires_at IS NOT NULL
+    AND status IN ('reserved', 'pending_payment');
