@@ -322,3 +322,26 @@ CREATE TABLE IF NOT EXISTS booking_refunds (
 );
 CREATE INDEX IF NOT EXISTS idx_booking_refunds_booking ON booking_refunds (tenant_id, booking_id) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_booking_refunds_payment ON booking_refunds (tenant_id, payment_id) WHERE is_deleted = FALSE;
+
+-- =============================================================================
+-- Migration 004 — Addendum: venue_id column on slots
+-- Added in batch 2.1 after SlotEntity.venueId was introduced.
+-- Idempotent — DO $$ guard.
+-- =============================================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'slots' AND column_name = 'venue_id'
+  ) THEN
+    ALTER TABLE slots ADD COLUMN venue_id UUID;
+    COMMENT ON COLUMN slots.venue_id IS
+      'Denormalized from courts_booking.venue_id at generation time. '
+      'Enables venue-calendar queries without a join. Nullable for legacy rows.';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_slots_tenant_venue
+  ON slots (tenant_id, venue_id)
+  WHERE venue_id IS NOT NULL AND is_deleted = FALSE;

@@ -34,6 +34,7 @@ const slot_template_controller_1 = require("./controllers/slot-template.controll
 const pricing_rule_controller_1 = require("./controllers/pricing-rule.controller");
 const blackout_controller_1 = require("./controllers/blackout.controller");
 const holiday_controller_1 = require("./controllers/holiday.controller");
+const venue_slot_controller_1 = require("./controllers/venue-slot.controller");
 const court_module_1 = require("../court/court.module");
 let SlotModule = class SlotModule {
 };
@@ -58,6 +59,7 @@ exports.SlotModule = SlotModule = __decorate([
             pricing_rule_controller_1.PricingRuleController,
             blackout_controller_1.BlackoutController,
             holiday_controller_1.HolidayController,
+            venue_slot_controller_1.VenueSlotController,
         ],
         providers: [
             rate_card_repository_1.RateCardRepository,

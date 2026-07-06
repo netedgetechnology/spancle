@@ -1,7 +1,7 @@
 import {
-  IsDateString, IsEnum, IsOptional, IsUUID,
+  IsDateString, IsEnum, IsInt, IsOptional, IsUUID, Min,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 const SLOT_STATUSES = ['available', 'reserved', 'booked', 'cancelled', 'completed'] as const;
 
@@ -9,6 +9,10 @@ export class QuerySlotsDto {
   @IsUUID()
   @IsOptional()
   courtId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  venueId?: string;
 
   @IsUUID()
   @IsOptional()
@@ -23,7 +27,7 @@ export class QuerySlotsDto {
   @IsOptional()
   from?: string;
 
-  /** ISO date string — filter slots starting before this date */
+  /** ISO date string — filter slots ending on or before this date */
   @IsDateString()
   @IsOptional()
   to?: string;
@@ -31,4 +35,18 @@ export class QuerySlotsDto {
   @IsEnum(SLOT_STATUSES)
   @IsOptional()
   status?: typeof SLOT_STATUSES[number];
+
+  /** Maximum results to return — future pagination support */
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  limit?: number;
+
+  /** Offset for pagination */
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  @Type(() => Number)
+  offset?: number;
 }

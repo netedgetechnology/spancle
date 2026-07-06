@@ -72,11 +72,14 @@ let SlotService = SlotService_1 = class SlotService {
         return this.slotRepository.query({
             tenantId,
             courtId: query.courtId,
+            venueId: query.venueId,
             branchId: query.branchId,
             sportId: query.sportId,
             from: query.from ? new Date(query.from) : undefined,
             to: query.to ? new Date(query.to) : undefined,
             status: query.status,
+            limit: query.limit,
+            offset: query.offset,
         });
     }
     async findOne(id, tenantId) {
@@ -152,6 +155,30 @@ let SlotService = SlotService_1 = class SlotService {
             throw new common_1.BadRequestException(`Cannot transition slot from "${from}" to "${to}". ` +
                 `Allowed: [${allowed.join(', ') || 'none'}]`);
         }
+    }
+    async bulkCancelInWindow(params) {
+        const cancelled = await this.slotRepository.bulkCancelAvailable({
+            tenantId: params.tenantId,
+            startAt: params.startAt,
+            endAt: params.endAt,
+            courtId: params.courtId,
+            branchId: params.branchId,
+        });
+        if (cancelled > 0) {
+            await this.eventEmitter.emitAsync(slot_events_1.SlotEvents.BULK_DELETED, {
+                tenantId: params.tenantId,
+                courtId: params.courtId ?? null,
+                venueId: params.venueId ?? null,
+                branchId: params.branchId ?? null,
+                count: cancelled,
+                slotIds: [],
+                actorId: params.actorId,
+                timestamp: new Date().toISOString(),
+            });
+            this.logger.log(`Bulk cancelled ${cancelled} slots — ` +
+                `court=${params.courtId ?? 'any'} tenant=${params.tenantId}`);
+        }
+        return { cancelled };
     }
 };
 exports.SlotService = SlotService;

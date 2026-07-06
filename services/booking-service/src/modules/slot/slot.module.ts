@@ -33,6 +33,7 @@ import { SlotTemplateController } from './controllers/slot-template.controller';
 import { PricingRuleController }  from './controllers/pricing-rule.controller';
 import { BlackoutController }     from './controllers/blackout.controller';
 import { HolidayController }      from './controllers/holiday.controller';
+import { VenueSlotController }    from './controllers/venue-slot.controller';
 
 // Cross-module dependencies
 import { CourtModule } from '../court/court.module';
@@ -70,6 +71,7 @@ import { CourtModule } from '../court/court.module';
     PricingRuleController,
     BlackoutController,
     HolidayController,
+    VenueSlotController,
   ],
   providers: [
     RateCardRepository,

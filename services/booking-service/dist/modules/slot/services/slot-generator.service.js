@@ -40,6 +40,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
     async generate(dto, tenantId, actorId) {
         const court = await this.fetchCourtOrFail(dto.courtId, tenantId);
         this.assertCourtBookable(court);
+        await this.assertVenueExists(court.venueId, tenantId);
         const config = dto.templateId
             ? await this.resolveFromTemplate(dto.templateId, tenantId)
             : {
@@ -217,10 +218,13 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
         if (hoursOverride) {
             return { openTime: hoursOverride.openTime, closeTime: hoursOverride.closeTime };
         }
-        return { openTime: '06:00', closeTime: '23:00' };
+        return { openTime: '00:00', closeTime: '23:59' };
     }
     generateSlotsForDay(dateStr, hours, durationMins, bufferMins) {
         return slot_utils_1.SlotUtils.chopIntoSlots(dateStr, hours.openTime, hours.closeTime, durationMins, bufferMins);
+    }
+    async assertVenueExists(venueId, tenantId) {
+        await this.venueService.findOne(venueId, tenantId);
     }
 };
 exports.SlotGeneratorService = SlotGeneratorService;

@@ -93,11 +93,14 @@ export class SlotService {
     return this.slotRepository.query({
       tenantId,
       courtId:  query.courtId,
+      venueId:  query.venueId,
       branchId: query.branchId,
       sportId:  query.sportId,
       from:     query.from ? new Date(query.from) : undefined,
       to:       query.to   ? new Date(query.to)   : undefined,
       status:   query.status as SlotStatus | undefined,
+      limit:    query.limit,
+      offset:   query.offset,
     });
   }
 
@@ -225,5 +228,50 @@ export class SlotService {
         `Allowed: [${allowed.join(', ') || 'none'}]`,
       );
     }
+  }
+
+  // ── Bulk operations ────────────────────────────────────────────────────────
+
+  /**
+   * Bulk-cancels available slots within a time window for a court or branch.
+   * Never cancels 'booked' slots — those require explicit per-booking action.
+   * Emits BULK_DELETED after successful cancellation.
+   */
+  async bulkCancelInWindow(params: {
+    tenantId:  string;
+    startAt:   Date;
+    endAt:     Date;
+    courtId?:  string;
+    venueId?:  string;
+    branchId?: string;
+    actorId:   string;
+  }): Promise<{ cancelled: number }> {
+    const cancelled = await this.slotRepository.bulkCancelAvailable({
+      tenantId:  params.tenantId,
+      startAt:   params.startAt,
+      endAt:     params.endAt,
+      courtId:   params.courtId,
+      branchId:  params.branchId,
+    });
+
+    if (cancelled > 0) {
+      await this.eventEmitter.emitAsync(SlotEvents.BULK_DELETED, {
+        tenantId:  params.tenantId,
+        courtId:   params.courtId  ?? null,
+        venueId:   params.venueId  ?? null,
+        branchId:  params.branchId ?? null,
+        count:     cancelled,
+        slotIds:   [],   // individual IDs not returned by bulk UPDATE
+        actorId:   params.actorId,
+        timestamp: new Date().toISOString(),
+      });
+
+      this.logger.log(
+        `Bulk cancelled ${cancelled} slots — ` +
+        `court=${params.courtId ?? 'any'} tenant=${params.tenantId}`,
+      );
+    }
+
+    return { cancelled };
   }
 }

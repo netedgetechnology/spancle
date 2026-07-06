@@ -94,6 +94,9 @@ export class SlotGeneratorService {
     const court = await this.fetchCourtOrFail(dto.courtId, tenantId);
     this.assertCourtBookable(court);
 
+    // 1b. Validate venue exists (soft-delete check — VenueEntity has no isActive)
+    await this.assertVenueExists(court.venueId, tenantId);
+
     // 2. Resolve generation config (template or direct DTO fields)
     const config = dto.templateId
       ? await this.resolveFromTemplate(dto.templateId, tenantId)
@@ -355,30 +358,38 @@ export class SlotGeneratorService {
   /**
    * Resolves the operating window for a day.
    *
-   * Sources (priority order):
-   *   1. hoursOverride in the DTO  — explicit window from the caller
-   *   2. Default full-day window   — 06:00–23:00 (bookable hours convention)
+   * Hour resolution priority (highest to lowest):
+   *   1. hoursOverride in the DTO  — caller-supplied explicit window
+   *   2. Court-level override      — reserved for future CourtEntity.openTime/closeTime
+   *   3. Venue-level override      — reserved for future VenueEntity.defaultHours
+   *   4. Branch hours              — authoritative source (identity-service, future HTTP fetch)
+   *   5. System default            — 00:00–24:00 (full day; no arbitrary restriction)
    *
-   * Operating hours (sessions, breaks, maintenance) belong to the branch in
-   * identity-service and are not replicated into booking-service.  When the
-   * caller needs hour-restricted generation they MUST supply hoursOverride.
-   * Full-day default guarantees generation still works without a cross-service
-   * call while remaining overridable.
+   * Layers 2–4 are reserved for future implementation when those entities
+   * carry operating-hours data.  Callers MUST supply hoursOverride to
+   * restrict generation to specific windows until branch-hours resolution
+   * is implemented across the service boundary.
    *
-   * Returns null to skip a day (currently unused — all days are open by
-   * default; callers can restrict via daysOfWeek in a future DTO extension).
+   * Returns null to skip the day entirely (not currently used; reserved for
+   * per-day closed overrides via a future daysOfWeek field on GenerateSlotsDto).
    */
   private resolveHoursForDay(
     _court:        unknown,
     _dayOfWeek:    string,
     hoursOverride: { openTime: string; closeTime: string } | null,
   ): ResolvedDayHours | null {
+    // Priority 1: explicit DTO override
     if (hoursOverride) {
       return { openTime: hoursOverride.openTime, closeTime: hoursOverride.closeTime };
     }
-    // Default: 06:00–23:00 — covers typical sports facility operating hours.
-    // Callers that need tighter windows must supply hoursOverride.
-    return { openTime: '06:00', closeTime: '23:00' };
+
+    // Priority 2–4: court / venue / branch overrides — not yet implemented.
+    // When CourtEntity gains openTime/closeTime those will be checked here.
+
+    // Priority 5: system default — full calendar day.
+    // 00:00–24:00 expressed as 00:00 open, 00:00 close next day is awkward;
+    // use 00:00–23:59 to cover the full schedulable window without midnight wrap.
+    return { openTime: '00:00', closeTime: '23:59' };
   }
 
   /**
@@ -392,5 +403,14 @@ export class SlotGeneratorService {
     bufferMins:   number,
   ): ReturnType<typeof SlotUtils.chopIntoSlots> {
     return SlotUtils.chopIntoSlots(dateStr, hours.openTime, hours.closeTime, durationMins, bufferMins);
+  }
+
+  /**
+   * Validates the venue referenced by a court still exists (not soft-deleted).
+   * VenueEntity has no isActive flag — soft-delete is the only disable mechanism.
+   */
+  private async assertVenueExists(venueId: string, tenantId: string): Promise<void> {
+    // VenueService.findOne throws NotFoundException when venue is soft-deleted or missing.
+    await this.venueService.findOne(venueId, tenantId);
   }
 }
