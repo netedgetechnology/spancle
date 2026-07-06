@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import { TenantGuard, RbacGuard } from './modules/booking/guards/booking.guard';
 import { BookingModule } from './modules/booking/booking.module';
@@ -45,6 +46,7 @@ import { QrModule }      from './modules/qr/qr.module';
     }),
 
     EventEmitterModule.forRoot({ wildcard: true, delimiter: '.', global: true }),
+    ScheduleModule.forRoot(),
 
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

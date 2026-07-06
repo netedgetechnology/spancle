@@ -53,6 +53,7 @@ const booking_support_repository_1 = require("../repositories/booking-support.re
 const booking_validation_service_1 = require("./booking-validation.service");
 const booking_utils_1 = require("../utils/booking.utils");
 const booking_events_1 = require("../events/booking.events");
+const slot_events_1 = require("../../slot/events/slot.events");
 const booking_entity_1 = require("../entities/booking.entity");
 const slot_repository_1 = require("../../slot/repositories/slot.repository");
 const DEFAULT_RESERVATION_TTL_MINS = 15;
@@ -218,6 +219,10 @@ let BookingService = BookingService_1 = class BookingService {
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.EXPIRED, {
             tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
         });
+        await this.eventEmitter.emitAsync(slot_events_1.SlotEvents.SLOTS_RELEASED, {
+            tenantId, bookingId: id, slotIds: booking.slotIds,
+            reason: 'expired', actorId, timestamp: new Date().toISOString(),
+        });
         return updated;
     }
     async confirm(id, tenantId, actorId) {
@@ -275,6 +280,10 @@ let BookingService = BookingService_1 = class BookingService {
         await this.emitStatusChange(tenantId, id, actorId, booking.status, 'cancelled');
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.CANCELLED, {
             tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+        });
+        await this.eventEmitter.emitAsync(slot_events_1.SlotEvents.SLOTS_RELEASED, {
+            tenantId, bookingId: id, slotIds: booking.slotIds,
+            reason: 'cancelled', actorId, timestamp: new Date().toISOString(),
         });
         void this.voidInvoiceForBooking(id, tenantId, actorId, dto.reason ?? 'booking cancelled');
         this.logger.log(`Booking cancelled: ${booking.reference} reason="${dto.reason}"`);
@@ -400,6 +409,24 @@ let BookingService = BookingService_1 = class BookingService {
         });
         return updated;
     }
+    async markInProgress(id, tenantId, actorId) {
+        const booking = await this.findOne(id, tenantId);
+        this.assertTransitionAllowed(booking.status, 'in_progress');
+        const updated = await this.bookingRepository.updateById(id, tenantId, {
+            status: 'in_progress',
+            updatedById: actorId,
+        });
+        await this.logRepository.insert({
+            tenantId, bookingId: id, action: 'status_changed',
+            actorId, actorType: 'system',
+            previousStatus: booking.status, newStatus: 'in_progress',
+        });
+        await this.emitStatusChange(tenantId, id, actorId, booking.status, 'in_progress');
+        await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.IN_PROGRESS, {
+            tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+        });
+        return updated;
+    }
     async complete(id, tenantId, actorId) {
         const booking = await this.findOne(id, tenantId);
         this.assertTransitionAllowed(booking.status, 'completed');
@@ -461,6 +488,10 @@ let BookingService = BookingService_1 = class BookingService {
         await this.emitStatusChange(tenantId, id, actorId, 'pending_payment', 'cancelled');
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.CANCELLED, {
             tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+        });
+        await this.eventEmitter.emitAsync(slot_events_1.SlotEvents.SLOTS_RELEASED, {
+            tenantId, bookingId: id, slotIds: booking.slotIds,
+            reason: 'cancelled', actorId, timestamp: new Date().toISOString(),
         });
         this.logger.warn(`Payment failed for booking ${booking.reference}: ${dto.reason ?? dto.providerErrorCode}`);
         return updated;
@@ -537,28 +568,75 @@ let BookingService = BookingService_1 = class BookingService {
             this.logger.log(`Recurring series: parent=${parent.id} generated=${generatedIds.length} tenant=${tenantId}`);
         }
     }
+    async autoExpireReservations() {
+        const batchSize = this.configService.get('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+        const candidates = await this.bookingRepository.findExpiredReservations(batchSize);
+        let count = 0;
+        for (const b of candidates) {
+            try {
+                await this.expire(b.id, b.tenantId, 'system');
+                count++;
+            }
+            catch (err) {
+                this.logger.warn(`autoExpireReservations: failed for ${b.id} — ${err.message}`);
+            }
+        }
+        if (count)
+            this.logger.log(`autoExpireReservations: expired ${count} bookings`);
+        return count;
+    }
+    async autoMarkInProgress(tenantId) {
+        const batchSize = this.configService.get('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+        const candidates = await this.bookingRepository.findStartedConfirmed(tenantId, batchSize);
+        let count = 0;
+        for (const b of candidates) {
+            try {
+                await this.markInProgress(b.id, b.tenantId, 'system');
+                count++;
+            }
+            catch (err) {
+                this.logger.warn(`autoMarkInProgress: failed for ${b.id} — ${err.message}`);
+            }
+        }
+        if (count)
+            this.logger.log(`autoMarkInProgress: ${count} bookings in_progress — tenant ${tenantId}`);
+        return count;
+    }
     async autoCompleteExpired(tenantId) {
-        const expired = await this.bookingRepository.findPastConfirmed(tenantId, new Date());
+        const batchSize = this.configService.get('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+        const delayMins = this.configService.get('BOOKING_AUTOCOMPLETE_DELAY_MINS', 0);
+        const before = new Date(Date.now() - delayMins * 60_000);
+        const expired = await this.bookingRepository.findPastConfirmed(tenantId, before, batchSize);
         let count = 0;
         for (const b of expired) {
             try {
                 await this.complete(b.id, tenantId, 'system');
                 count++;
             }
-            catch { }
+            catch (err) {
+                this.logger.warn(`autoCompleteExpired: failed for ${b.id} — ${err.message}`);
+            }
         }
+        if (count)
+            this.logger.log(`autoCompleteExpired: completed ${count} bookings — tenant ${tenantId}`);
         return count;
     }
-    async autoMarkNoShows(tenantId, gracePeriodMins = 30) {
-        const candidates = await this.bookingRepository.findNoShowCandidates(tenantId, gracePeriodMins);
+    async autoMarkNoShows(tenantId) {
+        const batchSize = this.configService.get('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+        const graceMins = this.configService.get('BOOKING_NO_SHOW_GRACE_MINS', 30);
+        const candidates = await this.bookingRepository.findNoShowCandidates(tenantId, graceMins, batchSize);
         let count = 0;
         for (const b of candidates) {
             try {
                 await this.markNoShow(b.id, { notes: 'Auto-marked by system after grace period' }, tenantId, 'system');
                 count++;
             }
-            catch { }
+            catch (err) {
+                this.logger.warn(`autoMarkNoShows: failed for ${b.id} — ${err.message}`);
+            }
         }
+        if (count)
+            this.logger.log(`autoMarkNoShows: marked ${count} no-shows — tenant ${tenantId}`);
         return count;
     }
     assertTransitionAllowed(from, to) {

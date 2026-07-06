@@ -11,5 +11,6 @@ var SlotEvents;
     SlotEvents["BULK_GENERATED"] = "spancle.slot.bulk_generated";
     SlotEvents["RESERVED"] = "spancle.slot.reserved";
     SlotEvents["RESERVATION_EXPIRED"] = "spancle.slot.reservation_expired";
+    SlotEvents["SLOTS_RELEASED"] = "spancle.slot.released";
 })(SlotEvents || (exports.SlotEvents = SlotEvents = {}));
 //# sourceMappingURL=slot.events.js.map

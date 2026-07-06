@@ -12,6 +12,7 @@ export enum SlotEvents {
   BULK_GENERATED  = 'spancle.slot.bulk_generated',
   RESERVED        = 'spancle.slot.reserved',
   RESERVATION_EXPIRED = 'spancle.slot.reservation_expired',
+  SLOTS_RELEASED  = 'spancle.slot.released',
 }
 
 export interface SlotEventPayload {

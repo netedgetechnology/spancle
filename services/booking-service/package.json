@@ -41,7 +41,8 @@
     "cache-manager": "^5.7.6",
     "cache-manager-ioredis": "^2.1.0",
     "@spancle/types": "workspace:*",
-    "@nestjs/jwt": "^10.2.0"
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/schedule": "^4.1.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.2",

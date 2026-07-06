@@ -13,6 +13,7 @@ import { BookingLogRepository }       from '../repositories/booking-support.repo
 import { BookingValidationService }   from './booking-validation.service';
 import { BookingUtils }               from '../utils/booking.utils';
 import { BookingEvents }              from '../events/booking.events';
+import { SlotEvents }                from '../../slot/events/slot.events';
 import type {
   BookingStatusChangedPayload,
   BookingRescheduledPayload,
@@ -265,6 +266,10 @@ export class BookingService {
     await this.eventEmitter.emitAsync(BookingEvents.EXPIRED, {
       tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
     });
+    await this.eventEmitter.emitAsync(SlotEvents.SLOTS_RELEASED, {
+      tenantId, bookingId: id, slotIds: booking.slotIds,
+      reason: 'expired', actorId, timestamp: new Date().toISOString(),
+    });
 
     return updated;
   }
@@ -356,6 +361,10 @@ export class BookingService {
     await this.emitStatusChange(tenantId, id, actorId, booking.status, 'cancelled');
     await this.eventEmitter.emitAsync(BookingEvents.CANCELLED, {
       tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+    });
+    await this.eventEmitter.emitAsync(SlotEvents.SLOTS_RELEASED, {
+      tenantId, bookingId: id, slotIds: booking.slotIds,
+      reason: 'cancelled', actorId, timestamp: new Date().toISOString(),
     });
 
     // Void invoice if one was already issued (fire-and-forget; non-fatal)
@@ -557,6 +566,32 @@ export class BookingService {
 
   // ── Complete ───────────────────────────────────────────────────────────────
 
+  // ── Mark In-Progress ──────────────────────────────────────────────────────
+
+  async markInProgress(id: string, tenantId: string, actorId: string): Promise<BookingEntity> {
+    const booking = await this.findOne(id, tenantId);
+    this.assertTransitionAllowed(booking.status, 'in_progress');
+
+    const updated = await this.bookingRepository.updateById(id, tenantId, {
+      status: 'in_progress',
+      updatedById: actorId,
+    });
+
+    await this.logRepository.insert({
+      tenantId, bookingId: id, action: 'status_changed',
+      actorId, actorType: 'system',
+      previousStatus: booking.status, newStatus: 'in_progress',
+    });
+    await this.emitStatusChange(tenantId, id, actorId, booking.status, 'in_progress');
+    await this.eventEmitter.emitAsync(BookingEvents.IN_PROGRESS, {
+      tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+    });
+
+    return updated;
+  }
+
+  // ── Complete ───────────────────────────────────────────────────────────────
+
   async complete(id: string, tenantId: string, actorId: string): Promise<BookingEntity> {
     const booking = await this.findOne(id, tenantId);
     this.assertTransitionAllowed(booking.status, 'completed');
@@ -656,6 +691,10 @@ export class BookingService {
     await this.emitStatusChange(tenantId, id, actorId, 'pending_payment', 'cancelled');
     await this.eventEmitter.emitAsync(BookingEvents.CANCELLED, {
       tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
+    });
+    await this.eventEmitter.emitAsync(SlotEvents.SLOTS_RELEASED, {
+      tenantId, bookingId: id, slotIds: booking.slotIds,
+      reason: 'cancelled', actorId, timestamp: new Date().toISOString(),
     });
 
     this.logger.warn(
@@ -777,36 +816,75 @@ export class BookingService {
   // ── Scheduler-facing ───────────────────────────────────────────────────────
 
   /**
+   * Expires all bookings in reserved/pending_payment whose expiresAt has passed.
+   * Processes in batches. Returns count of expired bookings.
+   * Slot release is handled inside expire() — no duplication here.
+   */
+  async autoExpireReservations(): Promise<number> {
+    const batchSize = this.configService.get<number>('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+    const candidates = await this.bookingRepository.findExpiredReservations(batchSize);
+    let count = 0;
+    for (const b of candidates) {
+      try {
+        await this.expire(b.id, b.tenantId, 'system');
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoExpireReservations: failed for ${b.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoExpireReservations: expired ${count} bookings`);
+    return count;
+  }
+
+  /**
+   * Transitions confirmed bookings to in_progress when start time arrives.
+   * Runs per-tenant; called by scheduler.
+   */
+  async autoMarkInProgress(tenantId: string): Promise<number> {
+    const batchSize = this.configService.get<number>('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+    const candidates = await this.bookingRepository.findStartedConfirmed(tenantId, batchSize);
+    let count = 0;
+    for (const b of candidates) {
+      try {
+        await this.markInProgress(b.id, b.tenantId, 'system');
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoMarkInProgress: failed for ${b.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoMarkInProgress: ${count} bookings in_progress — tenant ${tenantId}`);
+    return count;
+  }
+
+  /**
    * Marks all confirmed bookings whose end time has passed as 'completed'.
-   * Called by a scheduler task (Sprint 6).
+   * Called by the scheduler.
    */
   async autoCompleteExpired(tenantId: string): Promise<number> {
-    const expired = await this.bookingRepository.findPastConfirmed(
-      tenantId,
-      new Date(),
-    );
+    const batchSize = this.configService.get<number>('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+    const delayMins = this.configService.get<number>('BOOKING_AUTOCOMPLETE_DELAY_MINS', 0);
+    const before = new Date(Date.now() - delayMins * 60_000);
+    const expired = await this.bookingRepository.findPastConfirmed(tenantId, before, batchSize);
     let count = 0;
     for (const b of expired) {
       try {
         await this.complete(b.id, tenantId, 'system');
         count++;
-      } catch { /* individual failure does not block others */ }
+      } catch (err) {
+        this.logger.warn(`autoCompleteExpired: failed for ${b.id} — ${(err as Error).message}`);
+      }
     }
+    if (count) this.logger.log(`autoCompleteExpired: completed ${count} bookings — tenant ${tenantId}`);
     return count;
   }
 
   /**
-   * Auto-marks no-shows for confirmed bookings past the grace period
-   * with no check-in.
+   * Auto-marks no-shows for confirmed bookings past the grace period with no check-in.
    */
-  async autoMarkNoShows(
-    tenantId: string,
-    gracePeriodMins = 30,
-  ): Promise<number> {
-    const candidates = await this.bookingRepository.findNoShowCandidates(
-      tenantId,
-      gracePeriodMins,
-    );
+  async autoMarkNoShows(tenantId: string): Promise<number> {
+    const batchSize   = this.configService.get<number>('BOOKING_SCHEDULER_BATCH_SIZE', 50);
+    const graceMins   = this.configService.get<number>('BOOKING_NO_SHOW_GRACE_MINS', 30);
+    const candidates  = await this.bookingRepository.findNoShowCandidates(tenantId, graceMins, batchSize);
     let count = 0;
     for (const b of candidates) {
       try {
@@ -817,8 +895,11 @@ export class BookingService {
           'system',
         );
         count++;
-      } catch { /* individual failure does not block others */ }
+      } catch (err) {
+        this.logger.warn(`autoMarkNoShows: failed for ${b.id} — ${(err as Error).message}`);
+      }
     }
+    if (count) this.logger.log(`autoMarkNoShows: marked ${count} no-shows — tenant ${tenantId}`);
     return count;
   }
 

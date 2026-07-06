@@ -142,13 +142,42 @@ export class BookingRepository {
   }
 
   /**
+   * Finds bookings in reserved/pending_payment whose expiresAt has passed.
+   * Capped at batchSize to prevent a single sweep processing thousands of rows.
+   */
+  async findExpiredReservations(batchSize = 50): Promise<BookingEntity[]> {
+    return this.dataSource.getRepository(BookingEntity)
+      .createQueryBuilder('b')
+      .where("b.status IN ('reserved','pending_payment')")
+      .andWhere('b.expiresAt < :now', { now: new Date() })
+      .andWhere('b.isDeleted = false')
+      .orderBy('b.expiresAt', 'ASC')
+      .take(batchSize)
+      .getMany();
+  }
+
+  /**
    * Finds all confirmed bookings that started before now and are still 'confirmed'.
    * Called by the scheduler to mark completed bookings.
    */
-  async findPastConfirmed(tenantId: string, before: Date): Promise<BookingEntity[]> {
+  async findPastConfirmed(tenantId: string, before: Date, batchSize = 50): Promise<BookingEntity[]> {
     return this.scopedQb('b', tenantId)
       .andWhere("b.status = 'confirmed'")
       .andWhere('b.endsAt < :before', { before })
+      .take(batchSize)
+      .getMany();
+  }
+
+  /**
+   * Finds confirmed bookings whose start time has arrived but are not yet in_progress.
+   * Used by the scheduler to auto-transition confirmed → in_progress.
+   */
+  async findStartedConfirmed(tenantId: string, batchSize = 50): Promise<BookingEntity[]> {
+    return this.scopedQb('b', tenantId)
+      .andWhere("b.status = 'confirmed'")
+      .andWhere('b.startsAt <= :now', { now: new Date() })
+      .andWhere('b.endsAt > :now2', { now2: new Date() })
+      .take(batchSize)
       .getMany();
   }
 
@@ -156,12 +185,13 @@ export class BookingRepository {
    * Finds confirmed bookings where the session started but no check-in occurred.
    * Used for no-show detection.
    */
-  async findNoShowCandidates(tenantId: string, gracePeriodMinutes = 30): Promise<BookingEntity[]> {
+  async findNoShowCandidates(tenantId: string, gracePeriodMinutes = 30, batchSize = 50): Promise<BookingEntity[]> {
     const cutoff = new Date(Date.now() - gracePeriodMinutes * 60_000);
     return this.scopedQb('b', tenantId)
       .andWhere("b.status = 'confirmed'")
       .andWhere('b.startsAt < :cutoff', { cutoff })
       .andWhere('b.checkedInAt IS NULL')
+      .take(batchSize)
       .getMany();
   }
 }

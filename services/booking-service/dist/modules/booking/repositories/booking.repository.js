@@ -114,18 +114,38 @@ let BookingRepository = BookingRepository_1 = class BookingRepository {
             .andWhere('b.startsAt < :to', { to: params.to })
             .getMany();
     }
-    async findPastConfirmed(tenantId, before) {
+    async findExpiredReservations(batchSize = 50) {
+        return this.dataSource.getRepository(booking_entity_1.BookingEntity)
+            .createQueryBuilder('b')
+            .where("b.status IN ('reserved','pending_payment')")
+            .andWhere('b.expiresAt < :now', { now: new Date() })
+            .andWhere('b.isDeleted = false')
+            .orderBy('b.expiresAt', 'ASC')
+            .take(batchSize)
+            .getMany();
+    }
+    async findPastConfirmed(tenantId, before, batchSize = 50) {
         return this.scopedQb('b', tenantId)
             .andWhere("b.status = 'confirmed'")
             .andWhere('b.endsAt < :before', { before })
+            .take(batchSize)
             .getMany();
     }
-    async findNoShowCandidates(tenantId, gracePeriodMinutes = 30) {
+    async findStartedConfirmed(tenantId, batchSize = 50) {
+        return this.scopedQb('b', tenantId)
+            .andWhere("b.status = 'confirmed'")
+            .andWhere('b.startsAt <= :now', { now: new Date() })
+            .andWhere('b.endsAt > :now2', { now2: new Date() })
+            .take(batchSize)
+            .getMany();
+    }
+    async findNoShowCandidates(tenantId, gracePeriodMinutes = 30, batchSize = 50) {
         const cutoff = new Date(Date.now() - gracePeriodMinutes * 60_000);
         return this.scopedQb('b', tenantId)
             .andWhere("b.status = 'confirmed'")
             .andWhere('b.startsAt < :cutoff', { cutoff })
             .andWhere('b.checkedInAt IS NULL')
+            .take(batchSize)
             .getMany();
     }
 };

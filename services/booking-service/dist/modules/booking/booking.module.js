@@ -17,6 +17,7 @@ const booking_repository_1 = require("./repositories/booking.repository");
 const booking_support_repository_1 = require("./repositories/booking-support.repository");
 const booking_service_1 = require("./services/booking.service");
 const booking_validation_service_1 = require("./services/booking-validation.service");
+const booking_scheduler_service_1 = require("./services/booking-scheduler.service");
 const booking_controller_1 = require("./controllers/booking.controller");
 const slot_module_1 = require("../slot/slot.module");
 let BookingModule = class BookingModule {
@@ -41,6 +42,7 @@ exports.BookingModule = BookingModule = __decorate([
             booking_support_repository_1.BookingLogRepository,
             booking_validation_service_1.BookingValidationService,
             booking_service_1.BookingService,
+            booking_scheduler_service_1.BookingSchedulerService,
         ],
         exports: [booking_service_1.BookingService, booking_validation_service_1.BookingValidationService],
     })

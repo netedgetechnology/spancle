@@ -14,6 +14,7 @@ const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const throttler_1 = require("@nestjs/throttler");
+const schedule_1 = require("@nestjs/schedule");
 const booking_guard_1 = require("./modules/booking/guards/booking.guard");
 const booking_module_1 = require("./modules/booking/booking.module");
 const slot_module_1 = require("./modules/slot/slot.module");
@@ -53,6 +54,7 @@ exports.AppModule = AppModule = __decorate([
                 }),
             }),
             event_emitter_1.EventEmitterModule.forRoot({ wildcard: true, delimiter: '.', global: true }),
+            schedule_1.ScheduleModule.forRoot(),
             throttler_1.ThrottlerModule.forRootAsync({
                 inject: [config_1.ConfigService],
                 useFactory: (config) => ({

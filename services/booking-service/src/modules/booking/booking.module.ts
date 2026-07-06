@@ -15,6 +15,7 @@ import {
 
 import { BookingService }           from './services/booking.service';
 import { BookingValidationService } from './services/booking-validation.service';
+import { BookingSchedulerService }  from './services/booking-scheduler.service';
 import { BookingController }        from './controllers/booking.controller';
 import { SlotModule }               from '../slot/slot.module';
 
@@ -36,6 +37,7 @@ import { SlotModule }               from '../slot/slot.module';
     BookingLogRepository,
     BookingValidationService,
     BookingService,
+    BookingSchedulerService,
   ],
   exports: [BookingService, BookingValidationService],
 })
