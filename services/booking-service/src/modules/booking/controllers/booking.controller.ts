@@ -225,7 +225,18 @@ export class BookingController {
     return this.bookingService.paymentFailed(id, dto, tenant.tenantId, actor.actorId);
   }
 
-    @Patch(':id/complete')
+  @Patch(':id/mark-in-progress')
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
+  markInProgress(
+    @Param('id', ParseUUIDPipe) id: string,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ) {
+    return this.bookingService.markInProgress(id, tenant.tenantId, actor.actorId);
+  }
+
+  @Patch(':id/complete')
   @HttpCode(HttpStatus.OK)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
   complete(

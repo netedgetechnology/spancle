@@ -18,6 +18,8 @@ import { BookingValidationService } from './services/booking-validation.service'
 import { BookingSchedulerService }  from './services/booking-scheduler.service';
 import { BookingController }        from './controllers/booking.controller';
 import { SlotModule }               from '../slot/slot.module';
+import { CourtModule }              from '../court/court.module';
+import { VenueModule }              from '../venue/venue.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { SlotModule }               from '../slot/slot.module';
       BookingLogEntity,
     ]),
     SlotModule,
+    CourtModule,
+    VenueModule,
   ],
   controllers: [BookingController],
   providers: [

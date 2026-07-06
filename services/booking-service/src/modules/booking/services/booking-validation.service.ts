@@ -4,8 +4,10 @@ import {
   Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { SlotRepository }  from '../../slot/repositories/slot.repository';
+import { SlotRepository }    from '../../slot/repositories/slot.repository';
 import { BookingRepository } from '../repositories/booking.repository';
+import { CourtService }      from '../../court/services/court.service';
+import { VenueService }      from '../../venue/services/venue.service';
 import type { BookingEntity } from '../entities/booking.entity';
 
 export interface SlotInfo {
@@ -31,7 +33,33 @@ export class BookingValidationService {
   constructor(
     private readonly slotRepository:    SlotRepository,
     private readonly bookingRepository: BookingRepository,
+    private readonly courtService:      CourtService,
+    private readonly venueService:      VenueService,
   ) {}
+
+  /**
+   * Validates that the court exists, is active, and is bookable.
+   * Validates that the venue exists (soft-delete check).
+   * Called by BookingService.create() before validateSlotsForBooking.
+   */
+  async validateCourtAndVenue(courtId: string, tenantId: string): Promise<void> {
+    const court = await this.courtService.findOne(courtId, tenantId);
+    // CourtService.findOne throws NotFoundException if not found.
+
+    if (!court.isActive) {
+      throw new UnprocessableEntityException(
+        `Court ${courtId} is inactive and cannot accept new bookings`,
+      );
+    }
+    if (!court.isBookable) {
+      throw new UnprocessableEntityException(
+        `Court ${courtId} is not accepting bookings`,
+      );
+    }
+
+    // Validate venue exists (VenueService.findOne throws NotFoundException if soft-deleted)
+    await this.venueService.findOne(court.venueId, tenantId);
+  }
 
   /**
    * Validates all slots for a new booking:

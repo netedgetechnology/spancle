@@ -14,11 +14,25 @@ exports.BookingValidationService = void 0;
 const common_1 = require("@nestjs/common");
 const slot_repository_1 = require("../../slot/repositories/slot.repository");
 const booking_repository_1 = require("../repositories/booking.repository");
+const court_service_1 = require("../../court/services/court.service");
+const venue_service_1 = require("../../venue/services/venue.service");
 let BookingValidationService = BookingValidationService_1 = class BookingValidationService {
-    constructor(slotRepository, bookingRepository) {
+    constructor(slotRepository, bookingRepository, courtService, venueService) {
         this.slotRepository = slotRepository;
         this.bookingRepository = bookingRepository;
+        this.courtService = courtService;
+        this.venueService = venueService;
         this.logger = new common_1.Logger(BookingValidationService_1.name);
+    }
+    async validateCourtAndVenue(courtId, tenantId) {
+        const court = await this.courtService.findOne(courtId, tenantId);
+        if (!court.isActive) {
+            throw new common_1.UnprocessableEntityException(`Court ${courtId} is inactive and cannot accept new bookings`);
+        }
+        if (!court.isBookable) {
+            throw new common_1.UnprocessableEntityException(`Court ${courtId} is not accepting bookings`);
+        }
+        await this.venueService.findOne(court.venueId, tenantId);
     }
     async validateSlotsForBooking(slotIds, tenantId, courtId) {
         if (slotIds.length === 0) {
@@ -159,6 +173,8 @@ exports.BookingValidationService = BookingValidationService;
 exports.BookingValidationService = BookingValidationService = BookingValidationService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [slot_repository_1.SlotRepository,
-        booking_repository_1.BookingRepository])
+        booking_repository_1.BookingRepository,
+        court_service_1.CourtService,
+        venue_service_1.VenueService])
 ], BookingValidationService);
 //# sourceMappingURL=booking-validation.service.js.map

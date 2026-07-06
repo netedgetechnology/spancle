@@ -68,6 +68,9 @@ let BookingController = class BookingController {
     paymentFailed(id, dto, tenant, actor) {
         return this.bookingService.paymentFailed(id, dto, tenant.tenantId, actor.actorId);
     }
+    markInProgress(id, tenant, actor) {
+        return this.bookingService.markInProgress(id, tenant.tenantId, actor.actorId);
+    }
     complete(id, tenant, actor) {
         return this.bookingService.complete(id, tenant.tenantId, actor.actorId);
     }
@@ -228,6 +231,17 @@ __decorate([
     __metadata("design:paramtypes", [String, Function, Object, Object]),
     __metadata("design:returntype", void 0)
 ], BookingController.prototype, "paymentFailed", null);
+__decorate([
+    (0, common_1.Patch)(':id/mark-in-progress'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], BookingController.prototype, "markInProgress", null);
 __decorate([
     (0, common_1.Patch)(':id/complete'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),

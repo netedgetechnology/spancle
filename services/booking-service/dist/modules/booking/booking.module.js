@@ -20,6 +20,8 @@ const booking_validation_service_1 = require("./services/booking-validation.serv
 const booking_scheduler_service_1 = require("./services/booking-scheduler.service");
 const booking_controller_1 = require("./controllers/booking.controller");
 const slot_module_1 = require("../slot/slot.module");
+const court_module_1 = require("../court/court.module");
+const venue_module_1 = require("../venue/venue.module");
 let BookingModule = class BookingModule {
 };
 exports.BookingModule = BookingModule;
@@ -33,6 +35,8 @@ exports.BookingModule = BookingModule = __decorate([
                 booking_log_entity_1.BookingLogEntity,
             ]),
             slot_module_1.SlotModule,
+            court_module_1.CourtModule,
+            venue_module_1.VenueModule,
         ],
         controllers: [booking_controller_1.BookingController],
         providers: [

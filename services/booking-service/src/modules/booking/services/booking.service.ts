@@ -70,6 +70,9 @@ export class BookingService {
     tenantId: string,
     actorId:  string,
   ): Promise<BookingEntity> {
+    // Validate court is active + bookable, venue exists — before any slot locking
+    await this.validationService.validateCourtAndVenue(dto.courtId, tenantId);
+
     const slots = await this.validationService.validateSlotsForBooking(
       dto.slotIds, tenantId, dto.courtId,
     );

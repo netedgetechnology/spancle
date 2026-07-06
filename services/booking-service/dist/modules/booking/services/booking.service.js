@@ -82,6 +82,7 @@ let BookingService = BookingService_1 = class BookingService {
         this.logger = new common_1.Logger(BookingService_1.name);
     }
     async create(dto, tenantId, actorId) {
+        await this.validationService.validateCourtAndVenue(dto.courtId, tenantId);
         const slots = await this.validationService.validateSlotsForBooking(dto.slotIds, tenantId, dto.courtId);
         const sortedSlots = [...slots].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
         const startsAt = sortedSlots[0].startAt;
