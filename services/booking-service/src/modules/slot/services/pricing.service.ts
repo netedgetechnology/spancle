@@ -40,6 +40,7 @@ export interface SlotPricingContext {
   sportId:              string | null;
   startAt:              Date;
   durationMins:         number;
+  venueId?:             string | null;
   courtHourlyRateMinor: number | null;
   /** Rate Card ID if the court has one assigned (overrides courtHourlyRateMinor for base price) */
   rateCardId?:          string | null;
@@ -116,6 +117,7 @@ export class PricingService {
       this.pricingRuleRepository.findMatchingRules({
         tenantId:  ctx.tenantId,
         courtId:   ctx.courtId,
+        venueId:   ctx.venueId,
         branchId:  ctx.branchId,
         sportId:   ctx.sportId,
         slotDate,
@@ -172,6 +174,7 @@ export class PricingService {
         const matchingRules = await this.pricingRuleRepository.findMatchingRules({
           tenantId:  ctx.tenantId,
           courtId:   ctx.courtId,
+          venueId:   ctx.venueId,
           branchId:  ctx.branchId,
           sportId:   ctx.sportId,
           slotDate,
@@ -209,6 +212,7 @@ export class PricingService {
       this.pricingRuleRepository.findMatchingRules({
         tenantId,
         courtId:   dto.courtId,
+        venueId:   dto.venueId,
         branchId:  dto.branchId,
         sportId:   dto.sportId ?? null,
         slotDate,
@@ -298,16 +302,36 @@ export class PricingService {
 
     // ── Step 3: Additive modifiers ─────────────────────────────────────────
     // Applied in this exact type order; all matching rules within each type stack.
-    const modifierOrder = ['peak', 'weekend', 'holiday', 'member', 'custom'] as const;
+    // New rule types in Batch 5 follow the same evaluation semantics:
+    //   time_of_day — time-window surcharge (finer-grained than peak)
+    //   day_of_week — per-day adjustment (finer-grained than weekend)
+    //   seasonal    — date-range pricing; no extra guard condition
+    //   promotion   — promotional discount; no extra guard condition
+    //   membership  — membership tier pricing; only fires when isMember = true
+    //   coach       — coach-session surcharge; no extra guard condition
+    //   tournament  — tournament block pricing; no extra guard condition
+    //   coupon      — coupon-code discount; caller validates code before calling pipeline
+    //   member      — member discount (legacy alias for membership)
+    //   custom      — catch-all (non-absolute only here; absolute handled in step 2)
+    const modifierOrder = [
+      'peak', 'time_of_day', 'day_of_week', 'weekend',
+      'holiday', 'seasonal', 'promotion',
+      'coach', 'tournament',
+      'membership', 'member',
+      'coupon', 'custom',
+    ] as const;
 
     for (const ruleType of modifierOrder) {
       const candidates = rules
         .filter((r) => {
           if (r.ruleType !== ruleType) return false;
           // holiday rules: only fire on actual holidays
-          if (ruleType === 'holiday' && !isHoliday) return false;
-          // member rules: only fire when booker is a member
-          if (ruleType === 'member'  && !isMember)  return false;
+          if (ruleType === 'holiday'    && !isHoliday) return false;
+          // member/membership rules: only fire when booker is a member
+          if (ruleType === 'member'     && !isMember)  return false;
+          if (ruleType === 'membership' && !isMember)  return false;
+          // custom rules with absolute modifier handled in step 2; skip here
+          if (ruleType === 'custom' && r.modifierType === 'absolute') return false;
           return true;
         })
         .sort((a, b) => b.priority - a.priority); // highest priority first within type

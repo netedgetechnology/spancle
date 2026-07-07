@@ -63,24 +63,31 @@ export class PricingRuleRepository {
   async findMatchingRules(params: {
     tenantId:   string;
     courtId:    string;
+    venueId?:   string | null;
     branchId:   string;
     sportId:    string | null;
     slotDate:   string;       // YYYY-MM-DD
     slotTime:   string;       // HH:MM
     dayOfWeek:  string;       // e.g. 'monday'
   }): Promise<PricingRuleEntity[]> {
-    const { tenantId, courtId, branchId, sportId, slotDate, slotTime, dayOfWeek } = params;
+    const { tenantId, courtId, venueId, branchId, sportId, slotDate, slotTime, dayOfWeek } = params;
 
     const qb = this.scopedQb('r', tenantId)
-      // Scope: tenant wildcard OR specific branch/sport/court
+      // Scope: tenant wildcard OR specific venue/branch/sport/court
       .andWhere(
         `(
           (r.scope = 'tenant')
           OR (r.scope = 'branch' AND r.branchId = :branchId)
+          ${venueId ? "OR (r.scope = 'venue' AND r.venueId = :venueId)" : ''}
           OR (r.scope = 'court'  AND r.courtId  = :courtId)
           ${sportId ? "OR (r.scope = 'sport' AND r.sportId = :sportId)" : ''}
         )`,
-        { branchId, courtId, ...(sportId && { sportId }) },
+        {
+          branchId,
+          courtId,
+          ...(venueId && { venueId }),
+          ...(sportId && { sportId }),
+        },
       )
       // Date range: validFrom <= slotDate <= validUntil (nulls = open-ended)
       .andWhere(
@@ -123,6 +130,24 @@ export class PricingRuleRepository {
       { id, tenantId },
       { isDeleted: true, isActive: false, deletedAt: new Date(), updatedAt: new Date() },
     );
+  }
+
+  /**
+   * Atomically increments redemption_count on a coupon rule.
+   * Called inside the booking creation transaction.
+   * Uses manager (EntityManager) for transaction participation.
+   */
+  async incrementRedemption(
+    ruleId:   string,
+    tenantId: string,
+    manager:  import('typeorm').EntityManager,
+  ): Promise<void> {
+    await manager
+      .createQueryBuilder()
+      .update(PricingRuleEntity)
+      .set({ redemptionCount: () => 'redemption_count + 1' })
+      .where('id = :id AND tenant_id = :tenantId', { id: ruleId, tenantId })
+      .execute();
   }
 
   /**

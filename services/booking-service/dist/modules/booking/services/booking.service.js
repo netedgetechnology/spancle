@@ -54,6 +54,7 @@ const booking_validation_service_1 = require("./booking-validation.service");
 const booking_utils_1 = require("../utils/booking.utils");
 const booking_events_1 = require("../events/booking.events");
 const slot_events_1 = require("../../slot/events/slot.events");
+const pricing_rule_repository_1 = require("../../slot/repositories/pricing-rule.repository");
 const booking_entity_1 = require("../entities/booking.entity");
 const slot_repository_1 = require("../../slot/repositories/slot.repository");
 const DEFAULT_RESERVATION_TTL_MINS = 15;
@@ -71,11 +72,12 @@ const ALLOWED_TRANSITIONS = {
     expired: [],
 };
 let BookingService = BookingService_1 = class BookingService {
-    constructor(bookingRepository, logRepository, validationService, slotRepository, eventEmitter, dataSource, configService) {
+    constructor(bookingRepository, logRepository, validationService, slotRepository, pricingRuleRepository, eventEmitter, dataSource, configService) {
         this.bookingRepository = bookingRepository;
         this.logRepository = logRepository;
         this.validationService = validationService;
         this.slotRepository = slotRepository;
+        this.pricingRuleRepository = pricingRuleRepository;
         this.eventEmitter = eventEmitter;
         this.dataSource = dataSource;
         this.configService = configService;
@@ -95,6 +97,17 @@ let BookingService = BookingService_1 = class BookingService {
         const reference = booking_utils_1.BookingUtils.generateReference();
         const booking = await this.dataSource.transaction(async (manager) => {
             await this.slotRepository.lockAndVerifyAvailable(dto.slotIds, tenantId, manager);
+            if (dto.couponCode) {
+                const slotDate = sortedSlots[0].startAt.toISOString().slice(0, 10);
+                const couponRule = await this.pricingRuleRepository.findCouponRule(dto.couponCode, tenantId, slotDate);
+                if (!couponRule) {
+                    throw new common_1.BadRequestException(`Coupon code "${dto.couponCode}" is invalid or expired`);
+                }
+                if (couponRule.maxRedemptions !== null && couponRule.redemptionCount >= couponRule.maxRedemptions) {
+                    throw new common_1.BadRequestException(`Coupon code "${dto.couponCode}" has been fully redeemed`);
+                }
+                await this.pricingRuleRepository.incrementRedemption(couponRule.id, tenantId, manager);
+            }
             const b = await manager.save(manager.create(booking_entity_1.BookingEntity, {
                 tenantId,
                 reference,
@@ -669,6 +682,7 @@ exports.BookingService = BookingService = BookingService_1 = __decorate([
         booking_support_repository_1.BookingLogRepository,
         booking_validation_service_1.BookingValidationService,
         slot_repository_1.SlotRepository,
+        pricing_rule_repository_1.PricingRuleRepository,
         event_emitter_1.EventEmitter2,
         typeorm_1.DataSource,
         config_1.ConfigService])

@@ -36,6 +36,7 @@ let PricingService = PricingService_1 = class PricingService {
             this.pricingRuleRepository.findMatchingRules({
                 tenantId: ctx.tenantId,
                 courtId: ctx.courtId,
+                venueId: ctx.venueId,
                 branchId: ctx.branchId,
                 sportId: ctx.sportId,
                 slotDate,
@@ -66,6 +67,7 @@ let PricingService = PricingService_1 = class PricingService {
             const matchingRules = await this.pricingRuleRepository.findMatchingRules({
                 tenantId: ctx.tenantId,
                 courtId: ctx.courtId,
+                venueId: ctx.venueId,
                 branchId: ctx.branchId,
                 sportId: ctx.sportId,
                 slotDate,
@@ -90,6 +92,7 @@ let PricingService = PricingService_1 = class PricingService {
             this.pricingRuleRepository.findMatchingRules({
                 tenantId,
                 courtId: dto.courtId,
+                venueId: dto.venueId,
                 branchId: dto.branchId,
                 sportId: dto.sportId ?? null,
                 slotDate,
@@ -150,7 +153,13 @@ let PricingService = PricingService_1 = class PricingService {
                 breakdown,
             };
         }
-        const modifierOrder = ['peak', 'weekend', 'holiday', 'member', 'custom'];
+        const modifierOrder = [
+            'peak', 'time_of_day', 'day_of_week', 'weekend',
+            'holiday', 'seasonal', 'promotion',
+            'coach', 'tournament',
+            'membership', 'member',
+            'coupon', 'custom',
+        ];
         for (const ruleType of modifierOrder) {
             const candidates = rules
                 .filter((r) => {
@@ -159,6 +168,10 @@ let PricingService = PricingService_1 = class PricingService {
                 if (ruleType === 'holiday' && !isHoliday)
                     return false;
                 if (ruleType === 'member' && !isMember)
+                    return false;
+                if (ruleType === 'membership' && !isMember)
+                    return false;
+                if (ruleType === 'custom' && r.modifierType === 'absolute')
                     return false;
                 return true;
             })

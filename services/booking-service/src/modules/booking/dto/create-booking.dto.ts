@@ -72,6 +72,13 @@ export class CreateBookingDto {
   @IsObject() @IsOptional()
   metadata?: Record<string, unknown>;
 
+  /**
+   * Optional coupon code to apply to this booking.
+   * Validated and redeemed atomically during booking creation.
+   */
+  @IsString() @IsOptional() @MaxLength(50)
+  couponCode?: string;
+
   /** When present, generates a recurring series from these slots */
   @ValidateNested() @Type(() => RecurrenceDto) @IsOptional()
   recurrence?: RecurrenceDto;

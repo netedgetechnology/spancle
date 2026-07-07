@@ -246,6 +246,7 @@ export class SlotGeneratorService {
         sportId:              court.sportId ?? null,
         startAt:              s.startAt!,
         durationMins:         config.durationMins,
+        venueId:              court.venueId,
         courtHourlyRateMinor: court.hourlyPrice     ?? null,
         // Slot generation always prices at the non-member (public) rate.
         // Member discounts are applied at booking time when the booker

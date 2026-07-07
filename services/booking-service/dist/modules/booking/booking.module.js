@@ -19,9 +19,9 @@ const booking_service_1 = require("./services/booking.service");
 const booking_validation_service_1 = require("./services/booking-validation.service");
 const booking_scheduler_service_1 = require("./services/booking-scheduler.service");
 const booking_controller_1 = require("./controllers/booking.controller");
-const slot_module_1 = require("../slot/slot.module");
 const court_module_1 = require("../court/court.module");
 const venue_module_1 = require("../venue/venue.module");
+const pricing_module_1 = require("../pricing/pricing.module");
 let BookingModule = class BookingModule {
 };
 exports.BookingModule = BookingModule;
@@ -34,7 +34,7 @@ exports.BookingModule = BookingModule = __decorate([
                 booking_refund_entity_1.BookingRefundEntity,
                 booking_log_entity_1.BookingLogEntity,
             ]),
-            slot_module_1.SlotModule,
+            pricing_module_1.PricingModule,
             court_module_1.CourtModule,
             venue_module_1.VenueModule,
         ],

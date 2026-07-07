@@ -1,35 +1,20 @@
 import {
-  IsArray,
-  IsBoolean,
-  IsDateString,
-  IsEnum,
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
-  ValidateIf,
+  IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty,
+  IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateIf,
 } from 'class-validator';
 
-// ── Shared constants ──────────────────────────────────────────────────────────
+export const RULE_TYPES = [
+  'base', 'peak', 'weekend', 'holiday', 'member', 'custom',
+  'time_of_day', 'day_of_week', 'seasonal', 'promotion',
+  'membership', 'coach', 'tournament', 'coupon',
+] as const;
 
-export const RULE_TYPES   = ['base', 'peak', 'weekend', 'holiday', 'member', 'custom'] as const;
-export const MOD_TYPES    = ['percentage', 'fixed', 'absolute']                         as const;
-export const SCOPES       = ['tenant', 'branch', 'sport', 'court']                      as const;
+export const MOD_TYPES    = ['percentage', 'fixed', 'absolute'] as const;
+export const SCOPES       = ['tenant', 'branch', 'venue', 'sport', 'court'] as const;
 export const DAYS_OF_WEEK = [
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ] as const;
 
-// ── UpdatePricingRuleDto ──────────────────────────────────────────────────────
-
-/**
- * All fields are optional — partial updates allowed.
- * When modifierType or modifierValue changes, validation re-runs
- * against ruleType semantics in PricingRuleValidationService.
- */
 export class UpdatePricingRuleDto {
   @IsString()
   @IsNotEmpty()
@@ -50,10 +35,9 @@ export class UpdatePricingRuleDto {
   @IsOptional()
   modifierType?: typeof MOD_TYPES[number];
 
-  /** For percentage: -100 to 10000. For fixed/absolute: 0 to 2_147_483_647 (int max) */
   @IsInt()
-  @Min(-10_000)
-  @Max(2_147_483_647)
+  @Min(-1_000_000)
+  @Max(100_000_000)
   @IsOptional()
   modifierValue?: number;
 
@@ -65,6 +49,11 @@ export class UpdatePricingRuleDto {
   @ValidateIf((o: UpdatePricingRuleDto) => o.scope === 'branch')
   @IsOptional()
   branchId?: string | null;
+
+  @IsUUID()
+  @ValidateIf((o: UpdatePricingRuleDto) => o.scope === 'venue')
+  @IsOptional()
+  venueId?: string | null;
 
   @IsUUID()
   @ValidateIf((o: UpdatePricingRuleDto) => o.scope === 'sport')
@@ -84,13 +73,11 @@ export class UpdatePricingRuleDto {
   @IsOptional()
   validUntil?: string | null;
 
-  /** Empty array = applies all days. Null = applies all days. */
   @IsArray()
   @IsEnum(DAYS_OF_WEEK, { each: true })
   @IsOptional()
   daysOfWeek?: (typeof DAYS_OF_WEEK[number])[] | null;
 
-  /** HH:MM 24-hour format */
   @IsString()
   @IsOptional()
   timeStart?: string | null;
@@ -108,4 +95,17 @@ export class UpdatePricingRuleDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  // ── Coupon fields ──────────────────────────────────────────────────────────
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  @IsOptional()
+  couponCode?: string | null;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  maxRedemptions?: number | null;
 }

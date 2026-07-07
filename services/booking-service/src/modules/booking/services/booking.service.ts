@@ -14,6 +14,7 @@ import { BookingValidationService }   from './booking-validation.service';
 import { BookingUtils }               from '../utils/booking.utils';
 import { BookingEvents }              from '../events/booking.events';
 import { SlotEvents }                from '../../slot/events/slot.events';
+import { PricingRuleRepository }     from '../../slot/repositories/pricing-rule.repository';
 import type {
   BookingStatusChangedPayload,
   BookingRescheduledPayload,
@@ -58,6 +59,7 @@ export class BookingService {
     private readonly logRepository:        BookingLogRepository,
     private readonly validationService:    BookingValidationService,
     private readonly slotRepository:       SlotRepository,
+    private readonly pricingRuleRepository: PricingRuleRepository,
     private readonly eventEmitter:         EventEmitter2,
     private readonly dataSource:           DataSource,
     private readonly configService:        ConfigService,
@@ -90,6 +92,21 @@ export class BookingService {
     const booking = await this.dataSource.transaction(async (manager) => {
       // ── Pessimistic lock: re-verify slots haven't been taken since outer validation ──
       await this.slotRepository.lockAndVerifyAvailable(dto.slotIds, tenantId, manager);
+
+      // ── Coupon redemption: validate and increment atomically inside transaction ──
+      if (dto.couponCode) {
+        const slotDate   = sortedSlots[0]!.startAt.toISOString().slice(0, 10);
+        const couponRule = await this.pricingRuleRepository.findCouponRule(
+          dto.couponCode, tenantId, slotDate,
+        );
+        if (!couponRule) {
+          throw new BadRequestException(`Coupon code "${dto.couponCode}" is invalid or expired`);
+        }
+        if (couponRule.maxRedemptions !== null && couponRule.redemptionCount >= couponRule.maxRedemptions) {
+          throw new BadRequestException(`Coupon code "${dto.couponCode}" has been fully redeemed`);
+        }
+        await this.pricingRuleRepository.incrementRedemption(couponRule.id, tenantId, manager);
+      }
 
       const b = await manager.save(
         manager.create(BookingEntity, {

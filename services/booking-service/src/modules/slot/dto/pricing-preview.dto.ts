@@ -26,6 +26,10 @@ export class PricingPreviewDto {
 
   /** Branch the court belongs to */
   @IsUUID()
+  @IsOptional()
+  venueId?: string | null;
+
+  @IsUUID()
   branchId!: string;
 
   /** Optional sport — used for sport-scoped rule matching */

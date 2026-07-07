@@ -11,9 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreatePricingRuleDto = void 0;
 const class_validator_1 = require("class-validator");
-const RULE_TYPES = ['base', 'peak', 'weekend', 'holiday', 'member', 'custom'];
+const RULE_TYPES = [
+    'base', 'peak', 'weekend', 'holiday', 'member', 'custom',
+    'time_of_day', 'day_of_week', 'seasonal', 'promotion',
+    'membership', 'coach', 'tournament', 'coupon',
+];
 const MOD_TYPES = ['percentage', 'fixed', 'absolute'];
-const SCOPES = ['tenant', 'branch', 'sport', 'court'];
+const SCOPES = ['tenant', 'branch', 'venue', 'sport', 'court'];
 const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 class CreatePricingRuleDto {
 }
@@ -32,7 +36,7 @@ __decorate([
 ], CreatePricingRuleDto.prototype, "description", void 0);
 __decorate([
     (0, class_validator_1.IsEnum)(RULE_TYPES),
-    __metadata("design:type", Object)
+    __metadata("design:type", String)
 ], CreatePricingRuleDto.prototype, "ruleType", void 0);
 __decorate([
     (0, class_validator_1.IsEnum)(MOD_TYPES),
@@ -41,6 +45,8 @@ __decorate([
 ], CreatePricingRuleDto.prototype, "modifierType", void 0);
 __decorate([
     (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(-1_000_000),
+    (0, class_validator_1.Max)(100_000_000),
     __metadata("design:type", Number)
 ], CreatePricingRuleDto.prototype, "modifierValue", void 0);
 __decorate([
@@ -50,16 +56,25 @@ __decorate([
 ], CreatePricingRuleDto.prototype, "scope", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.ValidateIf)((o) => o.scope === 'branch'),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreatePricingRuleDto.prototype, "branchId", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.ValidateIf)((o) => o.scope === 'venue'),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreatePricingRuleDto.prototype, "venueId", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.ValidateIf)((o) => o.scope === 'sport'),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreatePricingRuleDto.prototype, "sportId", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.ValidateIf)((o) => o.scope === 'court'),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreatePricingRuleDto.prototype, "courtId", void 0);
@@ -96,4 +111,19 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], CreatePricingRuleDto.prototype, "priority", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(50),
+    (0, class_validator_1.ValidateIf)((o) => o.ruleType === 'coupon'),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreatePricingRuleDto.prototype, "couponCode", void 0);
+__decorate([
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.ValidateIf)((o) => o.ruleType === 'coupon'),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], CreatePricingRuleDto.prototype, "maxRedemptions", void 0);
 //# sourceMappingURL=create-pricing-rule.dto.js.map

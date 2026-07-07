@@ -150,6 +150,7 @@ let SlotGeneratorService = SlotGeneratorService_1 = class SlotGeneratorService {
             sportId: court.sportId ?? null,
             startAt: s.startAt,
             durationMins: config.durationMins,
+            venueId: court.venueId,
             courtHourlyRateMinor: court.hourlyPrice ?? null,
             isMember: false,
             currency: 'GBP',

@@ -120,6 +120,12 @@ __decorate([
     __metadata("design:type", Object)
 ], CreateBookingDto.prototype, "metadata", void 0);
 __decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(50),
+    __metadata("design:type", String)
+], CreateBookingDto.prototype, "couponCode", void 0);
+__decorate([
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => RecurrenceDto),
     (0, class_validator_1.IsOptional)(),

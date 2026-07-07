@@ -11,9 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdatePricingRuleDto = exports.DAYS_OF_WEEK = exports.SCOPES = exports.MOD_TYPES = exports.RULE_TYPES = void 0;
 const class_validator_1 = require("class-validator");
-exports.RULE_TYPES = ['base', 'peak', 'weekend', 'holiday', 'member', 'custom'];
+exports.RULE_TYPES = [
+    'base', 'peak', 'weekend', 'holiday', 'member', 'custom',
+    'time_of_day', 'day_of_week', 'seasonal', 'promotion',
+    'membership', 'coach', 'tournament', 'coupon',
+];
 exports.MOD_TYPES = ['percentage', 'fixed', 'absolute'];
-exports.SCOPES = ['tenant', 'branch', 'sport', 'court'];
+exports.SCOPES = ['tenant', 'branch', 'venue', 'sport', 'court'];
 exports.DAYS_OF_WEEK = [
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ];
@@ -45,8 +49,8 @@ __decorate([
 ], UpdatePricingRuleDto.prototype, "modifierType", void 0);
 __decorate([
     (0, class_validator_1.IsInt)(),
-    (0, class_validator_1.Min)(-10_000),
-    (0, class_validator_1.Max)(2_147_483_647),
+    (0, class_validator_1.Min)(-1_000_000),
+    (0, class_validator_1.Max)(100_000_000),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], UpdatePricingRuleDto.prototype, "modifierValue", void 0);
@@ -61,6 +65,12 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], UpdatePricingRuleDto.prototype, "branchId", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    (0, class_validator_1.ValidateIf)((o) => o.scope === 'venue'),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], UpdatePricingRuleDto.prototype, "venueId", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
     (0, class_validator_1.ValidateIf)((o) => o.scope === 'sport'),
@@ -111,4 +121,17 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Boolean)
 ], UpdatePricingRuleDto.prototype, "isActive", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(50),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], UpdatePricingRuleDto.prototype, "couponCode", void 0);
+__decorate([
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], UpdatePricingRuleDto.prototype, "maxRedemptions", void 0);
 //# sourceMappingURL=update-pricing-rule.dto.js.map

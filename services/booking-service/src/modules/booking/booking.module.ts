@@ -20,6 +20,7 @@ import { BookingController }        from './controllers/booking.controller';
 import { SlotModule }               from '../slot/slot.module';
 import { CourtModule }              from '../court/court.module';
 import { VenueModule }              from '../venue/venue.module';
+import { PricingModule }            from '../pricing/pricing.module';
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { VenueModule }              from '../venue/venue.module';
       BookingRefundEntity,
       BookingLogEntity,
     ]),
-    SlotModule,
+    PricingModule,   // re-exports SlotModule — provides SlotRepository + PricingService
     CourtModule,
     VenueModule,
   ],

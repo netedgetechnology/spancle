@@ -55,14 +55,20 @@ let PricingRuleRepository = PricingRuleRepository_1 = class PricingRuleRepositor
         return qb.orderBy('r.priority', 'DESC').addOrderBy('r.ruleType', 'ASC').getMany();
     }
     async findMatchingRules(params) {
-        const { tenantId, courtId, branchId, sportId, slotDate, slotTime, dayOfWeek } = params;
+        const { tenantId, courtId, venueId, branchId, sportId, slotDate, slotTime, dayOfWeek } = params;
         const qb = this.scopedQb('r', tenantId)
             .andWhere(`(
           (r.scope = 'tenant')
           OR (r.scope = 'branch' AND r.branchId = :branchId)
+          ${venueId ? "OR (r.scope = 'venue' AND r.venueId = :venueId)" : ''}
           OR (r.scope = 'court'  AND r.courtId  = :courtId)
           ${sportId ? "OR (r.scope = 'sport' AND r.sportId = :sportId)" : ''}
-        )`, { branchId, courtId, ...(sportId && { sportId }) })
+        )`, {
+            branchId,
+            courtId,
+            ...(venueId && { venueId }),
+            ...(sportId && { sportId }),
+        })
             .andWhere("(r.validFrom IS NULL OR r.validFrom <= :slotDate)", { slotDate })
             .andWhere("(r.validUntil IS NULL OR r.validUntil >= :slotDate)")
             .andWhere(`(r.daysOfWeek IS NULL OR r.daysOfWeek = '[]'::jsonb OR r.daysOfWeek @> :dayJson::jsonb)`, { dayJson: JSON.stringify([dayOfWeek]) })
@@ -78,6 +84,14 @@ let PricingRuleRepository = PricingRuleRepository_1 = class PricingRuleRepositor
     }
     async softDelete(id, tenantId) {
         await this.repo.update({ id, tenantId }, { isDeleted: true, isActive: false, deletedAt: new Date(), updatedAt: new Date() });
+    }
+    async incrementRedemption(ruleId, tenantId, manager) {
+        await manager
+            .createQueryBuilder()
+            .update(pricing_rule_entity_1.PricingRuleEntity)
+            .set({ redemptionCount: () => 'redemption_count + 1' })
+            .where('id = :id AND tenant_id = :tenantId', { id: ruleId, tenantId })
+            .execute();
     }
     async findCouponRule(couponCode, tenantId, slotDate) {
         return this.scopedQb('r', tenantId)
