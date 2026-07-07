@@ -124,4 +124,28 @@ export class PricingRuleRepository {
       { isDeleted: true, isActive: false, deletedAt: new Date(), updatedAt: new Date() },
     );
   }
+
+  /**
+   * Finds the highest-priority active coupon rule matching a code.
+   * Validates: active, date range, not exhausted (maxRedemptions check in service).
+   */
+  async findCouponRule(
+    couponCode: string,
+    tenantId:   string,
+    slotDate:   string,
+  ): Promise<PricingRuleEntity | null> {
+    return this.scopedQb('r', tenantId)
+      .andWhere("r.ruleType = 'coupon'")
+      .andWhere('UPPER(r.couponCode) = :code', { code: couponCode.toUpperCase() })
+      .andWhere(
+        '(r.validFrom IS NULL OR r.validFrom <= :date)',
+        { date: slotDate },
+      )
+      .andWhere(
+        '(r.validUntil IS NULL OR r.validUntil >= :date2)',
+        { date2: slotDate },
+      )
+      .orderBy('r.priority', 'DESC')
+      .getOne();
+  }
 }

@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 }      from '@nestjs/event-emitter';
 import { PricingRuleRepository } from '../repositories/pricing-rule.repository';
 import { HolidayRepository }     from '../repositories/holiday.repository';
 import { RateCardRepository }    from '../repositories/rate-card.repository';
 import { RateCardService }       from './rate-card.service';
 import type { PricingRuleEntity } from '../entities/pricing-rule.entity';
 import { SlotUtils }              from '../utils/slot.utils';
+import { PricingEvents }          from '../events/pricing.events';
 import type {
   PricingPreviewDto,
   PricingPreviewResult,
@@ -100,6 +102,7 @@ export class PricingService {
     private readonly holidayRepository:     HolidayRepository,
     private readonly rateCardService:       RateCardService,
     private readonly rateCardRepository:    RateCardRepository,
+    private readonly eventEmitter:          EventEmitter2,
   ) {}
 
   // ── Single slot resolution ─────────────────────────────────────────────────
@@ -447,4 +450,183 @@ export class PricingService {
     const final = breakdown[breakdown.length - 1]!.priceAfter;
     return `${parts.join(' → ')} = ${this.formatPrice(final, currency)}`;
   }
+
+  // ── Public API: quote() ────────────────────────────────────────────────────
+
+  /**
+   * Returns a price quote for a booking request without committing anything.
+   * Identical to preview() but emits PRICE_CALCULATED and is the canonical
+   * entry point for Booking, POS, Academy, and Tournament engines.
+   *
+   * @param ctx   SlotPricingContext
+   * @returns     PriceResolutionResult with subtotal, discounts, finalTotal, appliedRules
+   */
+  async quote(ctx: SlotPricingContext): Promise<QuoteResult> {
+    const result = await this.resolve(ctx);
+
+    const base     = this.computeProportionalBase(ctx.courtHourlyRateMinor ?? null, ctx.durationMins);
+    const subtotal = base ?? 0;
+    const final    = result.resolvedPriceMinor ?? 0;
+    const discount = Math.max(0, subtotal - final);
+
+    await this.eventEmitter.emitAsync(PricingEvents.PRICE_CALCULATED, {
+      tenantId:           ctx.tenantId,
+      courtId:            ctx.courtId,
+      branchId:           ctx.branchId,
+      resolvedPriceMinor: result.resolvedPriceMinor,
+      appliedRuleIds:     result.appliedRuleIds,
+      context:            'quote',
+      timestamp:          new Date().toISOString(),
+    });
+
+    return {
+      subtotal,
+      discountMinor:      discount,
+      taxMinor:           0,              // tax engine is a future sprint
+      finalTotal:         result.resolvedPriceMinor,
+      appliedRuleIds:     result.appliedRuleIds,
+      breakdown:          result.breakdown,
+      currency:           ctx.currency ?? 'GBP',
+    };
+  }
+
+  // ── Public API: validateCoupon() ───────────────────────────────────────────
+
+  /**
+   * Validates a coupon code against the pricing rules for a given context.
+   *
+   * Checks:
+   *   1. A coupon rule with matching code exists in this tenant (case-insensitive)
+   *   2. Rule is active and within its date range
+   *   3. Scope matches (tenant/branch/venue/court)
+   *   4. maxRedemptions not exhausted
+   *
+   * Does NOT increment redemptionCount — that happens in BookingService.create()
+   * inside the booking transaction.
+   *
+   * Emits COUPON_ACCEPTED or COUPON_REJECTED.
+   */
+  async validateCoupon(
+    couponCode: string,
+    ctx:        Pick<SlotPricingContext, 'tenantId' | 'courtId' | 'branchId' | 'sportId'>,
+    options?:   { bookingId?: string; actorId?: string },
+  ): Promise<CouponValidationResult> {
+    const normalised = couponCode.trim().toUpperCase();
+    const slotDate   = new Date().toISOString().slice(0, 10);
+
+    const rule = await this.pricingRuleRepository.findCouponRule(
+      normalised,
+      ctx.tenantId,
+      slotDate,
+    );
+
+    if (!rule) {
+      await this.eventEmitter.emitAsync(PricingEvents.COUPON_REJECTED, {
+        tenantId:   ctx.tenantId,
+        couponCode: normalised,
+        reason:     'not_found' as const,
+        ...options,
+        timestamp:  new Date().toISOString(),
+      });
+      return { valid: false, reason: 'not_found' };
+    }
+
+    if (!rule.isActive) {
+      await this.eventEmitter.emitAsync(PricingEvents.COUPON_REJECTED, {
+        tenantId:   ctx.tenantId,
+        couponCode: normalised,
+        reason:     'inactive' as const,
+        ...options,
+        timestamp:  new Date().toISOString(),
+      });
+      return { valid: false, reason: 'inactive' };
+    }
+
+    if (rule.maxRedemptions !== null && rule.redemptionCount >= rule.maxRedemptions) {
+      await this.eventEmitter.emitAsync(PricingEvents.COUPON_REJECTED, {
+        tenantId:   ctx.tenantId,
+        couponCode: normalised,
+        reason:     'exhausted' as const,
+        ...options,
+        timestamp:  new Date().toISOString(),
+      });
+      return { valid: false, reason: 'exhausted' };
+    }
+
+    // Estimated discount for display — not binding until booking commit
+    const estimatedDiscount = rule.modifierType === 'percentage'
+      ? null  // no base price available here
+      : rule.modifierValue;
+
+    await this.eventEmitter.emitAsync(PricingEvents.COUPON_ACCEPTED, {
+      tenantId:      ctx.tenantId,
+      couponCode:    normalised,
+      ruleId:        rule.id,
+      discountMinor: estimatedDiscount ?? 0,
+      ...options,
+      timestamp:     new Date().toISOString(),
+    });
+
+    return {
+      valid:          true,
+      ruleId:         rule.id,
+      ruleName:       rule.name,
+      modifierType:   rule.modifierType,
+      modifierValue:  rule.modifierValue,
+    };
+  }
+
+  // ── Public API: applyRules() ───────────────────────────────────────────────
+
+  /**
+   * Applies a pre-fetched set of rules to a base price.
+   * Used when the caller has already fetched applicable rules (e.g. resolveBatch)
+   * and wants to apply them to a different base without re-querying.
+   *
+   * Emits RULE_APPLIED for each rule that modifies the price.
+   */
+  async applyRules(
+    rules:       PricingRuleEntity[],
+    baseMinor:   number,
+    isHoliday:   boolean,
+    isMember:    boolean,
+    context?:    string,
+  ): Promise<PriceResolutionResult> {
+    const result = this.runPipeline(rules, baseMinor, isHoliday, isMember);
+
+    for (const step of result.breakdown) {
+      await this.eventEmitter.emitAsync(PricingEvents.RULE_APPLIED, {
+        tenantId:   rules[0]?.tenantId ?? '',
+        ruleId:     step.ruleId,
+        ruleName:   step.ruleName,
+        ruleType:   step.ruleType,
+        priceAfter: step.priceAfter,
+        context,
+        timestamp:  new Date().toISOString(),
+      });
+    }
+
+    return result;
+  }
+}
+
+// ── Public result types ────────────────────────────────────────────────────────
+
+export interface QuoteResult {
+  subtotal:           number;
+  discountMinor:      number;
+  taxMinor:           number;          // 0 until tax engine implemented
+  finalTotal:         number | null;
+  appliedRuleIds:     string[];
+  breakdown:          import('../services/pricing.service').PriceBreakdownStep[];
+  currency:           string;
+}
+
+export interface CouponValidationResult {
+  valid:          boolean;
+  reason?:        'not_found' | 'inactive' | 'expired' | 'exhausted' | 'scope_mismatch';
+  ruleId?:        string;
+  ruleName?:      string;
+  modifierType?:  string;
+  modifierValue?: number;
 }

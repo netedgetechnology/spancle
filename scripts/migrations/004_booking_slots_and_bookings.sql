@@ -383,3 +383,62 @@ CREATE INDEX IF NOT EXISTS idx_bookings_expires_at
   ON bookings (tenant_id, expires_at)
   WHERE expires_at IS NOT NULL
     AND status IN ('reserved', 'pending_payment');
+
+-- =============================================================================
+-- Migration 004 — Addendum: Pricing Engine batch 5 (pricing rule extensions)
+-- Adds new rule types, venueId, and coupon fields to pricing_rules.
+-- Idempotent — DO $$ guards.
+-- =============================================================================
+
+-- Extend pricing_rule_type enum with new types
+DO $$
+BEGIN
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'time_of_day';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'day_of_week';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'seasonal';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'promotion';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'membership';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'coach';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'tournament';
+  ALTER TYPE pricing_rule_type ADD VALUE IF NOT EXISTS 'coupon';
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Extend pricing_rule_scope enum with venue
+DO $$
+BEGIN
+  ALTER TYPE pricing_rule_scope ADD VALUE IF NOT EXISTS 'venue';
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add venue_id column
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'pricing_rules' AND column_name = 'venue_id'
+  ) THEN
+    ALTER TABLE pricing_rules ADD COLUMN venue_id UUID;
+  END IF;
+END $$;
+
+-- Add coupon_code column
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'pricing_rules' AND column_name = 'coupon_code'
+  ) THEN
+    ALTER TABLE pricing_rules ADD COLUMN coupon_code VARCHAR(50);
+    ALTER TABLE pricing_rules ADD COLUMN max_redemptions INT;
+    ALTER TABLE pricing_rules ADD COLUMN redemption_count INT NOT NULL DEFAULT 0;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_tenant_venue
+  ON pricing_rules (tenant_id, venue_id)
+  WHERE venue_id IS NOT NULL AND is_deleted = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_tenant_coupon
+  ON pricing_rules (tenant_id, coupon_code)
+  WHERE coupon_code IS NOT NULL AND is_deleted = FALSE;

@@ -20,6 +20,14 @@ const ALLOWED_MODIFIER_TYPES = {
     holiday: ['percentage', 'fixed'],
     member: ['percentage', 'fixed'],
     custom: ['percentage', 'fixed', 'absolute'],
+    time_of_day: ['percentage', 'fixed', 'absolute'],
+    day_of_week: ['percentage', 'fixed'],
+    seasonal: ['percentage', 'fixed', 'absolute'],
+    promotion: ['percentage', 'fixed'],
+    membership: ['percentage', 'fixed', 'absolute'],
+    coach: ['percentage', 'fixed', 'absolute'],
+    tournament: ['percentage', 'fixed', 'absolute'],
+    coupon: ['percentage', 'fixed'],
 };
 let PricingRuleValidationService = PricingRuleValidationService_1 = class PricingRuleValidationService {
     constructor(pricingRuleRepository) {

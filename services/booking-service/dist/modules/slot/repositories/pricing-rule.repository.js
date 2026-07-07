@@ -79,6 +79,15 @@ let PricingRuleRepository = PricingRuleRepository_1 = class PricingRuleRepositor
     async softDelete(id, tenantId) {
         await this.repo.update({ id, tenantId }, { isDeleted: true, isActive: false, deletedAt: new Date(), updatedAt: new Date() });
     }
+    async findCouponRule(couponCode, tenantId, slotDate) {
+        return this.scopedQb('r', tenantId)
+            .andWhere("r.ruleType = 'coupon'")
+            .andWhere('UPPER(r.couponCode) = :code', { code: couponCode.toUpperCase() })
+            .andWhere('(r.validFrom IS NULL OR r.validFrom <= :date)', { date: slotDate })
+            .andWhere('(r.validUntil IS NULL OR r.validUntil >= :date2)', { date2: slotDate })
+            .orderBy('r.priority', 'DESC')
+            .getOne();
+    }
 };
 exports.PricingRuleRepository = PricingRuleRepository;
 exports.PricingRuleRepository = PricingRuleRepository = PricingRuleRepository_1 = __decorate([

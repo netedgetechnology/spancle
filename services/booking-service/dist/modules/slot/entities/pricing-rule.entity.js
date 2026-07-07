@@ -35,7 +35,11 @@ __decorate([
     (0, typeorm_1.Column)({
         name: 'rule_type',
         type: 'enum',
-        enum: ['base', 'peak', 'weekend', 'holiday', 'member', 'custom'],
+        enum: [
+            'base', 'peak', 'weekend', 'holiday', 'member', 'custom',
+            'time_of_day', 'day_of_week', 'seasonal', 'promotion',
+            'membership', 'coach', 'tournament', 'coupon',
+        ],
     }),
     __metadata("design:type", String)
 ], PricingRuleEntity.prototype, "ruleType", void 0);
@@ -55,7 +59,7 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['tenant', 'branch', 'sport', 'court'],
+        enum: ['tenant', 'branch', 'venue', 'sport', 'court'],
         default: 'tenant',
     }),
     __metadata("design:type", String)
@@ -65,6 +69,10 @@ __decorate([
     __metadata("design:type", Object)
 ], PricingRuleEntity.prototype, "branchId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'venue_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], PricingRuleEntity.prototype, "venueId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'sport_id', type: 'uuid', nullable: true }),
     __metadata("design:type", Object)
 ], PricingRuleEntity.prototype, "sportId", void 0);
@@ -72,6 +80,18 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'court_id', type: 'uuid', nullable: true }),
     __metadata("design:type", Object)
 ], PricingRuleEntity.prototype, "courtId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'coupon_code', type: 'varchar', length: 50, nullable: true }),
+    __metadata("design:type", Object)
+], PricingRuleEntity.prototype, "couponCode", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'max_redemptions', type: 'int', nullable: true }),
+    __metadata("design:type", Object)
+], PricingRuleEntity.prototype, "maxRedemptions", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'redemption_count', type: 'int', nullable: false, default: 0 }),
+    __metadata("design:type", Number)
+], PricingRuleEntity.prototype, "redemptionCount", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'valid_from', type: 'date', nullable: true }),
     __metadata("design:type", Object)
@@ -121,8 +141,10 @@ exports.PricingRuleEntity = PricingRuleEntity = __decorate([
     (0, typeorm_1.Index)(['tenantId', 'ruleType']),
     (0, typeorm_1.Index)(['tenantId', 'isActive']),
     (0, typeorm_1.Index)(['tenantId', 'branchId']),
+    (0, typeorm_1.Index)(['tenantId', 'venueId']),
     (0, typeorm_1.Index)(['tenantId', 'courtId']),
     (0, typeorm_1.Index)(['tenantId', 'sportId']),
+    (0, typeorm_1.Index)(['tenantId', 'couponCode']),
     (0, typeorm_1.Index)(['tenantId', 'isDeleted'])
 ], PricingRuleEntity);
 //# sourceMappingURL=pricing-rule.entity.js.map

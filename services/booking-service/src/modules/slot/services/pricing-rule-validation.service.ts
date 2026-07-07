@@ -48,12 +48,20 @@ export type ConflictCode =
  *   custom  → percentage | fixed | absolute  (full flexibility)
  */
 const ALLOWED_MODIFIER_TYPES: Record<PricingRuleType, ModifierType[]> = {
-  base:    ['percentage', 'fixed', 'absolute'],
-  peak:    ['percentage', 'fixed'],
-  weekend: ['percentage', 'fixed'],
-  holiday: ['percentage', 'fixed'],
-  member:  ['percentage', 'fixed'],
-  custom:  ['percentage', 'fixed', 'absolute'],
+  base:        ['percentage', 'fixed', 'absolute'],
+  peak:        ['percentage', 'fixed'],
+  weekend:     ['percentage', 'fixed'],
+  holiday:     ['percentage', 'fixed'],
+  member:      ['percentage', 'fixed'],
+  custom:      ['percentage', 'fixed', 'absolute'],
+  time_of_day: ['percentage', 'fixed', 'absolute'],
+  day_of_week: ['percentage', 'fixed'],
+  seasonal:    ['percentage', 'fixed', 'absolute'],
+  promotion:   ['percentage', 'fixed'],
+  membership:  ['percentage', 'fixed', 'absolute'],
+  coach:       ['percentage', 'fixed', 'absolute'],
+  tournament:  ['percentage', 'fixed', 'absolute'],
+  coupon:      ['percentage', 'fixed'],
 };
 
 /**

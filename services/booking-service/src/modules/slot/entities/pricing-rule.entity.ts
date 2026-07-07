@@ -9,14 +9,25 @@ import {
 } from 'typeorm';
 
 /**
- * Rule type determines how the modifier is applied in the price pipeline:
+ * Rule type determines how the modifier is applied in the price pipeline.
  *
- *   base      — replaces the base rate entirely (used for per-court custom rates)
- *   peak      — +% or +fixed added during peak hours
- *   weekend   — +% or +fixed added on Saturday/Sunday
- *   holiday   — +% or +fixed added on public holidays (matched via HolidayEntity)
- *   member    — -% discount applied for member bookings (negative modifierPct)
- *   custom    — fixed price override for a specific time window (ignores base)
+ * Core types:
+ *   base        — replaces the base rate entirely (per-court custom rates)
+ *   peak        — surcharge during peak time windows
+ *   weekend     — surcharge on Saturday/Sunday
+ *   holiday     — surcharge on public holidays
+ *   member      — discount for member bookings
+ *   custom      — catch-all time/date-specific adjustment
+ *
+ * Extended types (Batch 5):
+ *   time_of_day — fine-grained time-window pricing (more specific than peak)
+ *   day_of_week — per-day pricing (more expressive than weekend)
+ *   seasonal    — date-range seasonal pricing (summer/winter rates)
+ *   promotion   — limited-time promotional discount
+ *   membership  — tiered membership pricing (e.g. Gold vs Silver)
+ *   coach       — coach-session pricing (per-hour, per-session)
+ *   tournament  — tournament block pricing
+ *   coupon      — coupon-code driven discount (validated against couponCode field)
  */
 export type PricingRuleType =
   | 'base'
@@ -24,7 +35,15 @@ export type PricingRuleType =
   | 'weekend'
   | 'holiday'
   | 'member'
-  | 'custom';
+  | 'custom'
+  | 'time_of_day'
+  | 'day_of_week'
+  | 'seasonal'
+  | 'promotion'
+  | 'membership'
+  | 'coach'
+  | 'tournament'
+  | 'coupon';
 
 /**
  * Modifier types:
@@ -36,14 +55,15 @@ export type ModifierType = 'percentage' | 'fixed' | 'absolute';
 
 /**
  * Rule scope — defines what resource the rule applies to.
- * More specific scopes override less specific ones at the same priority.
+ * More specific scopes take precedence at the same priority.
  *
  *   tenant  → applies to all bookings for this tenant
  *   branch  → applies to all courts in a branch
+ *   venue   → applies to all courts in a venue (booking-service venue)
  *   sport   → applies to all courts for a sport
  *   court   → applies to a specific court only
  */
-export type PricingRuleScope = 'tenant' | 'branch' | 'sport' | 'court';
+export type PricingRuleScope = 'tenant' | 'branch' | 'venue' | 'sport' | 'court';
 
 /**
  * PricingRuleEntity — a price modifier rule.
@@ -65,8 +85,10 @@ export type PricingRuleScope = 'tenant' | 'branch' | 'sport' | 'court';
 @Index(['tenantId', 'ruleType'])
 @Index(['tenantId', 'isActive'])
 @Index(['tenantId', 'branchId'])
+@Index(['tenantId', 'venueId'])
 @Index(['tenantId', 'courtId'])
 @Index(['tenantId', 'sportId'])
+@Index(['tenantId', 'couponCode'])
 @Index(['tenantId', 'isDeleted'])
 export class PricingRuleEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -87,7 +109,11 @@ export class PricingRuleEntity {
   @Column({
     name:    'rule_type',
     type:    'enum',
-    enum:    ['base', 'peak', 'weekend', 'holiday', 'member', 'custom'],
+    enum:    [
+      'base', 'peak', 'weekend', 'holiday', 'member', 'custom',
+      'time_of_day', 'day_of_week', 'seasonal', 'promotion',
+      'membership', 'coach', 'tournament', 'coupon',
+    ],
   })
   ruleType!: PricingRuleType;
 
@@ -112,7 +138,7 @@ export class PricingRuleEntity {
 
   @Column({
     type:    'enum',
-    enum:    ['tenant', 'branch', 'sport', 'court'],
+    enum:    ['tenant', 'branch', 'venue', 'sport', 'court'],
     default: 'tenant',
   })
   scope!: PricingRuleScope;
@@ -121,6 +147,10 @@ export class PricingRuleEntity {
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId!: string | null;
 
+  /** Populated when scope = 'venue' */
+  @Column({ name: 'venue_id', type: 'uuid', nullable: true })
+  venueId!: string | null;
+
   /** Populated when scope = 'sport' */
   @Column({ name: 'sport_id', type: 'uuid', nullable: true })
   sportId!: string | null;
@@ -128,6 +158,30 @@ export class PricingRuleEntity {
   /** Populated when scope = 'court' */
   @Column({ name: 'court_id', type: 'uuid', nullable: true })
   courtId!: string | null;
+
+  // ── Coupon fields (ruleType = 'coupon') ───────────────────────────────────
+
+  /**
+   * Required when ruleType = 'coupon'.
+   * Case-insensitive comparison at service layer.
+   * Stored normalised (UPPER-CASED) at creation time.
+   */
+  @Column({ name: 'coupon_code', type: 'varchar', length: 50, nullable: true })
+  couponCode!: string | null;
+
+  /**
+   * Maximum number of times this coupon can be redeemed across all bookings.
+   * Null = unlimited uses.
+   */
+  @Column({ name: 'max_redemptions', type: 'int', nullable: true })
+  maxRedemptions!: number | null;
+
+  /**
+   * Number of times this coupon has been successfully redeemed.
+   * Incremented atomically during booking creation. Read-only outside of PricingService.
+   */
+  @Column({ name: 'redemption_count', type: 'int', nullable: false, default: 0 })
+  redemptionCount!: number;
 
   // ── Date applicability ─────────────────────────────────────────────────────
 

@@ -12,17 +12,20 @@ var PricingService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PricingService = void 0;
 const common_1 = require("@nestjs/common");
+const event_emitter_1 = require("@nestjs/event-emitter");
 const pricing_rule_repository_1 = require("../repositories/pricing-rule.repository");
 const holiday_repository_1 = require("../repositories/holiday.repository");
 const rate_card_repository_1 = require("../repositories/rate-card.repository");
 const rate_card_service_1 = require("./rate-card.service");
 const slot_utils_1 = require("../utils/slot.utils");
+const pricing_events_1 = require("../events/pricing.events");
 let PricingService = PricingService_1 = class PricingService {
-    constructor(pricingRuleRepository, holidayRepository, rateCardService, rateCardRepository) {
+    constructor(pricingRuleRepository, holidayRepository, rateCardService, rateCardRepository, eventEmitter) {
         this.pricingRuleRepository = pricingRuleRepository;
         this.holidayRepository = holidayRepository;
         this.rateCardService = rateCardService;
         this.rateCardRepository = rateCardRepository;
+        this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(PricingService_1.name);
     }
     async resolve(ctx) {
@@ -267,6 +270,99 @@ let PricingService = PricingService_1 = class PricingService {
         const final = breakdown[breakdown.length - 1].priceAfter;
         return `${parts.join(' → ')} = ${this.formatPrice(final, currency)}`;
     }
+    async quote(ctx) {
+        const result = await this.resolve(ctx);
+        const base = this.computeProportionalBase(ctx.courtHourlyRateMinor ?? null, ctx.durationMins);
+        const subtotal = base ?? 0;
+        const final = result.resolvedPriceMinor ?? 0;
+        const discount = Math.max(0, subtotal - final);
+        await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.PRICE_CALCULATED, {
+            tenantId: ctx.tenantId,
+            courtId: ctx.courtId,
+            branchId: ctx.branchId,
+            resolvedPriceMinor: result.resolvedPriceMinor,
+            appliedRuleIds: result.appliedRuleIds,
+            context: 'quote',
+            timestamp: new Date().toISOString(),
+        });
+        return {
+            subtotal,
+            discountMinor: discount,
+            taxMinor: 0,
+            finalTotal: result.resolvedPriceMinor,
+            appliedRuleIds: result.appliedRuleIds,
+            breakdown: result.breakdown,
+            currency: ctx.currency ?? 'GBP',
+        };
+    }
+    async validateCoupon(couponCode, ctx, options) {
+        const normalised = couponCode.trim().toUpperCase();
+        const slotDate = new Date().toISOString().slice(0, 10);
+        const rule = await this.pricingRuleRepository.findCouponRule(normalised, ctx.tenantId, slotDate);
+        if (!rule) {
+            await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.COUPON_REJECTED, {
+                tenantId: ctx.tenantId,
+                couponCode: normalised,
+                reason: 'not_found',
+                ...options,
+                timestamp: new Date().toISOString(),
+            });
+            return { valid: false, reason: 'not_found' };
+        }
+        if (!rule.isActive) {
+            await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.COUPON_REJECTED, {
+                tenantId: ctx.tenantId,
+                couponCode: normalised,
+                reason: 'inactive',
+                ...options,
+                timestamp: new Date().toISOString(),
+            });
+            return { valid: false, reason: 'inactive' };
+        }
+        if (rule.maxRedemptions !== null && rule.redemptionCount >= rule.maxRedemptions) {
+            await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.COUPON_REJECTED, {
+                tenantId: ctx.tenantId,
+                couponCode: normalised,
+                reason: 'exhausted',
+                ...options,
+                timestamp: new Date().toISOString(),
+            });
+            return { valid: false, reason: 'exhausted' };
+        }
+        const estimatedDiscount = rule.modifierType === 'percentage'
+            ? null
+            : rule.modifierValue;
+        await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.COUPON_ACCEPTED, {
+            tenantId: ctx.tenantId,
+            couponCode: normalised,
+            ruleId: rule.id,
+            discountMinor: estimatedDiscount ?? 0,
+            ...options,
+            timestamp: new Date().toISOString(),
+        });
+        return {
+            valid: true,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            modifierType: rule.modifierType,
+            modifierValue: rule.modifierValue,
+        };
+    }
+    async applyRules(rules, baseMinor, isHoliday, isMember, context) {
+        const result = this.runPipeline(rules, baseMinor, isHoliday, isMember);
+        for (const step of result.breakdown) {
+            await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.RULE_APPLIED, {
+                tenantId: rules[0]?.tenantId ?? '',
+                ruleId: step.ruleId,
+                ruleName: step.ruleName,
+                ruleType: step.ruleType,
+                priceAfter: step.priceAfter,
+                context,
+                timestamp: new Date().toISOString(),
+            });
+        }
+        return result;
+    }
 };
 exports.PricingService = PricingService;
 exports.PricingService = PricingService = PricingService_1 = __decorate([
@@ -274,6 +370,7 @@ exports.PricingService = PricingService = PricingService_1 = __decorate([
     __metadata("design:paramtypes", [pricing_rule_repository_1.PricingRuleRepository,
         holiday_repository_1.HolidayRepository,
         rate_card_service_1.RateCardService,
-        rate_card_repository_1.RateCardRepository])
+        rate_card_repository_1.RateCardRepository,
+        event_emitter_1.EventEmitter2])
 ], PricingService);
 //# sourceMappingURL=pricing.service.js.map
