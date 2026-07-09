@@ -113,12 +113,16 @@ __decorate([
 ], CreatePricingRuleDto.prototype, "priority", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.MaxLength)(50),
-    (0, class_validator_1.ValidateIf)((o) => o.ruleType === 'coupon'),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], CreatePricingRuleDto.prototype, "couponCode", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(50),
+    __metadata("design:type", Object)
+], CreatePricingRuleDto.prototype, "membershipTier", void 0);
 __decorate([
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),

@@ -49,7 +49,7 @@ let PricingService = PricingService_1 = class PricingService {
             ? await this.resolveRateCardBase(ctx.rateCardId, ctx.tenantId, slotDate, dayOfWeek, ctx.startAt.getUTCHours())
             : ctx.courtHourlyRateMinor;
         const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
-        return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
+        return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember, ctx.membershipTier ?? null);
     }
     async resolveBatch(slots) {
         if (slots.length === 0)
@@ -78,7 +78,7 @@ let PricingService = PricingService_1 = class PricingService {
                 ? await this.resolveRateCardBase(ctx.rateCardId, ctx.tenantId, slotDate, dayOfWeek, ctx.startAt.getUTCHours())
                 : ctx.courtHourlyRateMinor;
             const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
-            return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
+            return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember, ctx.membershipTier ?? null);
         }));
     }
     async preview(dto, tenantId) {
@@ -105,7 +105,7 @@ let PricingService = PricingService_1 = class PricingService {
             ? await this.resolveRateCardBase(dto.rateCardId, tenantId, slotDate, dayOfWeek, startAt.getUTCHours())
             : (dto.courtHourlyRateMinor ?? null);
         const proportionalBase = this.computeProportionalBase(hourlyRateMinor, dto.durationMins);
-        const result = this.runPipeline(matchingRules, proportionalBase, isHoliday, dto.isMember ?? false);
+        const result = this.runPipeline(matchingRules, proportionalBase, isHoliday, dto.isMember ?? false, null);
         return {
             resolvedPriceMinor: result.resolvedPriceMinor,
             formattedPrice: this.formatPrice(result.resolvedPriceMinor, currency),
@@ -116,7 +116,7 @@ let PricingService = PricingService_1 = class PricingService {
             summary: this.buildSummary(result.breakdown, proportionalBase, currency),
         };
     }
-    runPipeline(rules, proportionalBase, isHoliday, isMember) {
+    runPipeline(rules, proportionalBase, isHoliday, isMember, membershipTier = null) {
         const appliedRuleIds = [];
         const breakdown = [];
         let currentPrice = proportionalBase ?? 0;
@@ -171,6 +171,10 @@ let PricingService = PricingService_1 = class PricingService {
                     return false;
                 if (ruleType === 'membership' && !isMember)
                     return false;
+                if (ruleType === 'membership' && r.membershipTier && isMember) {
+                    if (!membershipTier || membershipTier !== r.membershipTier)
+                        return false;
+                }
                 if (ruleType === 'custom' && r.modifierType === 'absolute')
                     return false;
                 return true;
@@ -362,7 +366,7 @@ let PricingService = PricingService_1 = class PricingService {
         };
     }
     async applyRules(rules, baseMinor, isHoliday, isMember, context) {
-        const result = this.runPipeline(rules, baseMinor, isHoliday, isMember);
+        const result = this.runPipeline(rules, baseMinor, isHoliday, isMember, null);
         for (const step of result.breakdown) {
             await this.eventEmitter.emitAsync(pricing_events_1.PricingEvents.RULE_APPLIED, {
                 tenantId: rules[0]?.tenantId ?? '',

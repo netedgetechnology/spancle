@@ -54,6 +54,16 @@ export class MembershipController {
     });
   }
 
+  /** GET /api/v1/memberships/me/status — lightweight cross-engine status */
+  @Get('me/status')
+  @Roles('PLAYER', 'TENANT_ADMIN', 'TENANT_MANAGER')
+  meStatus(
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ): Promise<unknown> {
+    return this.membershipService.getMembershipStatus(actor.actorId, tenant.tenantId);
+  }
+
   /** GET /api/v1/memberships/me — player self-service */
   @Get('me')
   @Roles('PLAYER', 'TENANT_ADMIN', 'TENANT_MANAGER')

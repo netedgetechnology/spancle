@@ -89,6 +89,7 @@ export type PricingRuleScope = 'tenant' | 'branch' | 'venue' | 'sport' | 'court'
 @Index(['tenantId', 'courtId'])
 @Index(['tenantId', 'sportId'])
 @Index(['tenantId', 'couponCode'])
+@Index(['tenantId', 'membershipTier'])
 @Index(['tenantId', 'isDeleted'])
 export class PricingRuleEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -168,6 +169,15 @@ export class PricingRuleEntity {
    */
   @Column({ name: 'coupon_code', type: 'varchar', length: 50, nullable: true })
   couponCode!: string | null;
+
+  /**
+   * Membership tier filter — when set, the 'member' / 'membership' rule only fires
+   * when SlotPricingContext.membershipTier matches this slug exactly.
+   * null = applies to all tiers.
+   * Values match MembershipPlan.slug (e.g. 'gold', 'platinum').
+   */
+  @Column({ name: 'membership_tier', type: 'varchar', length: 50, nullable: true })
+  membershipTier!: string | null;
 
   /**
    * Maximum number of times this coupon can be redeemed across all bookings.

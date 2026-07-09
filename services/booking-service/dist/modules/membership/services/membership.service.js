@@ -8,6 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var MembershipService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MembershipService = void 0;
@@ -16,6 +19,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const membership_repository_1 = require("../repositories/membership.repository");
 const membership_plan_repository_1 = require("../repositories/membership-plan.repository");
 const membership_events_1 = require("../events/membership.events");
+const entitlement_service_1 = require("./entitlement.service");
 const ALLOWED_TRANSITIONS = {
     trial: ['active', 'expired', 'cancelled'],
     pending_payment: ['active', 'expired', 'cancelled'],
@@ -41,10 +45,11 @@ function generateMemberNumber() {
     return `MBR-${rand(alpha)}${rand(alpha)}${rand(digits)}${rand(digits)}${rand(digits)}${rand(digits)}`;
 }
 let MembershipService = MembershipService_1 = class MembershipService {
-    constructor(membershipRepository, planRepository, eventEmitter) {
+    constructor(membershipRepository, planRepository, eventEmitter, entitlementService) {
         this.membershipRepository = membershipRepository;
         this.planRepository = planRepository;
         this.eventEmitter = eventEmitter;
+        this.entitlementService = entitlementService;
         this.logger = new common_1.Logger(MembershipService_1.name);
     }
     assertTransitionAllowed(from, to) {
@@ -143,6 +148,23 @@ let MembershipService = MembershipService_1 = class MembershipService {
             actorId,
             timestamp: now.toISOString(),
         });
+        for (const benefit of benefitSnapshot) {
+            try {
+                await this.entitlementService.initialise(membership.id, tenantId, {
+                    benefitType: String(benefit['benefitType'] ?? ''),
+                    units: Number(benefit['unitsPerPeriod'] ?? 0),
+                    periodType: benefit['periodType'] ? String(benefit['periodType']) : undefined,
+                    rolloverAllowed: benefit['rolloverAllowed'] ? 1 : 0,
+                    maxRolloverUnits: benefit['maxRolloverUnits'] != null
+                        ? Number(benefit['maxRolloverUnits'])
+                        : undefined,
+                });
+            }
+            catch (err) {
+                this.logger.warn(`Entitlement provision failed for benefit "${benefit['benefitType']}" ` +
+                    `on membership ${membership.id}: ${err.message}`);
+            }
+        }
         this.logger.log(`Enrolled ${membership.memberNumber} on plan "${plan.name}" — tenant: ${tenantId}`);
         return membership;
     }
@@ -273,6 +295,11 @@ let MembershipService = MembershipService_1 = class MembershipService {
             tenantId, membershipId: id, userId: m.userId, actorId,
             timestamp: new Date().toISOString(),
         });
+        if (dto.immediate) {
+            await this.entitlementService.deactivateAll(id, tenantId, actorId).catch((err) => {
+                this.logger.warn(`cancel: entitlement deactivation failed for ${id}: ${err.message}`);
+            });
+        }
         return updated;
     }
     async suspend(id, tenantId, actorId, note) {
@@ -289,6 +316,9 @@ let MembershipService = MembershipService_1 = class MembershipService {
         await this.eventEmitter.emitAsync(membership_events_1.MembershipEvents.SUSPENDED, {
             tenantId, membershipId: id, userId: m.userId, actorId,
             timestamp: new Date().toISOString(),
+        });
+        await this.entitlementService.deactivateAll(id, tenantId, actorId).catch((err) => {
+            this.logger.warn(`suspend: entitlement deactivation failed for ${id}: ${err.message}`);
         });
         return updated;
     }
@@ -382,6 +412,9 @@ let MembershipService = MembershipService_1 = class MembershipService {
         await this.eventEmitter.emitAsync(membership_events_1.MembershipEvents.EXPIRED, {
             tenantId, membershipId: id, userId: m.userId, actorId,
             timestamp: new Date().toISOString(),
+        });
+        await this.entitlementService.deactivateAll(id, tenantId, actorId).catch((err) => {
+            this.logger.warn(`expire: entitlement deactivation failed for ${id}: ${err.message}`);
         });
         this.logger.log(`Membership ${m.memberNumber} expired (${prev} → expired) — tenant: ${tenantId}`);
         return updated;
@@ -488,6 +521,57 @@ let MembershipService = MembershipService_1 = class MembershipService {
             seatLabel: m.seatLabel ?? undefined,
         }, tenantId, actorId);
         return { previous, next };
+    }
+    async getMembershipStatus(userId, tenantId) {
+        const NON_MEMBER = {
+            isMember: false,
+            membershipId: null,
+            membershipTier: null,
+            membershipType: null,
+            membershipStatus: null,
+            priorityBookingHoursAhead: 0,
+            courtCreditsRemaining: 0,
+            coachCreditsRemaining: 0,
+            guestPassesRemaining: 0,
+            tournamentCreditsRemaining: 0,
+            cafeCreditMinor: 0,
+            lockerAccess: false,
+            parkingAccess: false,
+            discountEligible: false,
+        };
+        const membership = await this.membershipRepository.findActiveByUser(userId, tenantId);
+        if (!membership)
+            return NON_MEMBER;
+        const isActive = membership.status === 'active' || membership.status === 'trial';
+        if (!isActive) {
+            return { ...NON_MEMBER, membershipStatus: membership.status };
+        }
+        const plan = await this.planRepository.findById(membership.planId, tenantId);
+        const balances = await this.entitlementService.findAll(membership.id, tenantId);
+        const get = (type) => {
+            const b = balances.find((x) => x.benefitType === type);
+            return b ? Math.max(0, b.balance - b.reservedUnits) : 0;
+        };
+        const hasDiscount = (membership.benefitSnapshot ?? []).some((b) => ['booking_discount_pct', 'booking_discount_fixed'].includes(String(b['benefitType'] ?? '')));
+        const priorityBalance = balances.find((b) => b.benefitType === 'priority_booking_hours');
+        return {
+            isMember: true,
+            membershipId: membership.id,
+            membershipTier: plan?.slug ?? null,
+            membershipType: membership.membershipType,
+            membershipStatus: membership.status,
+            priorityBookingHoursAhead: priorityBalance
+                ? Math.max(0, priorityBalance.balance - priorityBalance.reservedUnits)
+                : 0,
+            courtCreditsRemaining: get('court_credit'),
+            coachCreditsRemaining: get('coaching_credit'),
+            guestPassesRemaining: get('guest_pass'),
+            tournamentCreditsRemaining: get('tournament_credit'),
+            cafeCreditMinor: get('cafe_credit'),
+            lockerAccess: get('locker_access') > 0,
+            parkingAccess: get('parking_access') > 0,
+            discountEligible: hasDiscount,
+        };
     }
     async autoExpireTrials() {
         const batchSize = 50;
@@ -643,8 +727,10 @@ let MembershipService = MembershipService_1 = class MembershipService {
 exports.MembershipService = MembershipService;
 exports.MembershipService = MembershipService = MembershipService_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => entitlement_service_1.EntitlementService))),
     __metadata("design:paramtypes", [membership_repository_1.MembershipRepository,
         membership_plan_repository_1.MembershipPlanRepository,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        entitlement_service_1.EntitlementService])
 ], MembershipService);
 //# sourceMappingURL=membership.service.js.map

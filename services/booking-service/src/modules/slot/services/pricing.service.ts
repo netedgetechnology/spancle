@@ -46,6 +46,12 @@ export interface SlotPricingContext {
   rateCardId?:          string | null;
   /** Whether the booker is a member — enables member-type rules */
   isMember:             boolean;
+  /**
+   * Membership tier slug from MembershipPlan.slug.
+   * Used by 'membership' rule type to apply tier-specific pricing.
+   * null = no tier filtering (all membership rules fire when isMember = true).
+   */
+  membershipTier?:      string | null;
   /** ISO-4217 currency for formatting (default: 'GBP') */
   currency?:            string;
 }
@@ -132,7 +138,7 @@ export class PricingService {
       : ctx.courtHourlyRateMinor;
 
     const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
-    return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
+    return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember, ctx.membershipTier ?? null);
   }
 
   // ── Batch resolution (used by SlotGeneratorService) ───────────────────────
@@ -187,7 +193,7 @@ export class PricingService {
           : ctx.courtHourlyRateMinor;
 
         const proportionalBase = this.computeProportionalBase(hourlyRateMinor, ctx.durationMins);
-        return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember);
+        return this.runPipeline(matchingRules, proportionalBase, isHoliday, ctx.isMember, ctx.membershipTier ?? null);
       }),
     );
   }
@@ -233,6 +239,7 @@ export class PricingService {
       proportionalBase,
       isHoliday,
       dto.isMember ?? false,
+      null,
     );
 
     return {
@@ -253,6 +260,7 @@ export class PricingService {
     proportionalBase: number | null,
     isHoliday:        boolean,
     isMember:         boolean,
+    membershipTier:   string | null = null,
   ): PriceResolutionResult {
     const appliedRuleIds: string[] = [];
     const breakdown: PriceBreakdownStep[] = [];
@@ -325,12 +333,13 @@ export class PricingService {
       const candidates = rules
         .filter((r) => {
           if (r.ruleType !== ruleType) return false;
-          // holiday rules: only fire on actual holidays
           if (ruleType === 'holiday'    && !isHoliday) return false;
-          // member/membership rules: only fire when booker is a member
           if (ruleType === 'member'     && !isMember)  return false;
           if (ruleType === 'membership' && !isMember)  return false;
-          // custom rules with absolute modifier handled in step 2; skip here
+          // Tier-scoped membership rules only fire when tier matches
+          if (ruleType === 'membership' && r.membershipTier && isMember) {
+            if (!membershipTier || membershipTier !== r.membershipTier) return false;
+          }
           if (ruleType === 'custom' && r.modifierType === 'absolute') return false;
           return true;
         })
@@ -616,7 +625,7 @@ export class PricingService {
     isMember:    boolean,
     context?:    string,
   ): Promise<PriceResolutionResult> {
-    const result = this.runPipeline(rules, baseMinor, isHoliday, isMember);
+    const result = this.runPipeline(rules, baseMinor, isHoliday, isMember, null);
 
     for (const step of result.breakdown) {
       await this.eventEmitter.emitAsync(PricingEvents.RULE_APPLIED, {

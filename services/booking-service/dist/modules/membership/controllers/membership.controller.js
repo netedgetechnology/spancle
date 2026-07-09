@@ -34,6 +34,9 @@ let MembershipController = class MembershipController {
             userId, planId, status, limit, offset,
         });
     }
+    meStatus(tenant, actor) {
+        return this.membershipService.getMembershipStatus(actor.actorId, tenant.tenantId);
+    }
     me(tenant, actor) {
         return this.membershipService.findActiveByUser(actor.actorId, tenant.tenantId);
     }
@@ -105,6 +108,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, String, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], MembershipController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('me/status'),
+    (0, roles_decorator_1.Roles)('PLAYER', 'TENANT_ADMIN', 'TENANT_MANAGER'),
+    __param(0, (0, tenant_decorator_1.TenantCtx)()),
+    __param(1, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], MembershipController.prototype, "meStatus", null);
 __decorate([
     (0, common_1.Get)('me'),
     (0, roles_decorator_1.Roles)('PLAYER', 'TENANT_ADMIN', 'TENANT_MANAGER'),

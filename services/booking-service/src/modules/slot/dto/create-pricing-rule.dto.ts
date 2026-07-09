@@ -98,11 +98,14 @@ export class CreatePricingRuleDto {
    * Stored normalised (UPPER-CASED). Case-insensitive on redemption.
    */
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  @ValidateIf((o: CreatePricingRuleDto) => o.ruleType === 'coupon')
   @IsOptional()
+  @MaxLength(50)
   couponCode?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(50)
+  membershipTier?: string | null;
 
   /**
    * Maximum number of total redemptions across all bookings.

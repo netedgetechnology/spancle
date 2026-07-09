@@ -85,6 +85,10 @@ __decorate([
     __metadata("design:type", Object)
 ], PricingRuleEntity.prototype, "couponCode", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'membership_tier', type: 'varchar', length: 50, nullable: true }),
+    __metadata("design:type", Object)
+], PricingRuleEntity.prototype, "membershipTier", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'max_redemptions', type: 'int', nullable: true }),
     __metadata("design:type", Object)
 ], PricingRuleEntity.prototype, "maxRedemptions", void 0);
@@ -145,6 +149,7 @@ exports.PricingRuleEntity = PricingRuleEntity = __decorate([
     (0, typeorm_1.Index)(['tenantId', 'courtId']),
     (0, typeorm_1.Index)(['tenantId', 'sportId']),
     (0, typeorm_1.Index)(['tenantId', 'couponCode']),
+    (0, typeorm_1.Index)(['tenantId', 'membershipTier']),
     (0, typeorm_1.Index)(['tenantId', 'isDeleted'])
 ], PricingRuleEntity);
 //# sourceMappingURL=pricing-rule.entity.js.map

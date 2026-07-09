@@ -1,5 +1,5 @@
-import { Module }        from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { forwardRef, Module } from '@nestjs/common';
+import { TypeOrmModule }      from '@nestjs/typeorm';
 
 import { MembershipPlanEntity }        from './entities/membership-plan.entity';
 import { MembershipBenefitEntity }     from './entities/membership-benefit.entity';

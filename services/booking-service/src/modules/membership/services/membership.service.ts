@@ -1,12 +1,5 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  UnprocessableEntityException,
-} from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { BadRequestException, ConflictException, forwardRef, Inject, Injectable, Logger, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { EventEmitter2 }        from '@nestjs/event-emitter';
 import { MembershipRepository }     from '../repositories/membership.repository';
 import { MembershipPlanRepository } from '../repositories/membership-plan.repository';
 import {
@@ -24,6 +17,8 @@ import type {
   UpdateMembershipDto,
   AssignUserDto,
 } from '../dto/update-membership.dto';
+import { EntitlementService } from './entitlement.service';
+import type { MembershipStatusDto } from '../dto/membership-status.dto';
 
 const ALLOWED_TRANSITIONS: Record<MembershipStatus, MembershipStatus[]> = {
   trial:                ['active', 'expired', 'cancelled'],
@@ -67,6 +62,8 @@ export class MembershipService {
     private readonly membershipRepository: MembershipRepository,
     private readonly planRepository:       MembershipPlanRepository,
     private readonly eventEmitter:         EventEmitter2,
+    @Inject(forwardRef(() => EntitlementService))
+    private readonly entitlementService:   EntitlementService,
   ) {}
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -213,6 +210,26 @@ export class MembershipService {
       actorId,
       timestamp:    now.toISOString(),
     });
+
+    // Provision entitlement balances from the benefit snapshot
+    for (const benefit of benefitSnapshot) {
+      try {
+        await this.entitlementService.initialise(membership.id, tenantId, {
+          benefitType:     String(benefit['benefitType']   ?? ''),
+          units:           Number(benefit['unitsPerPeriod'] ?? 0),
+          periodType:      benefit['periodType'] ? String(benefit['periodType']) : undefined,
+          rolloverAllowed: benefit['rolloverAllowed'] ? 1 : 0,
+          maxRolloverUnits: benefit['maxRolloverUnits'] != null
+            ? Number(benefit['maxRolloverUnits'])
+            : undefined,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Entitlement provision failed for benefit "${benefit['benefitType']}" ` +
+          `on membership ${membership.id}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     this.logger.log(
       `Enrolled ${membership.memberNumber} on plan "${plan.name}" — tenant: ${tenantId}`,
@@ -420,6 +437,13 @@ export class MembershipService {
       timestamp: new Date().toISOString(),
     });
 
+    // Deactivate entitlement balances on immediate cancellation
+    if (dto.immediate) {
+      await this.entitlementService.deactivateAll(id, tenantId, actorId).catch((err) => {
+        this.logger.warn(`cancel: entitlement deactivation failed for ${id}: ${(err as Error).message}`);
+      });
+    }
+
     return updated;
   }
 
@@ -445,6 +469,9 @@ export class MembershipService {
     await this.eventEmitter.emitAsync(MembershipEvents.SUSPENDED, {
       tenantId, membershipId: id, userId: m.userId, actorId,
       timestamp: new Date().toISOString(),
+    });
+    await this.entitlementService.deactivateAll(id, tenantId, actorId).catch((err) => {
+      this.logger.warn(`suspend: entitlement deactivation failed for ${id}: ${(err as Error).message}`);
     });
     return updated;
   }
@@ -586,6 +613,10 @@ export class MembershipService {
     await this.eventEmitter.emitAsync(MembershipEvents.EXPIRED, {
       tenantId, membershipId: id, userId: m.userId, actorId,
       timestamp: new Date().toISOString(),
+    });
+
+    await this.entitlementService.deactivateAll(id, tenantId, actorId).catch((err) => {
+      this.logger.warn(`expire: entitlement deactivation failed for ${id}: ${(err as Error).message}`);
     });
 
     this.logger.log(
@@ -771,6 +802,82 @@ export class MembershipService {
     );
 
     return { previous, next };
+  }
+
+  // ── Membership status (cross-engine read) ────────────────────────────────
+
+  /**
+   * Returns the lightweight MembershipStatusDto consumed by Booking and Pricing.
+   * Queries the active membership + entitlement balances in two DB reads.
+   * No Redis cache — raw DB read (cache is a Batch 6.5 concern).
+   *
+   * Callers MUST use this method rather than querying membership tables directly.
+   */
+  async getMembershipStatus(
+    userId:   string,
+    tenantId: string,
+  ): Promise<MembershipStatusDto> {
+    const NON_MEMBER: MembershipStatusDto = {
+      isMember:                  false,
+      membershipId:              null,
+      membershipTier:            null,
+      membershipType:            null,
+      membershipStatus:          null,
+      priorityBookingHoursAhead: 0,
+      courtCreditsRemaining:     0,
+      coachCreditsRemaining:     0,
+      guestPassesRemaining:      0,
+      tournamentCreditsRemaining: 0,
+      cafeCreditMinor:           0,
+      lockerAccess:              false,
+      parkingAccess:             false,
+      discountEligible:          false,
+    };
+
+    const membership = await this.membershipRepository.findActiveByUser(userId, tenantId);
+    if (!membership) return NON_MEMBER;
+
+    const isActive = membership.status === 'active' || membership.status === 'trial';
+    if (!isActive) {
+      return { ...NON_MEMBER, membershipStatus: membership.status };
+    }
+
+    // Resolve plan slug for tier (used by Pricing to match tier-based rules)
+    const plan = await this.planRepository.findById(membership.planId, tenantId);
+
+    const balances = await this.entitlementService.findAll(membership.id, tenantId);
+
+    const get = (type: string): number => {
+      const b = balances.find((x) => x.benefitType === type);
+      return b ? Math.max(0, b.balance - b.reservedUnits) : 0;
+    };
+
+    const hasDiscount = (membership.benefitSnapshot ?? []).some((b) =>
+      ['booking_discount_pct', 'booking_discount_fixed'].includes(String(b['benefitType'] ?? '')),
+    );
+
+    const priorityBalance = balances.find(
+      (b) => b.benefitType === 'priority_booking_hours',
+    );
+
+    return {
+      isMember:                  true,
+      membershipId:              membership.id,
+      membershipTier:            plan?.slug ?? null,
+      membershipType:            membership.membershipType,
+      membershipStatus:          membership.status,
+      priorityBookingHoursAhead: priorityBalance
+        ? Math.max(0, priorityBalance.balance - priorityBalance.reservedUnits)
+        : 0,
+      courtCreditsRemaining:     get('court_credit'),
+      coachCreditsRemaining:     get('coaching_credit'),
+      guestPassesRemaining:      get('guest_pass'),
+      tournamentCreditsRemaining: get('tournament_credit'),
+      cafeCreditMinor:           get('cafe_credit'),
+      lockerAccess:              get('locker_access') > 0,
+      parkingAccess:             get('parking_access') > 0,
+      discountEligible:          hasDiscount,
+    };
   }
 
   // ── Scheduler-facing batch methods ────────────────────────────────────────

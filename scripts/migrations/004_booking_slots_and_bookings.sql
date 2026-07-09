@@ -442,3 +442,25 @@ CREATE INDEX IF NOT EXISTS idx_pricing_rules_tenant_venue
 CREATE INDEX IF NOT EXISTS idx_pricing_rules_tenant_coupon
   ON pricing_rules (tenant_id, coupon_code)
   WHERE coupon_code IS NOT NULL AND is_deleted = FALSE;
+
+-- =============================================================================
+-- Migration 004 — Addendum: Pricing Engine membership tier (Batch 6.4)
+-- Idempotent — DO $$ guards.
+-- =============================================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'pricing_rules' AND column_name = 'membership_tier'
+  ) THEN
+    ALTER TABLE pricing_rules ADD COLUMN membership_tier VARCHAR(50);
+    COMMENT ON COLUMN pricing_rules.membership_tier IS
+      'When set, this pricing rule only fires for members whose plan slug matches. '
+      'null = all tiers. Used with ruleType = ''membership''.';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_tenant_membership_tier
+  ON pricing_rules (tenant_id, membership_tier)
+  WHERE membership_tier IS NOT NULL AND is_deleted = FALSE;
