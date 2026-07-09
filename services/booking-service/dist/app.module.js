@@ -21,6 +21,7 @@ const slot_module_1 = require("./modules/slot/slot.module");
 const venue_module_1 = require("./modules/venue/venue.module");
 const court_module_1 = require("./modules/court/court.module");
 const qr_module_1 = require("./modules/qr/qr.module");
+const membership_module_1 = require("./modules/membership/membership.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -64,7 +65,7 @@ exports.AppModule = AppModule = __decorate([
                         }],
                 }),
             }),
-            booking_module_1.BookingModule, slot_module_1.SlotModule, venue_module_1.VenueModule, court_module_1.CourtModule, qr_module_1.QrModule,
+            booking_module_1.BookingModule, slot_module_1.SlotModule, venue_module_1.VenueModule, court_module_1.CourtModule, qr_module_1.QrModule, membership_module_1.MembershipModule,
         ],
         providers: [
             { provide: core_1.APP_GUARD, useClass: booking_guard_1.TenantGuard },

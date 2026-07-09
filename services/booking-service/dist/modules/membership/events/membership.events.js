@@ -1,0 +1,32 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MembershipEvents = void 0;
+var MembershipEvents;
+(function (MembershipEvents) {
+    MembershipEvents["ENROLLED"] = "spancle.membership.enrolled";
+    MembershipEvents["ACTIVATED"] = "spancle.membership.activated";
+    MembershipEvents["FROZEN"] = "spancle.membership.frozen";
+    MembershipEvents["UNFROZEN"] = "spancle.membership.unfrozen";
+    MembershipEvents["RENEWED"] = "spancle.membership.renewed";
+    MembershipEvents["RENEWAL_INVOICE_REQUESTED"] = "spancle.membership.renewal_invoice_requested";
+    MembershipEvents["PAYMENT_RECEIVED"] = "spancle.membership.payment_received";
+    MembershipEvents["PAYMENT_FAILED"] = "spancle.membership.payment_failed";
+    MembershipEvents["GRACE_PERIOD_STARTED"] = "spancle.membership.grace_period_started";
+    MembershipEvents["EXPIRED"] = "spancle.membership.expired";
+    MembershipEvents["CANCELLATION_SCHEDULED"] = "spancle.membership.cancellation_scheduled";
+    MembershipEvents["CANCELLED"] = "spancle.membership.cancelled";
+    MembershipEvents["UPGRADED"] = "spancle.membership.upgraded";
+    MembershipEvents["DOWNGRADE_SCHEDULED"] = "spancle.membership.downgrade_scheduled";
+    MembershipEvents["DOWNGRADED"] = "spancle.membership.downgraded";
+    MembershipEvents["SUSPENDED"] = "spancle.membership.suspended";
+    MembershipEvents["RESTORED"] = "spancle.membership.restored";
+    MembershipEvents["STATUS_CHANGED"] = "spancle.membership.status_changed";
+    MembershipEvents["ENTITLEMENT_CONSUMED"] = "spancle.membership.entitlement_consumed";
+    MembershipEvents["ENTITLEMENT_REFUNDED"] = "spancle.membership.entitlement_refunded";
+    MembershipEvents["ENTITLEMENT_EXHAUSTED"] = "spancle.membership.entitlement_exhausted";
+    MembershipEvents["ENTITLEMENT_BALANCE_RESET"] = "spancle.membership.entitlement_balance_reset";
+    MembershipEvents["PLAN_CREATED"] = "spancle.membership.plan_created";
+    MembershipEvents["PLAN_UPDATED"] = "spancle.membership.plan_updated";
+    MembershipEvents["PLAN_ARCHIVED"] = "spancle.membership.plan_archived";
+})(MembershipEvents || (exports.MembershipEvents = MembershipEvents = {}));
+//# sourceMappingURL=membership.events.js.map

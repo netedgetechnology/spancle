@@ -1,0 +1,108 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var MembershipRepository_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MembershipRepository = void 0;
+const common_1 = require("@nestjs/common");
+const typeorm_1 = require("@nestjs/typeorm");
+const typeorm_2 = require("typeorm");
+const membership_entity_1 = require("../entities/membership.entity");
+const membership_transaction_entity_1 = require("../entities/membership-transaction.entity");
+const membership_audit_log_entity_1 = require("../entities/membership-audit-log.entity");
+let MembershipRepository = MembershipRepository_1 = class MembershipRepository {
+    constructor(dataSource) {
+        this.dataSource = dataSource;
+        this.logger = new common_1.Logger(MembershipRepository_1.name);
+    }
+    get repo() { return this.dataSource.getRepository(membership_entity_1.MembershipEntity); }
+    get txRepo() { return this.dataSource.getRepository(membership_transaction_entity_1.MembershipTransactionEntity); }
+    get auditRepo() { return this.dataSource.getRepository(membership_audit_log_entity_1.MembershipAuditLogEntity); }
+    scopedQb(alias, tenantId) {
+        return this.repo
+            .createQueryBuilder(alias)
+            .where(`${alias}.tenantId = :tenantId`, { tenantId })
+            .andWhere(`${alias}.isDeleted = false`);
+    }
+    async create(data) {
+        return this.repo.save(this.repo.create(data));
+    }
+    async findById(id, tenantId) {
+        return this.scopedQb('m', tenantId).andWhere('m.id = :id', { id }).getOne();
+    }
+    async findByIdOrFail(id, tenantId) {
+        const m = await this.findById(id, tenantId);
+        if (!m)
+            throw new common_1.NotFoundException(`Membership ${id} not found`);
+        return m;
+    }
+    async findByMemberNumber(memberNumber, tenantId) {
+        return this.scopedQb('m', tenantId)
+            .andWhere('m.memberNumber = :memberNumber', { memberNumber })
+            .getOne();
+    }
+    async findActiveByUser(userId, tenantId) {
+        return this.scopedQb('m', tenantId)
+            .andWhere('m.userId = :userId', { userId })
+            .andWhere(`m.status NOT IN ('upgraded','downgraded','expired','cancelled')`)
+            .orderBy('m.createdAt', 'DESC')
+            .getOne();
+    }
+    async query(params) {
+        const qb = this.scopedQb('m', params.tenantId)
+            .orderBy('m.createdAt', 'DESC');
+        if (params.userId)
+            qb.andWhere('m.userId = :userId', { userId: params.userId });
+        if (params.planId)
+            qb.andWhere('m.planId = :planId', { planId: params.planId });
+        if (params.status)
+            qb.andWhere('m.status = :status', { status: params.status });
+        if (params.membershipType)
+            qb.andWhere('m.membershipType = :membershipType', { membershipType: params.membershipType });
+        if (params.limit)
+            qb.take(params.limit);
+        if (params.offset)
+            qb.skip(params.offset);
+        return qb.getMany();
+    }
+    async updateById(id, tenantId, data) {
+        await this.repo.update({ id, tenantId }, data);
+        return this.repo.findOneOrFail({ where: { id, tenantId } });
+    }
+    async softDelete(id, tenantId) {
+        await this.repo.update({ id, tenantId }, { isDeleted: true, deletedAt: new Date() });
+    }
+    async insertTransaction(data) {
+        return this.txRepo.save(this.txRepo.create(data));
+    }
+    async findTransactions(membershipId, tenantId, limit = 50, offset = 0) {
+        return this.txRepo
+            .createQueryBuilder('t')
+            .where('t.tenantId = :tenantId', { tenantId })
+            .andWhere('t.membershipId = :membershipId', { membershipId })
+            .orderBy('t.createdAt', 'DESC')
+            .take(limit)
+            .skip(offset)
+            .getMany();
+    }
+    async insertAuditLog(data) {
+        return this.auditRepo.save(this.auditRepo.create(data));
+    }
+};
+exports.MembershipRepository = MembershipRepository;
+exports.MembershipRepository = MembershipRepository = MembershipRepository_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, typeorm_1.InjectDataSource)()),
+    __metadata("design:paramtypes", [typeorm_2.DataSource])
+], MembershipRepository);
+//# sourceMappingURL=membership.repository.js.map

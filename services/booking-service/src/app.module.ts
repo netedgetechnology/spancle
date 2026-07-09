@@ -8,11 +8,12 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { TenantGuard, RbacGuard } from './modules/booking/guards/booking.guard';
-import { BookingModule } from './modules/booking/booking.module';
-import { SlotModule }    from './modules/slot/slot.module';
-import { VenueModule }   from './modules/venue/venue.module';
-import { CourtModule }   from './modules/court/court.module';
-import { QrModule }      from './modules/qr/qr.module';
+import { BookingModule }    from './modules/booking/booking.module';
+import { SlotModule }       from './modules/slot/slot.module';
+import { VenueModule }      from './modules/venue/venue.module';
+import { CourtModule }      from './modules/court/court.module';
+import { QrModule }         from './modules/qr/qr.module';
+import { MembershipModule } from './modules/membership/membership.module';
 
 @Module({
   imports: [
@@ -58,7 +59,7 @@ import { QrModule }      from './modules/qr/qr.module';
       }),
     }),
 
-    BookingModule, SlotModule, VenueModule, CourtModule, QrModule,
+    BookingModule, SlotModule, VenueModule, CourtModule, QrModule, MembershipModule,
   ],
   providers: [
     // Global guard chain for all booking-service routes:
