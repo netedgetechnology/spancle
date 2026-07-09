@@ -10,8 +10,9 @@ import { MembershipAuditLogEntity }    from './entities/membership-audit-log.ent
 import { MembershipPlanRepository } from './repositories/membership-plan.repository';
 import { MembershipRepository }     from './repositories/membership.repository';
 
-import { MembershipPlanService } from './services/membership-plan.service';
-import { MembershipService }     from './services/membership.service';
+import { MembershipPlanService }      from './services/membership-plan.service';
+import { MembershipService }          from './services/membership.service';
+import { MembershipSchedulerService } from './services/membership-scheduler.service';
 
 import { MembershipPlanController } from './controllers/membership-plan.controller';
 import { MembershipController }     from './controllers/membership.controller';
@@ -45,6 +46,7 @@ import { MembershipController }     from './controllers/membership.controller';
     MembershipRepository,
     MembershipPlanService,
     MembershipService,
+    MembershipSchedulerService,
   ],
   exports: [MembershipService],
 })

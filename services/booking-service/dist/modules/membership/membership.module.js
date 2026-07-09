@@ -18,6 +18,7 @@ const membership_plan_repository_1 = require("./repositories/membership-plan.rep
 const membership_repository_1 = require("./repositories/membership.repository");
 const membership_plan_service_1 = require("./services/membership-plan.service");
 const membership_service_1 = require("./services/membership.service");
+const membership_scheduler_service_1 = require("./services/membership-scheduler.service");
 const membership_plan_controller_1 = require("./controllers/membership-plan.controller");
 const membership_controller_1 = require("./controllers/membership.controller");
 let MembershipModule = class MembershipModule {
@@ -43,6 +44,7 @@ exports.MembershipModule = MembershipModule = __decorate([
             membership_repository_1.MembershipRepository,
             membership_plan_service_1.MembershipPlanService,
             membership_service_1.MembershipService,
+            membership_scheduler_service_1.MembershipSchedulerService,
         ],
         exports: [membership_service_1.MembershipService],
     })

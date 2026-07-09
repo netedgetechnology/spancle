@@ -25,8 +25,6 @@ import type {
   AssignUserDto,
 } from '../dto/update-membership.dto';
 
-// ── State machine ─────────────────────────────────────────────────────────────
-
 const ALLOWED_TRANSITIONS: Record<MembershipStatus, MembershipStatus[]> = {
   trial:                ['active', 'expired', 'cancelled'],
   pending_payment:      ['active', 'expired', 'cancelled'],
@@ -555,5 +553,399 @@ export class MembershipService {
       note: `Assigned userId ${dto.userId}`,
     });
     return updated;
+  }
+
+  // ── Expire ────────────────────────────────────────────────────────────────
+
+  /**
+   * Transitions a membership to 'expired'.
+   * Called by: scheduler (trial expiry, grace-period expiry), manual admin action.
+   * Emits MEMBERSHIP_EXPIRED.
+   */
+  async expire(
+    id:        string,
+    tenantId:  string,
+    actorId:   string,
+    actorType: 'system' | 'staff' = 'system',
+  ): Promise<MembershipEntity> {
+    const m    = await this.membershipRepository.findByIdOrFail(id, tenantId);
+    const prev = m.status;
+    this.assertTransitionAllowed(prev, 'expired');
+
+    const updated = await this.membershipRepository.updateById(id, tenantId, {
+      status:      'expired',
+      expiresAt:   new Date(),
+      updatedById: actorId,
+    });
+
+    await this.logTransition({
+      tenantId, membershipId: id, action: 'expired',
+      actorId, actorType, previousStatus: prev, newStatus: 'expired',
+    });
+    await this.emitStatusChanged(tenantId, id, m.userId, actorId, prev, 'expired');
+    await this.eventEmitter.emitAsync(MembershipEvents.EXPIRED, {
+      tenantId, membershipId: id, userId: m.userId, actorId,
+      timestamp: new Date().toISOString(),
+    });
+
+    this.logger.log(
+      `Membership ${m.memberNumber} expired (${prev} → expired) — tenant: ${tenantId}`,
+    );
+    return updated;
+  }
+
+  // ── Renew ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Records a completed renewal: transitions pending_renewal/payment_failed → active
+   * and advances renewsAt by one billing cycle.
+   * Finance-service calls this after a successful payment (via event listener in Batch 6.3).
+   * Can also be called directly by admin staff.
+   */
+  async renew(
+    id:        string,
+    tenantId:  string,
+    actorId:   string,
+    actorType: 'system' | 'staff' = 'system',
+  ): Promise<MembershipEntity> {
+    const m    = await this.membershipRepository.findByIdOrFail(id, tenantId);
+    const prev = m.status;
+    this.assertTransitionAllowed(prev, 'active');
+
+    const plan = await this.planRepository.findByIdOrFail(m.planId, tenantId);
+
+    const cycleMs: Record<string, number> = {
+      monthly:   30 * 86_400_000,
+      quarterly: 90 * 86_400_000,
+      annual:   365 * 86_400_000,
+    };
+    const now      = new Date();
+    const base     = m.renewsAt && m.renewsAt > now ? m.renewsAt : now;
+    const interval = cycleMs[plan.billingCycle];
+    const renewsAt = interval ? new Date(base.getTime() + interval) : null;
+
+    const updated = await this.membershipRepository.updateById(id, tenantId, {
+      status:      'active',
+      renewsAt,
+      expiresAt:   null,
+      updatedById: actorId,
+    });
+
+    await this.logTransition({
+      tenantId, membershipId: id, action: 'renewed',
+      actorId, actorType, previousStatus: prev, newStatus: 'active',
+      note: renewsAt ? `Next renewal: ${renewsAt.toISOString()}` : 'Lifetime — no renewal',
+    });
+    await this.emitStatusChanged(tenantId, id, m.userId, actorId, prev, 'active');
+    await this.eventEmitter.emitAsync(MembershipEvents.RENEWED, {
+      tenantId, membershipId: id, userId: m.userId, actorId,
+      timestamp: now.toISOString(),
+    });
+
+    return updated;
+  }
+
+  // ── Upgrade ───────────────────────────────────────────────────────────────
+
+  /**
+   * Upgrades a membership to a different (higher) plan.
+   * Terminates the current membership as 'upgraded' and creates a new
+   * membership in 'pending_payment' for the target plan.
+   * The new membership inherits the same userId and memberNumber prefix.
+   * Finance integration (proration credit) is handled in Batch 6.3.
+   */
+  async upgrade(
+    id:       string,
+    dto:      UpgradeMembershipDto,
+    tenantId: string,
+    actorId:  string,
+  ): Promise<{ previous: MembershipEntity; next: MembershipEntity }> {
+    const m = await this.membershipRepository.findByIdOrFail(id, tenantId);
+
+    if (isTerminal(m.status)) {
+      throw new BadRequestException(
+        `Cannot upgrade a membership in terminal state "${m.status}"`,
+      );
+    }
+    if (m.planId === dto.targetPlanId) {
+      throw new BadRequestException('Target plan is the same as the current plan');
+    }
+
+    const targetPlan = await this.planRepository.findByIdOrFail(dto.targetPlanId, tenantId);
+    if (!targetPlan.isActive) {
+      throw new BadRequestException('Target plan is not active');
+    }
+
+    // Mark current membership as upgraded (terminal)
+    const prev    = m.status;
+    const previous = await this.membershipRepository.updateById(id, tenantId, {
+      status:      'upgraded',
+      updatedById: actorId,
+    });
+
+    await this.logTransition({
+      tenantId, membershipId: id, action: 'upgraded',
+      actorId, actorType: 'user', previousStatus: prev, newStatus: 'upgraded',
+      note: `Upgraded to plan ${dto.targetPlanId}`,
+    });
+    await this.emitStatusChanged(tenantId, id, m.userId, actorId, prev, 'upgraded');
+    await this.eventEmitter.emitAsync(MembershipEvents.UPGRADED, {
+      tenantId, membershipId: id, userId: m.userId, actorId,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Enrol on the new plan — benefit snapshot taken fresh
+    const next = await this.enrol(
+      {
+        planId:            dto.targetPlanId,
+        userId:            m.userId ?? undefined,
+        membershipType:    targetPlan.membershipType,
+        autoRenew:         m.autoRenew,
+        parentMembershipId: m.parentMembershipId ?? undefined,
+        seatLabel:         m.seatLabel ?? undefined,
+      },
+      tenantId,
+      actorId,
+    );
+
+    return { previous, next };
+  }
+
+  // ── Execute downgrade ─────────────────────────────────────────────────────
+
+  /**
+   * Executes a scheduled downgrade at renewal time.
+   * Called by the scheduler when renewsAt ≤ now and pendingDowngradePlanId is set.
+   * Terminates the current membership as 'downgraded' and creates a new one
+   * on the target plan.
+   */
+  async executeDowngrade(
+    id:       string,
+    tenantId: string,
+    actorId:  string,
+  ): Promise<{ previous: MembershipEntity; next: MembershipEntity }> {
+    const m = await this.membershipRepository.findByIdOrFail(id, tenantId);
+
+    if (m.status !== 'active') {
+      throw new BadRequestException('Downgrade can only execute on an active membership');
+    }
+    if (!m.pendingDowngradePlanId) {
+      throw new BadRequestException('Membership has no pending downgrade');
+    }
+
+    const targetPlan = await this.planRepository.findByIdOrFail(
+      m.pendingDowngradePlanId,
+      tenantId,
+    );
+
+    // Terminate current as 'downgraded'
+    const previous = await this.membershipRepository.updateById(id, tenantId, {
+      status:                'downgraded',
+      pendingDowngradePlanId: null,
+      updatedById:           actorId,
+    });
+
+    await this.logTransition({
+      tenantId, membershipId: id, action: 'downgraded',
+      actorId, actorType: 'system', previousStatus: 'active', newStatus: 'downgraded',
+      note: `Downgraded to plan ${m.pendingDowngradePlanId}`,
+    });
+    await this.emitStatusChanged(tenantId, id, m.userId, actorId, 'active', 'downgraded');
+    await this.eventEmitter.emitAsync(MembershipEvents.DOWNGRADED, {
+      tenantId, membershipId: id, userId: m.userId, actorId,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Enrol on the lower plan
+    const next = await this.enrol(
+      {
+        planId:            m.pendingDowngradePlanId,
+        userId:            m.userId ?? undefined,
+        membershipType:    targetPlan.membershipType,
+        autoRenew:         m.autoRenew,
+        parentMembershipId: m.parentMembershipId ?? undefined,
+        seatLabel:         m.seatLabel ?? undefined,
+      },
+      tenantId,
+      actorId,
+    );
+
+    return { previous, next };
+  }
+
+  // ── Scheduler-facing batch methods ────────────────────────────────────────
+
+  /**
+   * Expires all trial memberships whose trialEndsAt has passed.
+   * Runs cross-tenant; called by MembershipSchedulerService.
+   */
+  async autoExpireTrials(): Promise<number> {
+    const batchSize = 50;
+    const candidates = await this.membershipRepository.findExpiredTrials(batchSize);
+    let count = 0;
+    for (const m of candidates) {
+      try {
+        await this.expire(m.id, m.tenantId, 'system');
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoExpireTrials: ${m.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoExpireTrials: expired ${count} trial(s)`);
+    return count;
+  }
+
+  /**
+   * Expires payment_failed memberships whose grace period has passed.
+   */
+  async autoExpireGrace(): Promise<number> {
+    const batchSize = 50;
+    const candidates = await this.membershipRepository.findGraceExpired(batchSize);
+    let count = 0;
+    for (const m of candidates) {
+      try {
+        await this.expire(m.id, m.tenantId, 'system');
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoExpireGrace: ${m.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoExpireGrace: expired ${count} membership(s)`);
+    return count;
+  }
+
+  /**
+   * Sends renewal reminders for memberships approaching their renewsAt.
+   * Emits RENEWAL_INVOICE_REQUESTED — Finance-service listener picks this up.
+   */
+  async autoRequestRenewals(leadDays: number): Promise<number> {
+    const batchSize = 50;
+    const candidates = await this.membershipRepository.findDueForRenewal(leadDays, batchSize);
+    let count = 0;
+    for (const m of candidates) {
+      try {
+        const updated = await this.membershipRepository.updateById(m.id, m.tenantId, {
+          status: 'pending_renewal',
+        });
+        await this.logTransition({
+          tenantId: m.tenantId, membershipId: m.id, action: 'pending_renewal',
+          actorId: 'system', actorType: 'system',
+          previousStatus: m.status, newStatus: 'pending_renewal',
+        });
+        await this.emitStatusChanged(
+          m.tenantId, m.id, m.userId, 'system', m.status, 'pending_renewal',
+        );
+        await this.eventEmitter.emitAsync(MembershipEvents.RENEWAL_INVOICE_REQUESTED, {
+          tenantId: m.tenantId, membershipId: m.id, userId: m.userId,
+          actorId: 'system', timestamp: new Date().toISOString(),
+        });
+        void updated;
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoRequestRenewals: ${m.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoRequestRenewals: queued ${count} renewal(s)`);
+    return count;
+  }
+
+  /**
+   * Lifts freeze on memberships whose frozenUntil has passed.
+   * Extends renewsAt by the number of freeze days consumed.
+   */
+  async autoLiftFreezes(): Promise<number> {
+    const batchSize = 50;
+    const candidates = await this.membershipRepository.findFreezeExpired(batchSize);
+    let count = 0;
+    for (const m of candidates) {
+      try {
+        // Extend renewsAt by freeze duration
+        const freezeMs = m.frozenUntil && m.frozenAt
+          ? m.frozenUntil.getTime() - m.frozenAt.getTime()
+          : 0;
+        const renewsAt = m.renewsAt
+          ? new Date(m.renewsAt.getTime() + freezeMs)
+          : null;
+
+        await this.membershipRepository.updateById(m.id, m.tenantId, {
+          status:      'active',
+          frozenAt:    null,
+          frozenUntil: null,
+          renewsAt,
+        });
+        await this.logTransition({
+          tenantId: m.tenantId, membershipId: m.id, action: 'unfrozen',
+          actorId: 'system', actorType: 'system',
+          previousStatus: 'frozen', newStatus: 'active',
+          note: `Auto-unfrozen; renewsAt extended to ${renewsAt?.toISOString() ?? 'unchanged'}`,
+        });
+        await this.emitStatusChanged(
+          m.tenantId, m.id, m.userId, 'system', 'frozen', 'active',
+        );
+        await this.eventEmitter.emitAsync(MembershipEvents.UNFROZEN, {
+          tenantId: m.tenantId, membershipId: m.id, userId: m.userId,
+          actorId: 'system', timestamp: new Date().toISOString(),
+        });
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoLiftFreezes: ${m.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoLiftFreezes: unfrozen ${count} membership(s)`);
+    return count;
+  }
+
+  /**
+   * Executes pending downgrades for memberships whose renewsAt has passed.
+   */
+  async autoExecuteDowngrades(): Promise<number> {
+    const batchSize = 50;
+    const candidates = await this.membershipRepository.findPendingDowngrades(batchSize);
+    let count = 0;
+    for (const m of candidates) {
+      try {
+        await this.executeDowngrade(m.id, m.tenantId, 'system');
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoExecuteDowngrades: ${m.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoExecuteDowngrades: executed ${count} downgrade(s)`);
+    return count;
+  }
+
+  /**
+   * Finalises cancellations for memberships in cancellation_pending
+   * whose period end (renewsAt) has passed.
+   */
+  async autoFinaliseCancellations(): Promise<number> {
+    const batchSize = 50;
+    const candidates = await this.membershipRepository.findPendingCancellations(batchSize);
+    let count = 0;
+    for (const m of candidates) {
+      try {
+        await this.membershipRepository.updateById(m.id, m.tenantId, {
+          status:      'cancelled',
+          cancelledAt: new Date(),
+        });
+        await this.logTransition({
+          tenantId: m.tenantId, membershipId: m.id, action: 'cancelled',
+          actorId: 'system', actorType: 'system',
+          previousStatus: 'cancellation_pending', newStatus: 'cancelled',
+        });
+        await this.emitStatusChanged(
+          m.tenantId, m.id, m.userId, 'system', 'cancellation_pending', 'cancelled',
+        );
+        await this.eventEmitter.emitAsync(MembershipEvents.CANCELLED, {
+          tenantId: m.tenantId, membershipId: m.id, userId: m.userId,
+          actorId: 'system', timestamp: new Date().toISOString(),
+        });
+        count++;
+      } catch (err) {
+        this.logger.warn(`autoFinaliseCancellations: ${m.id} — ${(err as Error).message}`);
+      }
+    }
+    if (count) this.logger.log(`autoFinaliseCancellations: cancelled ${count} membership(s)`);
+    return count;
   }
 }

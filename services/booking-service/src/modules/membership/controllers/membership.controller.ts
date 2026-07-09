@@ -13,6 +13,7 @@ import { CreateMembershipDto }                     from '../dto/create-membershi
 import {
   FreezeMembershipDto,
   CancelMembershipDto,
+  UpgradeMembershipDto,
   ScheduleDowngradeDto,
   UpdateMembershipDto,
   AssignUserDto,
@@ -182,6 +183,43 @@ export class MembershipController {
     @BookingActor() actor: BookingActorContext,
   ): Promise<unknown> {
     return this.membershipService.scheduleDowngrade(id, dto, tenant.tenantId, actor.actorId);
+  }
+
+  /** PATCH /api/v1/memberships/:id/upgrade */
+  @Patch(':id/upgrade')
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'PLAYER')
+  upgrade(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpgradeMembershipDto,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ): Promise<unknown> {
+    return this.membershipService.upgrade(id, dto, tenant.tenantId, actor.actorId);
+  }
+
+  /** PATCH /api/v1/memberships/:id/expire — manual admin expiry */
+  @Patch(':id/expire')
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN')
+  expire(
+    @Param('id', ParseUUIDPipe) id: string,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ): Promise<unknown> {
+    return this.membershipService.expire(id, tenant.tenantId, actor.actorId, 'staff');
+  }
+
+  /** PATCH /api/v1/memberships/:id/renew — manual admin renewal */
+  @Patch(':id/renew')
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
+  renew(
+    @Param('id', ParseUUIDPipe) id: string,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ): Promise<unknown> {
+    return this.membershipService.renew(id, tenant.tenantId, actor.actorId, 'staff');
   }
 
   /** PATCH /api/v1/memberships/:id/assign-user */

@@ -67,6 +67,15 @@ let MembershipController = class MembershipController {
     scheduleDowngrade(id, dto, tenant, actor) {
         return this.membershipService.scheduleDowngrade(id, dto, tenant.tenantId, actor.actorId);
     }
+    upgrade(id, dto, tenant, actor) {
+        return this.membershipService.upgrade(id, dto, tenant.tenantId, actor.actorId);
+    }
+    expire(id, tenant, actor) {
+        return this.membershipService.expire(id, tenant.tenantId, actor.actorId, 'staff');
+    }
+    renew(id, tenant, actor) {
+        return this.membershipService.renew(id, tenant.tenantId, actor.actorId, 'staff');
+    }
     assignUser(id, dto, tenant, actor) {
         return this.membershipService.assignUser(id, dto, tenant.tenantId, actor.actorId);
     }
@@ -216,6 +225,40 @@ __decorate([
     __metadata("design:paramtypes", [String, update_membership_dto_1.ScheduleDowngradeDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], MembershipController.prototype, "scheduleDowngrade", null);
+__decorate([
+    (0, common_1.Patch)(':id/upgrade'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER', 'PLAYER'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, tenant_decorator_1.TenantCtx)()),
+    __param(3, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_membership_dto_1.UpgradeMembershipDto, Object, Object]),
+    __metadata("design:returntype", Promise)
+], MembershipController.prototype, "upgrade", null);
+__decorate([
+    (0, common_1.Patch)(':id/expire'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], MembershipController.prototype, "expire", null);
+__decorate([
+    (0, common_1.Patch)(':id/renew'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], MembershipController.prototype, "renew", null);
 __decorate([
     (0, common_1.Patch)(':id/assign-user'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
