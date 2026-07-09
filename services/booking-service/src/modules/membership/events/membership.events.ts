@@ -27,6 +27,9 @@ export enum MembershipEvents {
   // Entitlement
   ENTITLEMENT_CONSUMED  = 'spancle.membership.entitlement_consumed',
   ENTITLEMENT_REFUNDED  = 'spancle.membership.entitlement_refunded',
+  ENTITLEMENT_ADJUSTED  = 'spancle.membership.entitlement_adjusted',
+  ENTITLEMENT_RESERVED  = 'spancle.membership.entitlement_reserved',
+  ENTITLEMENT_RELEASED  = 'spancle.membership.entitlement_released',
   ENTITLEMENT_EXHAUSTED = 'spancle.membership.entitlement_exhausted',
   ENTITLEMENT_BALANCE_RESET = 'spancle.membership.entitlement_balance_reset',
 

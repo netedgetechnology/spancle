@@ -198,3 +198,48 @@ CREATE INDEX IF NOT EXISTS idx_membership_audit_logs_tenant_membership
 
 CREATE INDEX IF NOT EXISTS idx_membership_audit_logs_tenant_created
   ON membership_audit_logs (tenant_id, created_at);
+
+-- =============================================================================
+-- Migration 007 — Addendum: membership_entitlement_balances (Batch 6.3)
+-- Idempotent — CREATE TABLE IF NOT EXISTS + IF NOT EXISTS indexes.
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS membership_entitlement_balances (
+  id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id                UUID         NOT NULL,
+  membership_id            UUID         NOT NULL,
+  benefit_type             VARCHAR(80)  NOT NULL,
+  balance                  INT          NOT NULL DEFAULT 0,
+  reserved_units           INT          NOT NULL DEFAULT 0,
+  base_units               INT          NOT NULL DEFAULT 0,
+  period_type              VARCHAR(20),
+  next_reset_at            TIMESTAMPTZ,
+  last_reset_at            TIMESTAMPTZ,
+  rollover_allowed         BOOLEAN      NOT NULL DEFAULT FALSE,
+  max_rollover_units       INT,
+  total_consumed_lifetime  INT          NOT NULL DEFAULT 0,
+  is_active                BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  -- No deleted_at — balances are deactivated (is_active = false), never deleted
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_entitlement_balances_type
+  ON membership_entitlement_balances (membership_id, benefit_type);
+
+CREATE INDEX IF NOT EXISTS idx_membership_entitlement_balances_tenant_membership
+  ON membership_entitlement_balances (tenant_id, membership_id);
+
+-- Scheduler reset sweep index
+CREATE INDEX IF NOT EXISTS idx_membership_entitlement_balances_next_reset
+  ON membership_entitlement_balances (tenant_id, next_reset_at)
+  WHERE next_reset_at IS NOT NULL AND is_active = TRUE;
+
+-- Stale reservation cleanup index
+CREATE INDEX IF NOT EXISTS idx_membership_entitlement_balances_stale_reservations
+  ON membership_entitlement_balances (updated_at)
+  WHERE reserved_units > 0 AND is_active = FALSE;
+
+-- Add 'reserve' and 'release' transaction types note:
+-- membership_transactions.transaction_type is varchar — no ALTER TYPE needed.
+-- New values: reserve | release | reset | forfeit (all valid without migration).

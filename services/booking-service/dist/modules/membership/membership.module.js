@@ -14,13 +14,18 @@ const membership_benefit_entity_1 = require("./entities/membership-benefit.entit
 const membership_entity_1 = require("./entities/membership.entity");
 const membership_transaction_entity_1 = require("./entities/membership-transaction.entity");
 const membership_audit_log_entity_1 = require("./entities/membership-audit-log.entity");
+const entitlement_balance_entity_1 = require("./entities/entitlement-balance.entity");
 const membership_plan_repository_1 = require("./repositories/membership-plan.repository");
 const membership_repository_1 = require("./repositories/membership.repository");
+const entitlement_repository_1 = require("./repositories/entitlement.repository");
 const membership_plan_service_1 = require("./services/membership-plan.service");
 const membership_service_1 = require("./services/membership.service");
 const membership_scheduler_service_1 = require("./services/membership-scheduler.service");
+const entitlement_service_1 = require("./services/entitlement.service");
+const entitlement_scheduler_service_1 = require("./services/entitlement-scheduler.service");
 const membership_plan_controller_1 = require("./controllers/membership-plan.controller");
 const membership_controller_1 = require("./controllers/membership.controller");
+const entitlement_controller_1 = require("./controllers/entitlement.controller");
 let MembershipModule = class MembershipModule {
 };
 exports.MembershipModule = MembershipModule;
@@ -33,20 +38,25 @@ exports.MembershipModule = MembershipModule = __decorate([
                 membership_entity_1.MembershipEntity,
                 membership_transaction_entity_1.MembershipTransactionEntity,
                 membership_audit_log_entity_1.MembershipAuditLogEntity,
+                entitlement_balance_entity_1.EntitlementBalanceEntity,
             ]),
         ],
         controllers: [
             membership_plan_controller_1.MembershipPlanController,
             membership_controller_1.MembershipController,
+            entitlement_controller_1.EntitlementController,
         ],
         providers: [
             membership_plan_repository_1.MembershipPlanRepository,
             membership_repository_1.MembershipRepository,
+            entitlement_repository_1.EntitlementRepository,
             membership_plan_service_1.MembershipPlanService,
             membership_service_1.MembershipService,
             membership_scheduler_service_1.MembershipSchedulerService,
+            entitlement_service_1.EntitlementService,
+            entitlement_scheduler_service_1.EntitlementSchedulerService,
         ],
-        exports: [membership_service_1.MembershipService],
+        exports: [membership_service_1.MembershipService, entitlement_service_1.EntitlementService],
     })
 ], MembershipModule);
 //# sourceMappingURL=membership.module.js.map
