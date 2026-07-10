@@ -14,6 +14,7 @@ import { VenueModule }      from './modules/venue/venue.module';
 import { CourtModule }      from './modules/court/court.module';
 import { QrModule }         from './modules/qr/qr.module';
 import { MembershipModule } from './modules/membership/membership.module';
+import { FinanceModule }    from './modules/finance/finance.module';
 
 @Module({
   imports: [
