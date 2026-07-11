@@ -1,5 +1,5 @@
 import {
-  IsEnum, IsInt, IsOptional, IsString,
+  IsEnum, IsInt, IsNotEmpty, IsOptional, IsString,
   IsUUID, Max, MaxLength, Min,
 } from 'class-validator';
 
@@ -46,7 +46,6 @@ export class CheckInDto {
   checkedInById?: string;
 }
 
-import { IsNotEmpty } from 'class-validator';
 export class MarkNoShowDto {
   @IsString() @IsOptional() @MaxLength(500)
   notes?: string;

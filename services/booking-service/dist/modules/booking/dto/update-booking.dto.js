@@ -51,7 +51,7 @@ class CancelBookingDto {
 exports.CancelBookingDto = CancelBookingDto;
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_2.IsNotEmpty)(),
+    (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], CancelBookingDto.prototype, "reason", void 0);
@@ -81,7 +81,6 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CheckInDto.prototype, "checkedInById", void 0);
-const class_validator_2 = require("class-validator");
 class MarkNoShowDto {
 }
 exports.MarkNoShowDto = MarkNoShowDto;
@@ -101,7 +100,7 @@ class WaiveNoShowDto {
 exports.WaiveNoShowDto = WaiveNoShowDto;
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_2.IsNotEmpty)(),
+    (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], WaiveNoShowDto.prototype, "reason", void 0);
