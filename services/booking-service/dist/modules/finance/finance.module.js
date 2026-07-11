@@ -15,18 +15,22 @@ const journal_entity_1 = require("./entities/journal.entity");
 const tax_rate_entity_1 = require("./entities/tax-rate.entity");
 const invoice_entity_1 = require("./entities/invoice.entity");
 const invoice_line_entity_1 = require("./entities/invoice-line.entity");
+const payment_entity_1 = require("./entities/payment.entity");
 const accounting_period_repository_1 = require("./repositories/accounting-period.repository");
 const chart_of_account_repository_1 = require("./repositories/chart-of-account.repository");
 const journal_repository_1 = require("./repositories/journal.repository");
 const tax_rate_repository_1 = require("./repositories/tax-rate.repository");
 const invoice_repository_1 = require("./repositories/invoice.repository");
+const payment_repository_1 = require("./repositories/payment.repository");
 const accounting_period_service_1 = require("./services/accounting-period.service");
 const double_entry_service_1 = require("./services/double-entry.service");
 const tax_resolver_service_1 = require("./services/tax-resolver.service");
 const chart_of_account_service_1 = require("./services/chart-of-account.service");
 const invoice_service_1 = require("./services/invoice.service");
+const payment_service_1 = require("./services/payment.service");
 const finance_admin_controller_1 = require("./controllers/finance-admin.controller");
 const invoice_admin_controller_1 = require("./controllers/invoice-admin.controller");
+const payment_admin_controller_1 = require("./controllers/payment-admin.controller");
 let FinanceModule = class FinanceModule {
 };
 exports.FinanceModule = FinanceModule;
@@ -43,11 +47,14 @@ exports.FinanceModule = FinanceModule = __decorate([
                 invoice_line_entity_1.InvoiceLineEntity,
                 invoice_line_entity_1.InvoiceTaxEntity,
                 invoice_line_entity_1.InvoiceReferenceEntity,
+                payment_entity_1.PaymentEntity,
+                payment_entity_1.PaymentAllocationEntity,
             ]),
         ],
         controllers: [
             finance_admin_controller_1.FinanceAdminController,
             invoice_admin_controller_1.InvoiceAdminController,
+            payment_admin_controller_1.PaymentAdminController,
         ],
         providers: [
             accounting_period_repository_1.AccountingPeriodRepository,
@@ -55,11 +62,13 @@ exports.FinanceModule = FinanceModule = __decorate([
             journal_repository_1.JournalRepository,
             tax_rate_repository_1.TaxRateRepository,
             invoice_repository_1.InvoiceRepository,
+            payment_repository_1.PaymentRepository,
             accounting_period_service_1.AccountingPeriodService,
             double_entry_service_1.DoubleEntryService,
             tax_resolver_service_1.TaxResolver,
             chart_of_account_service_1.ChartOfAccountService,
             invoice_service_1.InvoiceService,
+            payment_service_1.PaymentService,
         ],
         exports: [
             accounting_period_service_1.AccountingPeriodService,
@@ -67,10 +76,12 @@ exports.FinanceModule = FinanceModule = __decorate([
             tax_resolver_service_1.TaxResolver,
             chart_of_account_service_1.ChartOfAccountService,
             invoice_service_1.InvoiceService,
+            payment_service_1.PaymentService,
             tax_rate_repository_1.TaxRateRepository,
             journal_repository_1.JournalRepository,
             chart_of_account_repository_1.ChartOfAccountRepository,
             invoice_repository_1.InvoiceRepository,
+            payment_repository_1.PaymentRepository,
         ],
     })
 ], FinanceModule);
