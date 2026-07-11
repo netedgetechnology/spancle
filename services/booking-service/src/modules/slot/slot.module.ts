@@ -37,6 +37,7 @@ import { VenueSlotController }    from './controllers/venue-slot.controller';
 
 // Cross-module dependencies
 import { CourtModule } from '../court/court.module';
+import { VenueModule } from '../venue/venue.module';
 
 /**
  * SlotModule — the complete slot engine.
@@ -63,6 +64,7 @@ import { CourtModule } from '../court/court.module';
       HolidayEntity,
     ]),
     CourtModule,
+    VenueModule,
   ],
   controllers: [
     RateCardController,
@@ -95,6 +97,8 @@ import { CourtModule } from '../court/court.module';
     SlotService,
     AvailabilityService,
     PricingService,
+    PricingRuleRepository,
+    SlotRepository,
   ],
 })
 export class SlotModule {}

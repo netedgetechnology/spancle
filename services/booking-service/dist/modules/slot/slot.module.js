@@ -36,6 +36,7 @@ const blackout_controller_1 = require("./controllers/blackout.controller");
 const holiday_controller_1 = require("./controllers/holiday.controller");
 const venue_slot_controller_1 = require("./controllers/venue-slot.controller");
 const court_module_1 = require("../court/court.module");
+const venue_module_1 = require("../venue/venue.module");
 let SlotModule = class SlotModule {
 };
 exports.SlotModule = SlotModule;
@@ -51,6 +52,7 @@ exports.SlotModule = SlotModule = __decorate([
                 holiday_entity_1.HolidayEntity,
             ]),
             court_module_1.CourtModule,
+            venue_module_1.VenueModule,
         ],
         controllers: [
             rate_card_controller_1.RateCardController,
@@ -81,6 +83,8 @@ exports.SlotModule = SlotModule = __decorate([
             slot_service_1.SlotService,
             availability_service_1.AvailabilityService,
             pricing_service_1.PricingService,
+            pricing_rule_repository_1.PricingRuleRepository,
+            slot_repository_1.SlotRepository,
         ],
     })
 ], SlotModule);

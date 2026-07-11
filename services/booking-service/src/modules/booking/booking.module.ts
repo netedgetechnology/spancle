@@ -44,6 +44,6 @@ import { PricingModule }            from '../pricing/pricing.module';
     BookingService,
     BookingSchedulerService,
   ],
-  exports: [BookingService, BookingValidationService],
+  exports: [BookingService, BookingValidationService, BookingRepository, BookingLogRepository],
 })
 export class BookingModule {}

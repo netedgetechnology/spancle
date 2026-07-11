@@ -14,6 +14,6 @@ import { VenueModule }          from '../venue/venue.module';
   ],
   controllers: [CourtController, VenueCourtController],
   providers:   [CourtRepository, CourtService],
-  exports:     [CourtService],
+  exports:     [CourtService, CourtRepository],
 })
 export class CourtModule {}

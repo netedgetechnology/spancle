@@ -48,7 +48,7 @@ exports.BookingModule = BookingModule = __decorate([
             booking_service_1.BookingService,
             booking_scheduler_service_1.BookingSchedulerService,
         ],
-        exports: [booking_service_1.BookingService, booking_validation_service_1.BookingValidationService],
+        exports: [booking_service_1.BookingService, booking_validation_service_1.BookingValidationService, booking_repository_1.BookingRepository, booking_support_repository_1.BookingLogRepository],
     })
 ], BookingModule);
 //# sourceMappingURL=booking.module.js.map

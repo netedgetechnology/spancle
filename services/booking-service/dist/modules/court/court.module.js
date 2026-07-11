@@ -25,7 +25,7 @@ exports.CourtModule = CourtModule = __decorate([
         ],
         controllers: [court_controller_1.CourtController, court_controller_1.VenueCourtController],
         providers: [court_repository_1.CourtRepository, court_service_1.CourtService],
-        exports: [court_service_1.CourtService],
+        exports: [court_service_1.CourtService, court_repository_1.CourtRepository],
     })
 ], CourtModule);
 //# sourceMappingURL=court.module.js.map
