@@ -5,8 +5,11 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { EventEmitter2 }         from '@nestjs/event-emitter';
+import { InjectDataSource }      from '@nestjs/typeorm';
+import { DataSource }            from 'typeorm';
 import { PaymentRepository }     from '../repositories/payment.repository';
 import { InvoiceRepository }     from '../repositories/invoice.repository';
+import { JournalRepository }     from '../repositories/journal.repository';
 import { DoubleEntryService }    from './double-entry.service';
 import { AccountingPeriodService } from './accounting-period.service';
 import {
@@ -17,25 +20,28 @@ import {
 } from '../events/payment.events';
 import {
   PaymentGatewayAdapter,
+  StripeAdapter,
+  RazorpayAdapter,
 } from '../gateway/payment-gateway.adapter';
-import { StripeAdapter }         from '../gateway/payment-gateway.adapter';
-import { RazorpayAdapter }       from '../gateway/payment-gateway.adapter';
 import type { PaymentEntity, PaymentStatus } from '../entities/payment.entity';
+import { PaymentEntity as PaymentEntityClass } from '../entities/payment.entity';
+import { PaymentAllocationEntity }             from '../entities/payment.entity';
 import type {
   InitiatePaymentDto,
   CapturePaymentDto,
   AllocatePaymentDto,
   FailPaymentDto,
 } from '../dto/payment.dto';
+import type { JournalEntryInput } from '../repositories/journal.repository';
 
 // ── GL accounts ───────────────────────────────────────────────────────────────
 // Must match ChartOfAccountService seeder (Batch 7.1A).
 
 const GL = {
-  ACCOUNTS_RECEIVABLE:  '1150',
-  BANK:                 '1120',
-  CLEARING:             '1130',  // in-transit gateway funds
-  CASH:                 '1110',
+  ACCOUNTS_RECEIVABLE: '1150',
+  BANK:                '1120',
+  CLEARING:            '1130',   // in-transit gateway funds
+  CASH:                '1110',
 } as const;
 
 /** Resolve the debit-side GL account from the payment method. */
@@ -53,12 +59,12 @@ function receiptAccount(method: string): string {
 // ── Status state machine ──────────────────────────────────────────────────────
 
 const ALLOWED_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
-  initiated:    ['authorized', 'captured', 'failed', 'cancelled'],
-  authorized:   ['captured', 'failed', 'cancelled'],
-  captured:     ['chargedback'],
-  failed:       [],
-  cancelled:    [],
-  chargedback:  [],
+  initiated:   ['authorized', 'captured', 'failed', 'cancelled'],
+  authorized:  ['captured', 'failed', 'cancelled'],
+  captured:    ['chargedback'],
+  failed:      [],
+  cancelled:   [],
+  chargedback: [],
 };
 
 function assertTransitionAllowed(from: PaymentStatus, to: PaymentStatus): void {
@@ -76,21 +82,20 @@ function assertTransitionAllowed(from: PaymentStatus, to: PaymentStatus): void {
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
 
-  /** Gateway adapter registry — keyed by gateway name string. */
   private readonly adapters: Map<string, PaymentGatewayAdapter>;
 
   constructor(
-    private readonly paymentRepository: PaymentRepository,
-    private readonly invoiceRepository: InvoiceRepository,
+    private readonly paymentRepository:  PaymentRepository,
+    private readonly invoiceRepository:  InvoiceRepository,
+    private readonly journalRepository:  JournalRepository,
     private readonly doubleEntryService: DoubleEntryService,
     private readonly periodService:      AccountingPeriodService,
     private readonly eventEmitter:       EventEmitter2,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {
-    // Register adapters. New gateways: add to this map — no other changes needed.
     this.adapters = new Map<string, PaymentGatewayAdapter>([
       ['stripe',   new StripeAdapter()],
       ['razorpay', new RazorpayAdapter()],
-      // 'cash' and 'manual' have no external gateway — they skip adapter calls.
     ]);
   }
 
@@ -100,30 +105,21 @@ export class PaymentService {
 
   private buildEventBase(p: PaymentEntity, timestamp: string) {
     return {
-      tenantId:   p.tenantId,
-      paymentId:  p.id,
-      reference:  p.reference,
+      tenantId:    p.tenantId,
+      paymentId:   p.id,
+      reference:   p.reference,
       amountMinor: p.amountMinor,
-      currency:   p.currency,
-      method:     p.method,
-      gateway:    p.gateway,
-      status:     p.status,
-      customerId: p.customerId ?? null,
+      currency:    p.currency,
+      method:      p.method,
+      gateway:     p.gateway,
+      status:      p.status,
+      customerId:  p.customerId ?? null,
       timestamp,
     };
   }
 
-  // ── initiate() ────────────────────────────────────────────────────────────
+  // ── initiate() ───────────────────────────────────────────────────────────
 
-  /**
-   * Creates a payment record and calls the gateway to initialise the transaction.
-   *
-   * Idempotency (M7): if idempotencyKey matches an existing payment for this
-   * tenant, the existing payment is returned without creating a duplicate.
-   *
-   * For cash / manual gateways, no adapter call is made. The payment moves
-   * directly to 'authorized' pending physical cash receipt confirmation.
-   */
   async initiate(
     dto:      InitiatePaymentDto,
     tenantId: string,
@@ -145,18 +141,17 @@ export class PaymentService {
     const payment = await this.paymentRepository.create({
       tenantId,
       reference,
-      method:       dto.method,
-      gateway:      dto.gateway,
-      amountMinor:  dto.amountMinor,
-      currency:     dto.currency,
-      customerId:   dto.customerId,
+      method:         dto.method,
+      gateway:        dto.gateway,
+      amountMinor:    dto.amountMinor,
+      currency:       dto.currency,
+      customerId:     dto.customerId,
       idempotencyKey: dto.idempotencyKey,
-      ipAddress:    dto.ipAddress,
-      deviceId:     dto.deviceId,
-      createdById:  actorId,
+      ipAddress:      dto.ipAddress,
+      deviceId:       dto.deviceId,
+      createdById:    actorId,
     });
 
-    // Call gateway adapter when not cash/manual
     const adapter = this.adapter(dto.gateway);
     if (adapter) {
       try {
@@ -192,17 +187,13 @@ export class PaymentService {
     return this.paymentRepository.findByIdOrFail(payment.id, tenantId);
   }
 
-  // ── authorize() ───────────────────────────────────────────────────────────
+  // ── authorize() ──────────────────────────────────────────────────────────
 
-  /**
-   * Records gateway authorisation (e.g. 3DS completes, card authorised).
-   * Typically triggered by a webhook in production.
-   */
   async authorize(
-    id:              string,
+    id:               string,
     gatewayPaymentId: string,
-    tenantId:        string,
-    actorId:         string,
+    tenantId:         string,
+    actorId:          string,
   ): Promise<PaymentEntity> {
     const payment = await this.paymentRepository.findByIdOrFail(id, tenantId);
     assertTransitionAllowed(payment.status, 'authorized');
@@ -222,18 +213,22 @@ export class PaymentService {
     return this.paymentRepository.findByIdOrFail(id, tenantId);
   }
 
-  // ── capture() ─────────────────────────────────────────────────────────────
+  // ── capture() ────────────────────────────────────────────────────────────
+  //
+  // Accounting treatment:
+  //   DR 1110/1120/1130  Cash / Bank / Clearing   capturedMinor
+  //   CR 1150            Accounts Receivable       capturedMinor
+  //
+  // This correctly records the receipt of funds. AR is reduced by the captured
+  // amount regardless of which invoice the payment is allocated to — the
+  // invoice receivable was already recognised at InvoiceService.finalise().
+  //
+  // FIX A: Duplicate-capture guard — checks journalEntryId before posting.
+  // FIX A: Atomic DB write — journal post and payment status update inside
+  //         one DataSource.transaction(), using journalRepository.insertEntry()
+  //         directly rather than doubleEntryService.post() (which opens its own
+  //         transaction). The period and balance checks still run before the tx.
 
-  /**
-   * Captures the payment and posts the double-entry journal entry.
-   *
-   * Journal entry posted:
-   *   DR  1110/1120/1130  Cash / Bank / Clearing    capturedMinor
-   *   CR  1150            Accounts Receivable        capturedMinor
-   *
-   * This records the cash receipt. The deferred → earned revenue recognition
-   * happens separately when the booking is completed (Batch 7.4).
-   */
   async capture(
     id:       string,
     dto:      CapturePaymentDto,
@@ -243,16 +238,28 @@ export class PaymentService {
     const payment = await this.paymentRepository.findByIdOrFail(id, tenantId);
     assertTransitionAllowed(payment.status, 'captured');
 
-    const captureMinor = dto.amountMinor ?? payment.amountMinor;
+    // FIX A — duplicate journal guard: if journalEntryId already set, a previous
+    // capture() succeeded partially. Return without re-posting.
+    if (payment.journalEntryId) {
+      this.logger.warn(
+        `capture: payment ${payment.id} already has journalEntryId ${payment.journalEntryId} ` +
+        `— returning without re-posting`,
+      );
+      return this.paymentRepository.findByIdOrFail(id, tenantId);
+    }
 
+    const captureMinor = dto.amountMinor ?? payment.amountMinor;
     if (!Number.isInteger(captureMinor) || captureMinor <= 0) {
       throw new BadRequestException('Capture amount must be a positive integer (minor units)');
     }
 
     const now = new Date();
-    await this.periodService.assertOpen(tenantId, now);
 
-    // Call gateway adapter for online payments
+    // assertOpen runs before the transaction — it is read-only
+    const period = await this.periodService.assertOpen(tenantId, now);
+    const periodStr = period.period;
+
+    // Call gateway adapter (non-transactional — must be outside DB tx)
     const adapter = this.adapter(payment.gateway);
     let gatewayStatus = 'captured';
     let gatewayMeta: Record<string, unknown> = {};
@@ -268,43 +275,56 @@ export class PaymentService {
       gatewayMeta   = result.rawResponse;
     }
 
-    // Post double-entry: DR Cash/Clearing / CR Accounts Receivable
-    const periodStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const journalEntry = await this.doubleEntryService.post({
-      tenantId,
-      entryType:   'payment',
-      sourceType:  'payment',
-      sourceId:    payment.id,
-      description: `Payment received — ${payment.reference ?? payment.id}`,
-      postedAt:    now,
-      currency:    payment.currency,
-      lines: [
-        {
-          accountCode: receiptAccount(payment.method),
-          debitMinor:  captureMinor,
-          creditMinor: 0,
-          currency:    payment.currency,
-          description: `${payment.method} receipt — ${payment.reference}`,
-        },
-        {
-          accountCode: GL.ACCOUNTS_RECEIVABLE,
-          debitMinor:  0,
-          creditMinor: captureMinor,
-          currency:    payment.currency,
-          description: `AR cleared — ${payment.reference}`,
-        },
-      ],
-    });
+    // Validate journal lines balance (done outside tx — pure arithmetic)
+    const journalLines = [
+      {
+        accountCode: receiptAccount(payment.method),
+        debitMinor:  captureMinor,
+        creditMinor: 0,
+        currency:    payment.currency,
+        description: `${payment.method} receipt — ${payment.reference}`,
+      },
+      {
+        accountCode: GL.ACCOUNTS_RECEIVABLE,
+        debitMinor:  0,
+        creditMinor: captureMinor,
+        currency:    payment.currency,
+        description: `AR cleared — ${payment.reference}`,
+      },
+    ];
+    this.doubleEntryService.assertBalanced(journalLines);
 
-    await this.paymentRepository.update(id, tenantId, {
-      status:              'captured',
-      capturedAmountMinor: captureMinor,
-      unallocatedMinor:    captureMinor,
-      gatewayStatus,
-      gatewayMetadata:     gatewayMeta as any,
-      capturedAt:          now,
-      journalEntryId:      journalEntry.id,
-      updatedById:         actorId,
+    // FIX A — atomic: journal insert + payment status update in one transaction
+    const journalEntryId = await this.dataSource.transaction(async (manager) => {
+      const reference = await this.journalRepository.nextReference(periodStr, tenantId);
+
+      const entryInput: JournalEntryInput = {
+        tenantId,
+        reference,
+        entryType:        'payment',
+        sourceType:       'payment',
+        sourceId:         payment.id,
+        description:      `Payment received — ${payment.reference ?? payment.id}`,
+        postedAt:         now,
+        accountingPeriod: periodStr,
+        lines:            journalLines,
+      };
+
+      const entry = await this.journalRepository.insertEntry(entryInput, manager);
+
+      // Update payment inside same transaction
+      await manager.update(PaymentEntityClass, { id, tenantId }, {
+        status:              'captured',
+        capturedAmountMinor: captureMinor,
+        unallocatedMinor:    captureMinor,
+        gatewayStatus,
+        gatewayMetadata:     gatewayMeta as any,
+        capturedAt:          now,
+        journalEntryId:      entry.id,
+        updatedById:         actorId,
+      });
+
+      return entry.id;
     });
 
     const updated = await this.paymentRepository.findByIdOrFail(id, tenantId);
@@ -313,18 +333,18 @@ export class PaymentService {
       ...this.buildEventBase(updated, now.toISOString()),
       capturedAmountMinor: captureMinor,
       gatewayPaymentId:    payment.gatewayPaymentId,
-      journalEntryId:      journalEntry.id,
+      journalEntryId,
     } as PaymentCapturedPayload);
 
     this.logger.log(
       `capture: payment ${payment.reference} captured (${captureMinor} ${payment.currency}) ` +
-      `— journal ${journalEntry.id} — tenant ${tenantId}`,
+      `— journal ${journalEntryId} — tenant ${tenantId}`,
     );
 
     return updated;
   }
 
-  // ── fail() ────────────────────────────────────────────────────────────────
+  // ── fail() ───────────────────────────────────────────────────────────────
 
   async fail(
     id:       string,
@@ -354,19 +374,20 @@ export class PaymentService {
     return updated;
   }
 
-  // ── allocate() ────────────────────────────────────────────────────────────
+  // ── allocate() ───────────────────────────────────────────────────────────
+  //
+  // No journal entry is posted here — the capture() journal already debited
+  // Cash/Clearing and credited AR for the full captured amount. Allocation is
+  // an administrative linkage that attributes the receipt to a specific invoice.
+  //
+  // FIX B: Invoice over-allocation guard — allocatedMinor may not exceed
+  //         invoice.outstandingMinor (in addition to the existing payment
+  //         unallocated guard).
+  //
+  // FIX C: Three DB writes wrapped in a single DataSource.transaction() to
+  //         prevent partial application (allocation row inserted but invoice
+  //         or payment totals not updated).
 
-  /**
-   * Allocates captured payment funds to an invoice.
-   *
-   * Rules:
-   *   - Payment must be in 'captured' status.
-   *   - allocatedMinor must not exceed unallocatedMinor.
-   *   - Invoice status progresses: issued → partially_paid → paid.
-   *   - PaymentService is the SOLE updater of invoice payment status.
-   *   - No journal entry: the capture journal already moved money from
-   *     Clearing to AR. Allocation is an administrative linkage.
-   */
   async allocate(
     paymentId: string,
     dto:       AllocatePaymentDto,
@@ -385,7 +406,7 @@ export class PaymentService {
     }
     if (dto.allocatedMinor > payment.unallocatedMinor) {
       throw new BadRequestException(
-        `Cannot allocate ${dto.allocatedMinor}: only ${payment.unallocatedMinor} unallocated`,
+        `Cannot allocate ${dto.allocatedMinor}: only ${payment.unallocatedMinor} unallocated on payment`,
       );
     }
 
@@ -397,53 +418,77 @@ export class PaymentService {
       );
     }
 
-    // Compute new invoice payment state
-    const totalAllocated = await this.paymentRepository
-      .findAllocationsByInvoice(dto.invoiceId, tenantId)
-      .then((rows) => rows.reduce((s, r) => s + r.allocatedMinor, 0));
+    // FIX B — invoice over-allocation guard
+    if (dto.allocatedMinor > invoice.outstandingMinor) {
+      throw new BadRequestException(
+        `Cannot allocate ${dto.allocatedMinor} to invoice ${invoice.invoiceNumber ?? dto.invoiceId}: ` +
+        `only ${invoice.outstandingMinor} outstanding`,
+      );
+    }
 
-    const newAmountPaid   = totalAllocated + dto.allocatedMinor;
-    const newOutstanding  = Math.max(0, invoice.totalMinor - newAmountPaid);
-    const newInvoiceStatus = newOutstanding === 0 ? 'paid' : 'partially_paid';
+    // FIX C — wrap all three DB writes in a single transaction
+    const { newAmountPaid, newOutstanding, newInvoiceStatus } =
+      await this.dataSource.transaction(async (manager) => {
 
-    // Write allocation row
-    await this.paymentRepository.createAllocation({
+        // Re-read totals inside transaction for race-condition safety
+        const currentTotal = await manager
+          .createQueryBuilder(PaymentAllocationEntity, 'a')
+          .select('COALESCE(SUM(a.allocatedMinor), 0)', 'total')
+          .where('a.invoiceId = :invoiceId', { invoiceId: dto.invoiceId })
+          .andWhere('a.tenantId = :tenantId', { tenantId })
+          .getRawOne<{ total: string }>();
+
+        const totalAllocated  = parseInt(currentTotal?.total ?? '0', 10);
+        const newAmountPaid   = totalAllocated + dto.allocatedMinor;
+        const newOutstanding  = Math.max(0, invoice.totalMinor - newAmountPaid);
+        const newInvoiceStatus = newOutstanding === 0 ? 'paid' : 'partially_paid';
+
+        // Insert allocation row
+        await manager.save(
+          manager.create(PaymentAllocationEntity, {
+            tenantId,
+            paymentId,
+            invoiceId:      dto.invoiceId,
+            allocatedMinor: dto.allocatedMinor,
+            currency:       payment.currency,
+          }),
+        );
+
+        // Update invoice payment state
+        await manager.update(
+          (await import('../entities/invoice.entity')).InvoiceEntity,
+          { id: dto.invoiceId, tenantId },
+          {
+            amountPaidMinor:  newAmountPaid,
+            outstandingMinor: newOutstanding,
+            status:           newInvoiceStatus,
+            paidAt:           newInvoiceStatus === 'paid' ? new Date() : null,
+            updatedById:      actorId,
+          },
+        );
+
+        // Update payment running totals
+        const newAllocated   = payment.allocatedMinor + dto.allocatedMinor;
+        const newUnallocated = payment.capturedAmountMinor - newAllocated;
+        await manager.update(PaymentEntityClass, { id: paymentId, tenantId }, {
+          allocatedMinor:   newAllocated,
+          unallocatedMinor: newUnallocated,
+          updatedById:      actorId,
+        });
+
+        return { newAmountPaid, newOutstanding, newInvoiceStatus };
+      });
+
+    const updated = await this.paymentRepository.findByIdOrFail(paymentId, tenantId);
+
+    await this.eventEmitter.emitAsync(PaymentEvents.ALLOCATED, {
       tenantId,
       paymentId,
       invoiceId:      dto.invoiceId,
       allocatedMinor: dto.allocatedMinor,
       currency:       payment.currency,
-    });
-
-    // Update invoice — PaymentService is the SOLE writer of these fields
-    await this.invoiceRepository.update(dto.invoiceId, tenantId, {
-      amountPaidMinor:  newAmountPaid,
-      outstandingMinor: newOutstanding,
-      status:           newInvoiceStatus as any,
-      paidAt:           newInvoiceStatus === 'paid' ? new Date() : undefined,
-      updatedById:      actorId,
-    });
-
-    // Update payment running totals
-    const newAllocated    = payment.allocatedMinor + dto.allocatedMinor;
-    const newUnallocated  = payment.capturedAmountMinor - newAllocated;
-    await this.paymentRepository.update(paymentId, tenantId, {
-      allocatedMinor:   newAllocated,
-      unallocatedMinor: newUnallocated,
-      updatedById:      actorId,
-    });
-
-    const updated = await this.paymentRepository.findByIdOrFail(paymentId, tenantId);
-    const now     = new Date().toISOString();
-
-    await this.eventEmitter.emitAsync(PaymentEvents.ALLOCATED, {
-      tenantId,
-      paymentId,
-      invoiceId:     dto.invoiceId,
-      allocatedMinor: dto.allocatedMinor,
-      currency:      payment.currency,
-      invoiceStatus: newInvoiceStatus,
-      timestamp:     now,
+      invoiceStatus:  newInvoiceStatus,
+      timestamp:      new Date().toISOString(),
     } as PaymentAllocatedPayload);
 
     this.logger.log(
@@ -454,17 +499,13 @@ export class PaymentService {
     return updated;
   }
 
-  // ── reconcile() ───────────────────────────────────────────────────────────
+  // ── reconcile() ──────────────────────────────────────────────────────────
+  //
+  // Calls the gateway adapter to re-query payment status.
+  // Only drives capture() when status is still 'authorized' — prevents
+  // double-capture on a payment already in 'captured' state.
+  // The journalEntryId guard inside capture() provides a second line of defence.
 
-  /**
-   * Re-queries the gateway for the current status of a payment.
-   * Used by the reconciliation scheduler (Batch 7.4) to detect stale
-   * 'authorized' or 'initiated' payments.
-   *
-   * If the gateway reports 'succeeded/captured' but the local status is still
-   * 'authorized', capture() is called to bring the state in sync.
-   * If the gateway reports failure, fail() is called.
-   */
   async reconcile(
     id:       string,
     tenantId: string,
@@ -495,7 +536,6 @@ export class PaymentService {
       updatedById:   actorId,
     });
 
-    // Drive local state based on gateway response
     const gatewaySucceeded = ['succeeded', 'captured', 'paid'].includes(
       result.gatewayStatus.toLowerCase(),
     );
@@ -506,6 +546,8 @@ export class PaymentService {
     let updated: PaymentEntity;
 
     if (gatewaySucceeded && payment.status === 'authorized') {
+      // Only drive capture when local status is 'authorized'.
+      // capture() also has its own journalEntryId guard as a second layer.
       updated = await this.capture(id, {}, tenantId, actorId);
     } else if (gatewayFailed && !['failed', 'cancelled', 'captured'].includes(payment.status)) {
       updated = await this.fail(id, { reason: `Reconciled: ${result.gatewayStatus}` }, tenantId, actorId);
