@@ -1,43 +1,10 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -53,18 +20,19 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const payment_repository_1 = require("../repositories/payment.repository");
 const invoice_repository_1 = require("../repositories/invoice.repository");
-const journal_repository_1 = require("../repositories/journal.repository");
 const double_entry_service_1 = require("./double-entry.service");
 const accounting_period_service_1 = require("./accounting-period.service");
 const payment_events_1 = require("../events/payment.events");
 const payment_gateway_adapter_1 = require("../gateway/payment-gateway.adapter");
 const payment_entity_1 = require("../entities/payment.entity");
 const payment_entity_2 = require("../entities/payment.entity");
+const invoice_entity_1 = require("../entities/invoice.entity");
 const GL = {
     ACCOUNTS_RECEIVABLE: '1150',
     BANK: '1120',
     CLEARING: '1130',
     CASH: '1110',
+    UNAPPLIED_RECEIPTS: '2195',
 };
 function receiptAccount(method) {
     switch (method) {
@@ -91,10 +59,9 @@ function assertTransitionAllowed(from, to) {
     }
 }
 let PaymentService = PaymentService_1 = class PaymentService {
-    constructor(paymentRepository, invoiceRepository, journalRepository, doubleEntryService, periodService, eventEmitter, dataSource) {
+    constructor(paymentRepository, invoiceRepository, doubleEntryService, periodService, eventEmitter, dataSource) {
         this.paymentRepository = paymentRepository;
         this.invoiceRepository = invoiceRepository;
-        this.journalRepository = journalRepository;
         this.doubleEntryService = doubleEntryService;
         this.periodService = periodService;
         this.eventEmitter = eventEmitter;
@@ -189,64 +156,67 @@ let PaymentService = PaymentService_1 = class PaymentService {
         return this.paymentRepository.findByIdOrFail(id, tenantId);
     }
     async capture(id, dto, tenantId, actorId) {
-        const payment = await this.paymentRepository.findByIdOrFail(id, tenantId);
-        assertTransitionAllowed(payment.status, 'captured');
-        if (payment.journalEntryId) {
-            this.logger.warn(`capture: payment ${payment.id} already has journalEntryId ${payment.journalEntryId} ` +
-                `— returning without re-posting`);
-            return this.paymentRepository.findByIdOrFail(id, tenantId);
-        }
-        const captureMinor = dto.amountMinor ?? payment.amountMinor;
+        const preCheck = await this.paymentRepository.findByIdOrFail(id, tenantId);
+        assertTransitionAllowed(preCheck.status, 'captured');
+        const captureMinor = dto.amountMinor ?? preCheck.amountMinor;
         if (!Number.isInteger(captureMinor) || captureMinor <= 0) {
             throw new common_1.BadRequestException('Capture amount must be a positive integer (minor units)');
         }
         const now = new Date();
-        const period = await this.periodService.assertOpen(tenantId, now);
-        const periodStr = period.period;
-        const adapter = this.adapter(payment.gateway);
+        await this.periodService.assertOpen(tenantId, now);
+        const adapter = this.adapter(preCheck.gateway);
         let gatewayStatus = 'captured';
         let gatewayMeta = {};
         if (adapter) {
             const result = await adapter.capture({
-                gatewayPaymentId: payment.gatewayPaymentId ?? '',
+                gatewayPaymentId: preCheck.gatewayPaymentId ?? '',
                 amountMinor: captureMinor,
-                currency: payment.currency,
-                idempotencyKey: `cap_${payment.idempotencyKey ?? payment.id}`,
+                currency: preCheck.currency,
+                idempotencyKey: `cap_${preCheck.idempotencyKey ?? preCheck.id}`,
             });
             gatewayStatus = result.gatewayStatus;
             gatewayMeta = result.rawResponse;
         }
-        const journalLines = [
-            {
-                accountCode: receiptAccount(payment.method),
-                debitMinor: captureMinor,
-                creditMinor: 0,
-                currency: payment.currency,
-                description: `${payment.method} receipt — ${payment.reference}`,
-            },
-            {
-                accountCode: GL.ACCOUNTS_RECEIVABLE,
-                debitMinor: 0,
-                creditMinor: captureMinor,
-                currency: payment.currency,
-                description: `AR cleared — ${payment.reference}`,
-            },
-        ];
-        this.doubleEntryService.assertBalanced(journalLines);
         const journalEntryId = await this.dataSource.transaction(async (manager) => {
-            const reference = await this.journalRepository.nextReference(periodStr, tenantId);
-            const entryInput = {
+            const locked = await manager
+                .createQueryBuilder(payment_entity_1.PaymentEntity, 'p')
+                .setLock('pessimistic_write')
+                .where('p.id = :id', { id })
+                .andWhere('p.tenantId = :tenantId', { tenantId })
+                .getOne();
+            if (!locked)
+                throw new common_1.BadRequestException(`Payment ${id} not found`);
+            if (locked.journalEntryId) {
+                this.logger.warn(`capture: payment ${id} already captured (journalEntryId=${locked.journalEntryId}) ` +
+                    `— concurrent request resolved via lock`);
+                return locked.journalEntryId;
+            }
+            assertTransitionAllowed(locked.status, 'captured');
+            const entry = await this.doubleEntryService.postWithManager({
                 tenantId,
-                reference,
                 entryType: 'payment',
                 sourceType: 'payment',
-                sourceId: payment.id,
-                description: `Payment received — ${payment.reference ?? payment.id}`,
+                sourceId: locked.id,
+                description: `Payment received — ${locked.reference ?? locked.id}`,
                 postedAt: now,
-                accountingPeriod: periodStr,
-                lines: journalLines,
-            };
-            const entry = await this.journalRepository.insertEntry(entryInput, manager);
+                currency: locked.currency,
+                lines: [
+                    {
+                        accountCode: receiptAccount(locked.method),
+                        debitMinor: captureMinor,
+                        creditMinor: 0,
+                        currency: locked.currency,
+                        description: `${locked.method} receipt — ${locked.reference}`,
+                    },
+                    {
+                        accountCode: GL.UNAPPLIED_RECEIPTS,
+                        debitMinor: 0,
+                        creditMinor: captureMinor,
+                        currency: locked.currency,
+                        description: `Unapplied receipt — ${locked.reference}`,
+                    },
+                ],
+            }, manager);
             await manager.update(payment_entity_1.PaymentEntity, { id, tenantId }, {
                 status: 'captured',
                 capturedAmountMinor: captureMinor,
@@ -263,10 +233,10 @@ let PaymentService = PaymentService_1 = class PaymentService {
         await this.eventEmitter.emitAsync(payment_events_1.PaymentEvents.CAPTURED, {
             ...this.buildEventBase(updated, now.toISOString()),
             capturedAmountMinor: captureMinor,
-            gatewayPaymentId: payment.gatewayPaymentId,
+            gatewayPaymentId: preCheck.gatewayPaymentId,
             journalEntryId,
         });
-        this.logger.log(`capture: payment ${payment.reference} captured (${captureMinor} ${payment.currency}) ` +
+        this.logger.log(`capture: payment ${preCheck.reference} captured (${captureMinor} ${preCheck.currency}) ` +
             `— journal ${journalEntryId} — tenant ${tenantId}`);
         return updated;
     }
@@ -289,35 +259,40 @@ let PaymentService = PaymentService_1 = class PaymentService {
         return updated;
     }
     async allocate(paymentId, dto, tenantId, actorId) {
-        const payment = await this.paymentRepository.findByIdOrFail(paymentId, tenantId);
-        if (payment.status !== 'captured') {
-            throw new common_1.BadRequestException(`Can only allocate captured payments. Payment status is "${payment.status}"`);
-        }
         if (!Number.isInteger(dto.allocatedMinor) || dto.allocatedMinor <= 0) {
             throw new common_1.BadRequestException('allocatedMinor must be a positive integer');
         }
-        if (dto.allocatedMinor > payment.unallocatedMinor) {
-            throw new common_1.BadRequestException(`Cannot allocate ${dto.allocatedMinor}: only ${payment.unallocatedMinor} unallocated on payment`);
-        }
-        const invoice = await this.invoiceRepository.findByIdOrFail(dto.invoiceId, tenantId);
-        if (invoice.status === 'voided' || invoice.status === 'paid') {
-            throw new common_1.BadRequestException(`Cannot allocate to invoice with status "${invoice.status}"`);
-        }
-        if (dto.allocatedMinor > invoice.outstandingMinor) {
-            throw new common_1.BadRequestException(`Cannot allocate ${dto.allocatedMinor} to invoice ${invoice.invoiceNumber ?? dto.invoiceId}: ` +
-                `only ${invoice.outstandingMinor} outstanding`);
-        }
-        const { newAmountPaid, newOutstanding, newInvoiceStatus } = await this.dataSource.transaction(async (manager) => {
-            const currentTotal = await manager
-                .createQueryBuilder(payment_entity_2.PaymentAllocationEntity, 'a')
-                .select('COALESCE(SUM(a.allocatedMinor), 0)', 'total')
-                .where('a.invoiceId = :invoiceId', { invoiceId: dto.invoiceId })
-                .andWhere('a.tenantId = :tenantId', { tenantId })
-                .getRawOne();
-            const totalAllocated = parseInt(currentTotal?.total ?? '0', 10);
-            const newAmountPaid = totalAllocated + dto.allocatedMinor;
-            const newOutstanding = Math.max(0, invoice.totalMinor - newAmountPaid);
-            const newInvoiceStatus = newOutstanding === 0 ? 'paid' : 'partially_paid';
+        const now = new Date();
+        await this.periodService.assertOpen(tenantId, now);
+        const { newInvoiceStatus } = await this.dataSource.transaction(async (manager) => {
+            const payment = await manager
+                .createQueryBuilder(payment_entity_1.PaymentEntity, 'p')
+                .setLock('pessimistic_write')
+                .where('p.id = :id', { id: paymentId })
+                .andWhere('p.tenantId = :tenantId', { tenantId })
+                .getOne();
+            if (!payment)
+                throw new common_1.BadRequestException(`Payment ${paymentId} not found`);
+            if (payment.status !== 'captured') {
+                throw new common_1.BadRequestException(`Can only allocate captured payments. Payment status is "${payment.status}"`);
+            }
+            if (dto.allocatedMinor > payment.unallocatedMinor) {
+                throw new common_1.BadRequestException(`Cannot allocate ${dto.allocatedMinor}: only ${payment.unallocatedMinor} unallocated on payment`);
+            }
+            const invoice = await manager
+                .createQueryBuilder(invoice_entity_1.InvoiceEntity, 'inv')
+                .setLock('pessimistic_write')
+                .where('inv.id = :id', { id: dto.invoiceId })
+                .andWhere('inv.tenantId = :tenantId', { tenantId })
+                .getOne();
+            if (!invoice)
+                throw new common_1.BadRequestException(`Invoice ${dto.invoiceId} not found`);
+            if (invoice.status === 'voided' || invoice.status === 'paid') {
+                throw new common_1.BadRequestException(`Cannot allocate to invoice with status "${invoice.status}"`);
+            }
+            if (dto.allocatedMinor > invoice.outstandingMinor) {
+                throw new common_1.BadRequestException(`Cannot allocate ${dto.allocatedMinor}: only ${invoice.outstandingMinor} outstanding on invoice`);
+            }
             await manager.save(manager.create(payment_entity_2.PaymentAllocationEntity, {
                 tenantId,
                 paymentId,
@@ -325,21 +300,61 @@ let PaymentService = PaymentService_1 = class PaymentService {
                 allocatedMinor: dto.allocatedMinor,
                 currency: payment.currency,
             }));
-            await manager.update((await Promise.resolve().then(() => __importStar(require('../entities/invoice.entity')))).InvoiceEntity, { id: dto.invoiceId, tenantId }, {
+            await this.doubleEntryService.postWithManager({
+                tenantId,
+                entryType: 'payment',
+                sourceType: 'payment',
+                sourceId: paymentId,
+                description: `Payment allocated to invoice ${invoice.invoiceNumber ?? dto.invoiceId}`,
+                postedAt: now,
+                currency: payment.currency,
+                lines: [
+                    {
+                        accountCode: GL.UNAPPLIED_RECEIPTS,
+                        debitMinor: dto.allocatedMinor,
+                        creditMinor: 0,
+                        currency: payment.currency,
+                        description: `Unapplied cleared — ${payment.reference}`,
+                    },
+                    {
+                        accountCode: GL.ACCOUNTS_RECEIVABLE,
+                        debitMinor: 0,
+                        creditMinor: dto.allocatedMinor,
+                        currency: payment.currency,
+                        description: `AR settled — ${invoice.invoiceNumber ?? dto.invoiceId}`,
+                    },
+                ],
+            }, manager);
+            const newAmountPaid = invoice.amountPaidMinor + dto.allocatedMinor;
+            const newOutstanding = invoice.totalMinor - newAmountPaid;
+            const newInvoiceStatus = newOutstanding === 0 ? 'paid' : 'partially_paid';
+            await manager.update(invoice_entity_1.InvoiceEntity, { id: dto.invoiceId, tenantId }, {
                 amountPaidMinor: newAmountPaid,
                 outstandingMinor: newOutstanding,
                 status: newInvoiceStatus,
-                paidAt: newInvoiceStatus === 'paid' ? new Date() : null,
+                paidAt: newInvoiceStatus === 'paid' ? now : undefined,
                 updatedById: actorId,
             });
             const newAllocated = payment.allocatedMinor + dto.allocatedMinor;
-            const newUnallocated = payment.capturedAmountMinor - newAllocated;
+            const newUnallocated = payment.unallocatedMinor - dto.allocatedMinor;
             await manager.update(payment_entity_1.PaymentEntity, { id: paymentId, tenantId }, {
                 allocatedMinor: newAllocated,
                 unallocatedMinor: newUnallocated,
                 updatedById: actorId,
             });
-            return { newAmountPaid, newOutstanding, newInvoiceStatus };
+            if (newAllocated + newUnallocated !== payment.capturedAmountMinor) {
+                throw new Error(`Payment invariant violated: allocatedMinor(${newAllocated}) + ` +
+                    `unallocatedMinor(${newUnallocated}) !== ` +
+                    `capturedAmountMinor(${payment.capturedAmountMinor})`);
+            }
+            if (newAmountPaid > invoice.totalMinor) {
+                throw new Error(`Invoice invariant violated: amountPaidMinor(${newAmountPaid}) > ` +
+                    `totalMinor(${invoice.totalMinor})`);
+            }
+            if (newOutstanding !== invoice.totalMinor - newAmountPaid) {
+                throw new Error(`Invoice outstanding invariant violated`);
+            }
+            return { newInvoiceStatus };
         });
         const updated = await this.paymentRepository.findByIdOrFail(paymentId, tenantId);
         await this.eventEmitter.emitAsync(payment_events_1.PaymentEvents.ALLOCATED, {
@@ -347,12 +362,12 @@ let PaymentService = PaymentService_1 = class PaymentService {
             paymentId,
             invoiceId: dto.invoiceId,
             allocatedMinor: dto.allocatedMinor,
-            currency: payment.currency,
+            currency: updated.currency,
             invoiceStatus: newInvoiceStatus,
-            timestamp: new Date().toISOString(),
+            timestamp: now.toISOString(),
         });
-        this.logger.log(`allocate: payment ${payment.reference} → invoice ${invoice.invoiceNumber ?? dto.invoiceId} ` +
-            `(${dto.allocatedMinor} ${payment.currency}) — invoice now ${newInvoiceStatus} — tenant ${tenantId}`);
+        this.logger.log(`allocate: payment ${updated.reference} → invoice ${dto.invoiceId} ` +
+            `(${dto.allocatedMinor} ${updated.currency}) — invoice now ${newInvoiceStatus} — tenant ${tenantId}`);
         return updated;
     }
     async reconcile(id, tenantId, actorId) {
@@ -365,9 +380,7 @@ let PaymentService = PaymentService_1 = class PaymentService {
             throw new common_1.BadRequestException(`No gateway adapter for "${payment.gateway}" — cannot reconcile`);
         }
         const previousStatus = payment.status;
-        const result = await adapter.reconcile({
-            gatewayPaymentId: payment.gatewayPaymentId,
-        });
+        const result = await adapter.reconcile({ gatewayPaymentId: payment.gatewayPaymentId });
         await this.paymentRepository.update(id, tenantId, {
             gatewayStatus: result.gatewayStatus,
             updatedById: actorId,
@@ -408,10 +421,9 @@ let PaymentService = PaymentService_1 = class PaymentService {
 exports.PaymentService = PaymentService;
 exports.PaymentService = PaymentService = PaymentService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(6, (0, typeorm_1.InjectDataSource)()),
+    __param(5, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [payment_repository_1.PaymentRepository,
         invoice_repository_1.InvoiceRepository,
-        journal_repository_1.JournalRepository,
         double_entry_service_1.DoubleEntryService,
         accounting_period_service_1.AccountingPeriodService,
         event_emitter_1.EventEmitter2,

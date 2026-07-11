@@ -4,13 +4,12 @@ import {
   Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { EventEmitter2 }         from '@nestjs/event-emitter';
-import { InjectDataSource }      from '@nestjs/typeorm';
-import { DataSource }            from 'typeorm';
-import { PaymentRepository }     from '../repositories/payment.repository';
-import { InvoiceRepository }     from '../repositories/invoice.repository';
-import { JournalRepository }     from '../repositories/journal.repository';
-import { DoubleEntryService }    from './double-entry.service';
+import { EventEmitter2 }          from '@nestjs/event-emitter';
+import { InjectDataSource }       from '@nestjs/typeorm';
+import { DataSource }             from 'typeorm';
+import { PaymentRepository }      from '../repositories/payment.repository';
+import { InvoiceRepository }      from '../repositories/invoice.repository';
+import { DoubleEntryService }     from './double-entry.service';
 import { AccountingPeriodService } from './accounting-period.service';
 import {
   PaymentEvents,
@@ -26,33 +25,80 @@ import {
 import type { PaymentEntity, PaymentStatus } from '../entities/payment.entity';
 import { PaymentEntity as PaymentEntityClass } from '../entities/payment.entity';
 import { PaymentAllocationEntity }             from '../entities/payment.entity';
+import { InvoiceEntity }                       from '../entities/invoice.entity';
 import type {
   InitiatePaymentDto,
   CapturePaymentDto,
   AllocatePaymentDto,
   FailPaymentDto,
 } from '../dto/payment.dto';
-import type { JournalEntryInput } from '../repositories/journal.repository';
 
-// ── GL accounts ───────────────────────────────────────────────────────────────
-// Must match ChartOfAccountService seeder (Batch 7.1A).
+// ── Accounting model ──────────────────────────────────────────────────────────
+//
+// ISSUE 1 — CORRECTED ACCOUNTING MODEL
+//
+// The previous model (DR Cash / CR AR at capture, no journal at allocation)
+// produced a permanent GL/subledger mismatch when a payment was captured but
+// not yet allocated:
+//   GL AR balance = 0   (credit posted at capture)
+//   Σ invoice.outstandingMinor = 100   (invoice not yet settled)
+//
+// CORRECT TWO-STEP MODEL:
+//
+// Step 1 — capture() posts:
+//   DR 1110/1120/1130   Cash / Clearing         capturedMinor
+//   CR 2195             Unapplied Receipts       capturedMinor
+//
+//   Cash is recognised; unallocated funds sit in the Unapplied Receipts
+//   liability until attributed to a specific invoice.
+//   GL AR is untouched — Σ invoice.outstandingMinor still equals GL AR.
+//
+// Step 2 — allocate() posts:
+//   DR 2195             Unapplied Receipts       allocatedMinor
+//   CR 1150             Accounts Receivable      allocatedMinor
+//
+//   The liability is extinguished and AR is reduced by exactly the allocated
+//   amount. After this entry: GL AR = Σ invoice.outstandingMinor. ✅
+//
+// Scenario verification:
+//
+//   Fully allocated payment (100 captured, 100 allocated to one invoice):
+//     capture:   DR Cash 100 / CR Unapplied 100
+//     allocate:  DR Unapplied 100 / CR AR 100
+//     Net: DR Cash 100 / CR AR 100  → AR down by 100, invoice paid. ✅
+//
+//   Unallocated payment (100 captured, 0 allocated):
+//     capture:   DR Cash 100 / CR Unapplied 100
+//     GL AR unchanged. invoice.outstandingMinor unchanged.
+//     GL AR = Σ invoice.outstandingMinor. ✅
+//
+//   Partial allocation (100 captured, 60 allocated, 40 remaining):
+//     capture:   DR Cash 100 / CR Unapplied 100
+//     allocate:  DR Unapplied 60 / CR AR 60
+//     Unapplied balance = 40. GL AR reduced by 60. Invoice A: 40 outstanding. ✅
+//
+//   Multiple invoice allocations (100 captured → 60 to Inv A, 40 to Inv B):
+//     capture:   DR Cash 100 / CR Unapplied 100
+//     allocate1: DR Unapplied 60 / CR AR 60  → Inv A paid
+//     allocate2: DR Unapplied 40 / CR AR 40  → Inv B paid
+//     Unapplied = 0. GL AR reduced by 100 total. Both invoices paid. ✅
 
 const GL = {
   ACCOUNTS_RECEIVABLE: '1150',
   BANK:                '1120',
-  CLEARING:            '1130',   // in-transit gateway funds
+  CLEARING:            '1130',
   CASH:                '1110',
+  UNAPPLIED_RECEIPTS:  '2195',  // Unapplied Receipts liability (cleared at allocation)
 } as const;
 
-/** Resolve the debit-side GL account from the payment method. */
 function receiptAccount(method: string): string {
   switch (method) {
-    case 'cash':         return GL.CASH;
+    case 'cash':          return GL.CASH;
     case 'online_card':
     case 'card_present':
     case 'upi':
     case 'bank_transfer': return GL.CLEARING;
-    default:             return GL.BANK;
+    default:              return GL.BANK;
   }
 }
 
@@ -87,7 +133,6 @@ export class PaymentService {
   constructor(
     private readonly paymentRepository:  PaymentRepository,
     private readonly invoiceRepository:  InvoiceRepository,
-    private readonly journalRepository:  JournalRepository,
     private readonly doubleEntryService: DoubleEntryService,
     private readonly periodService:      AccountingPeriodService,
     private readonly eventEmitter:       EventEmitter2,
@@ -215,19 +260,19 @@ export class PaymentService {
 
   // ── capture() ────────────────────────────────────────────────────────────
   //
-  // Accounting treatment:
-  //   DR 1110/1120/1130  Cash / Bank / Clearing   capturedMinor
-  //   CR 1150            Accounts Receivable       capturedMinor
+  // ISSUE 1 FIX — corrected accounting:
+  //   DR Cash/Clearing   capturedMinor
+  //   CR Unapplied Receipts (2195)  capturedMinor
   //
-  // This correctly records the receipt of funds. AR is reduced by the captured
-  // amount regardless of which invoice the payment is allocated to — the
-  // invoice receivable was already recognised at InvoiceService.finalise().
+  // ISSUE 2 FIX — accounting boundary:
+  //   Uses DoubleEntryService.postWithManager() — not JournalRepository directly.
+  //   All assertBalanced, assertOpen, and logging remain in DoubleEntryService.
   //
-  // FIX A: Duplicate-capture guard — checks journalEntryId before posting.
-  // FIX A: Atomic DB write — journal post and payment status update inside
-  //         one DataSource.transaction(), using journalRepository.insertEntry()
-  //         directly rather than doubleEntryService.post() (which opens its own
-  //         transaction). The period and balance checks still run before the tx.
+  // ISSUE 3 FIX — concurrent capture:
+  //   Pessimistic FOR UPDATE lock on the payment row inside the transaction.
+  //   After locking, re-checks journalEntryId (the row may have changed since
+  //   the pre-flight read). Prevents two concurrent captures both observing
+  //   journalEntryId = NULL before either commits.
 
   async capture(
     id:       string,
@@ -235,84 +280,91 @@ export class PaymentService {
     tenantId: string,
     actorId:  string,
   ): Promise<PaymentEntity> {
-    const payment = await this.paymentRepository.findByIdOrFail(id, tenantId);
-    assertTransitionAllowed(payment.status, 'captured');
+    // Pre-flight: basic status check before acquiring the lock
+    const preCheck = await this.paymentRepository.findByIdOrFail(id, tenantId);
+    assertTransitionAllowed(preCheck.status, 'captured');
 
-    // FIX A — duplicate journal guard: if journalEntryId already set, a previous
-    // capture() succeeded partially. Return without re-posting.
-    if (payment.journalEntryId) {
-      this.logger.warn(
-        `capture: payment ${payment.id} already has journalEntryId ${payment.journalEntryId} ` +
-        `— returning without re-posting`,
-      );
-      return this.paymentRepository.findByIdOrFail(id, tenantId);
-    }
-
-    const captureMinor = dto.amountMinor ?? payment.amountMinor;
+    const captureMinor = dto.amountMinor ?? preCheck.amountMinor;
     if (!Number.isInteger(captureMinor) || captureMinor <= 0) {
       throw new BadRequestException('Capture amount must be a positive integer (minor units)');
     }
 
     const now = new Date();
 
-    // assertOpen runs before the transaction — it is read-only
-    const period = await this.periodService.assertOpen(tenantId, now);
-    const periodStr = period.period;
+    // Period check is read-only — run before the transaction
+    await this.periodService.assertOpen(tenantId, now);
 
-    // Call gateway adapter (non-transactional — must be outside DB tx)
-    const adapter = this.adapter(payment.gateway);
+    // Call gateway adapter — non-transactional, must be outside the DB tx
+    const adapter = this.adapter(preCheck.gateway);
     let gatewayStatus = 'captured';
     let gatewayMeta: Record<string, unknown> = {};
 
     if (adapter) {
       const result = await adapter.capture({
-        gatewayPaymentId: payment.gatewayPaymentId ?? '',
+        gatewayPaymentId: preCheck.gatewayPaymentId ?? '',
         amountMinor:      captureMinor,
-        currency:         payment.currency,
-        idempotencyKey:   `cap_${payment.idempotencyKey ?? payment.id}`,
+        currency:         preCheck.currency,
+        idempotencyKey:   `cap_${preCheck.idempotencyKey ?? preCheck.id}`,
       });
       gatewayStatus = result.gatewayStatus;
       gatewayMeta   = result.rawResponse;
     }
 
-    // Validate journal lines balance (done outside tx — pure arithmetic)
-    const journalLines = [
-      {
-        accountCode: receiptAccount(payment.method),
-        debitMinor:  captureMinor,
-        creditMinor: 0,
-        currency:    payment.currency,
-        description: `${payment.method} receipt — ${payment.reference}`,
-      },
-      {
-        accountCode: GL.ACCOUNTS_RECEIVABLE,
-        debitMinor:  0,
-        creditMinor: captureMinor,
-        currency:    payment.currency,
-        description: `AR cleared — ${payment.reference}`,
-      },
-    ];
-    this.doubleEntryService.assertBalanced(journalLines);
-
-    // FIX A — atomic: journal insert + payment status update in one transaction
+    // ISSUE 3 — pessimistic lock + re-check inside the transaction
+    // ISSUE 2 — doubleEntryService.postWithManager() preserves accounting boundary
     const journalEntryId = await this.dataSource.transaction(async (manager) => {
-      const reference = await this.journalRepository.nextReference(periodStr, tenantId);
+      // Acquire FOR UPDATE lock — blocks any concurrent capture on the same row
+      const locked = await manager
+        .createQueryBuilder(PaymentEntityClass, 'p')
+        .setLock('pessimistic_write')
+        .where('p.id = :id', { id })
+        .andWhere('p.tenantId = :tenantId', { tenantId })
+        .getOne();
 
-      const entryInput: JournalEntryInput = {
-        tenantId,
-        reference,
-        entryType:        'payment',
-        sourceType:       'payment',
-        sourceId:         payment.id,
-        description:      `Payment received — ${payment.reference ?? payment.id}`,
-        postedAt:         now,
-        accountingPeriod: periodStr,
-        lines:            journalLines,
-      };
+      if (!locked) throw new BadRequestException(`Payment ${id} not found`);
 
-      const entry = await this.journalRepository.insertEntry(entryInput, manager);
+      // Re-check under lock — a concurrent capture may have already committed
+      if (locked.journalEntryId) {
+        this.logger.warn(
+          `capture: payment ${id} already captured (journalEntryId=${locked.journalEntryId}) ` +
+          `— concurrent request resolved via lock`,
+        );
+        return locked.journalEntryId;
+      }
 
-      // Update payment inside same transaction
+      // Transition guard under lock
+      assertTransitionAllowed(locked.status, 'captured');
+
+      // ISSUE 1 — corrected journal: Cash/Clearing / Unapplied Receipts
+      const entry = await this.doubleEntryService.postWithManager(
+        {
+          tenantId,
+          entryType:   'payment',
+          sourceType:  'payment',
+          sourceId:    locked.id,
+          description: `Payment received — ${locked.reference ?? locked.id}`,
+          postedAt:    now,
+          currency:    locked.currency,
+          lines: [
+            {
+              accountCode: receiptAccount(locked.method),
+              debitMinor:  captureMinor,
+              creditMinor: 0,
+              currency:    locked.currency,
+              description: `${locked.method} receipt — ${locked.reference}`,
+            },
+            {
+              accountCode: GL.UNAPPLIED_RECEIPTS,
+              debitMinor:  0,
+              creditMinor: captureMinor,
+              currency:    locked.currency,
+              description: `Unapplied receipt — ${locked.reference}`,
+            },
+          ],
+        },
+        manager,
+      );
+
       await manager.update(PaymentEntityClass, { id, tenantId }, {
         status:              'captured',
         capturedAmountMinor: captureMinor,
@@ -332,12 +384,12 @@ export class PaymentService {
     await this.eventEmitter.emitAsync(PaymentEvents.CAPTURED, {
       ...this.buildEventBase(updated, now.toISOString()),
       capturedAmountMinor: captureMinor,
-      gatewayPaymentId:    payment.gatewayPaymentId,
+      gatewayPaymentId:    preCheck.gatewayPaymentId,
       journalEntryId,
     } as PaymentCapturedPayload);
 
     this.logger.log(
-      `capture: payment ${payment.reference} captured (${captureMinor} ${payment.currency}) ` +
+      `capture: payment ${preCheck.reference} captured (${captureMinor} ${preCheck.currency}) ` +
       `— journal ${journalEntryId} — tenant ${tenantId}`,
     );
 
@@ -376,17 +428,20 @@ export class PaymentService {
 
   // ── allocate() ───────────────────────────────────────────────────────────
   //
-  // No journal entry is posted here — the capture() journal already debited
-  // Cash/Clearing and credited AR for the full captured amount. Allocation is
-  // an administrative linkage that attributes the receipt to a specific invoice.
+  // ISSUE 1 FIX — corrected journal at allocation:
+  //   DR 2195  Unapplied Receipts   allocatedMinor
+  //   CR 1150  Accounts Receivable  allocatedMinor
   //
-  // FIX B: Invoice over-allocation guard — allocatedMinor may not exceed
-  //         invoice.outstandingMinor (in addition to the existing payment
-  //         unallocated guard).
+  //   This clears the liability and reduces AR — maintaining GL AR = Σ outstanding.
   //
-  // FIX C: Three DB writes wrapped in a single DataSource.transaction() to
-  //         prevent partial application (allocation row inserted but invoice
-  //         or payment totals not updated).
+  // ISSUE 4 FIX — concurrent allocation:
+  //   Pessimistic FOR UPDATE locks on both payment and invoice rows inside
+  //   the transaction. All amount reads, validations, and writes happen under
+  //   these locks. Two concurrent allocations cannot both pass the unallocated
+  //   and outstanding guards simultaneously.
+  //
+  // ISSUE 2 FIX — accounting boundary:
+  //   doubleEntryService.postWithManager() used for the allocation journal.
 
   async allocate(
     paymentId: string,
@@ -394,90 +449,147 @@ export class PaymentService {
     tenantId:  string,
     actorId:   string,
   ): Promise<PaymentEntity> {
-    const payment = await this.paymentRepository.findByIdOrFail(paymentId, tenantId);
-
-    if (payment.status !== 'captured') {
-      throw new BadRequestException(
-        `Can only allocate captured payments. Payment status is "${payment.status}"`,
-      );
-    }
     if (!Number.isInteger(dto.allocatedMinor) || dto.allocatedMinor <= 0) {
       throw new BadRequestException('allocatedMinor must be a positive integer');
     }
-    if (dto.allocatedMinor > payment.unallocatedMinor) {
-      throw new BadRequestException(
-        `Cannot allocate ${dto.allocatedMinor}: only ${payment.unallocatedMinor} unallocated on payment`,
-      );
-    }
 
-    const invoice = await this.invoiceRepository.findByIdOrFail(dto.invoiceId, tenantId);
+    // Period check is read-only — run before the transaction
+    const now = new Date();
+    await this.periodService.assertOpen(tenantId, now);
 
-    if (invoice.status === 'voided' || invoice.status === 'paid') {
-      throw new BadRequestException(
-        `Cannot allocate to invoice with status "${invoice.status}"`,
-      );
-    }
+    const { newInvoiceStatus } = await this.dataSource.transaction(async (manager) => {
+      // ISSUE 4 — lock payment row first (consistent lock ordering prevents deadlock)
+      const payment = await manager
+        .createQueryBuilder(PaymentEntityClass, 'p')
+        .setLock('pessimistic_write')
+        .where('p.id = :id', { id: paymentId })
+        .andWhere('p.tenantId = :tenantId', { tenantId })
+        .getOne();
 
-    // FIX B — invoice over-allocation guard
-    if (dto.allocatedMinor > invoice.outstandingMinor) {
-      throw new BadRequestException(
-        `Cannot allocate ${dto.allocatedMinor} to invoice ${invoice.invoiceNumber ?? dto.invoiceId}: ` +
-        `only ${invoice.outstandingMinor} outstanding`,
-      );
-    }
+      if (!payment) throw new BadRequestException(`Payment ${paymentId} not found`);
 
-    // FIX C — wrap all three DB writes in a single transaction
-    const { newAmountPaid, newOutstanding, newInvoiceStatus } =
-      await this.dataSource.transaction(async (manager) => {
-
-        // Re-read totals inside transaction for race-condition safety
-        const currentTotal = await manager
-          .createQueryBuilder(PaymentAllocationEntity, 'a')
-          .select('COALESCE(SUM(a.allocatedMinor), 0)', 'total')
-          .where('a.invoiceId = :invoiceId', { invoiceId: dto.invoiceId })
-          .andWhere('a.tenantId = :tenantId', { tenantId })
-          .getRawOne<{ total: string }>();
-
-        const totalAllocated  = parseInt(currentTotal?.total ?? '0', 10);
-        const newAmountPaid   = totalAllocated + dto.allocatedMinor;
-        const newOutstanding  = Math.max(0, invoice.totalMinor - newAmountPaid);
-        const newInvoiceStatus = newOutstanding === 0 ? 'paid' : 'partially_paid';
-
-        // Insert allocation row
-        await manager.save(
-          manager.create(PaymentAllocationEntity, {
-            tenantId,
-            paymentId,
-            invoiceId:      dto.invoiceId,
-            allocatedMinor: dto.allocatedMinor,
-            currency:       payment.currency,
-          }),
+      if (payment.status !== 'captured') {
+        throw new BadRequestException(
+          `Can only allocate captured payments. Payment status is "${payment.status}"`,
         );
-
-        // Update invoice payment state
-        await manager.update(
-          (await import('../entities/invoice.entity')).InvoiceEntity,
-          { id: dto.invoiceId, tenantId },
-          {
-            amountPaidMinor:  newAmountPaid,
-            outstandingMinor: newOutstanding,
-            status:           newInvoiceStatus,
-            paidAt:           newInvoiceStatus === 'paid' ? new Date() : null,
-            updatedById:      actorId,
-          },
+      }
+      if (dto.allocatedMinor > payment.unallocatedMinor) {
+        throw new BadRequestException(
+          `Cannot allocate ${dto.allocatedMinor}: only ${payment.unallocatedMinor} unallocated on payment`,
         );
+      }
 
-        // Update payment running totals
-        const newAllocated   = payment.allocatedMinor + dto.allocatedMinor;
-        const newUnallocated = payment.capturedAmountMinor - newAllocated;
-        await manager.update(PaymentEntityClass, { id: paymentId, tenantId }, {
-          allocatedMinor:   newAllocated,
-          unallocatedMinor: newUnallocated,
-          updatedById:      actorId,
-        });
+      // Lock invoice row second (consistent lock ordering)
+      const invoice = await manager
+        .createQueryBuilder(InvoiceEntity, 'inv')
+        .setLock('pessimistic_write')
+        .where('inv.id = :id', { id: dto.invoiceId })
+        .andWhere('inv.tenantId = :tenantId', { tenantId })
+        .getOne();
 
-        return { newAmountPaid, newOutstanding, newInvoiceStatus };
+      if (!invoice) throw new BadRequestException(`Invoice ${dto.invoiceId} not found`);
+
+      if (invoice.status === 'voided' || invoice.status === 'paid') {
+        throw new BadRequestException(
+          `Cannot allocate to invoice with status "${invoice.status}"`,
+        );
+      }
+      // ISSUE 4 — guard reads locked values (not stale pre-tx reads)
+      if (dto.allocatedMinor > invoice.outstandingMinor) {
+        throw new BadRequestException(
+          `Cannot allocate ${dto.allocatedMinor}: only ${invoice.outstandingMinor} outstanding on invoice`,
+        );
+      }
+
+      // Insert allocation row
+      await manager.save(
+        manager.create(PaymentAllocationEntity, {
+          tenantId,
+          paymentId,
+          invoiceId:      dto.invoiceId,
+          allocatedMinor: dto.allocatedMinor,
+          currency:       payment.currency,
+        }),
+      );
+
+      // ISSUE 1 — allocation journal: DR Unapplied Receipts / CR AR
+      await this.doubleEntryService.postWithManager(
+        {
+          tenantId,
+          entryType:   'payment',
+          sourceType:  'payment',
+          sourceId:    paymentId,
+          description: `Payment allocated to invoice ${invoice.invoiceNumber ?? dto.invoiceId}`,
+          postedAt:    now,
+          currency:    payment.currency,
+          lines: [
+            {
+              accountCode: GL.UNAPPLIED_RECEIPTS,
+              debitMinor:  dto.allocatedMinor,
+              creditMinor: 0,
+              currency:    payment.currency,
+              description: `Unapplied cleared — ${payment.reference}`,
+            },
+            {
+              accountCode: GL.ACCOUNTS_RECEIVABLE,
+              debitMinor:  0,
+              creditMinor: dto.allocatedMinor,
+              currency:    payment.currency,
+              description: `AR settled — ${invoice.invoiceNumber ?? dto.invoiceId}`,
+            },
+          ],
+        },
+        manager,
+      );
+
+      // Update invoice under lock — use locked values
+      const newAmountPaid    = invoice.amountPaidMinor + dto.allocatedMinor;
+      const newOutstanding   = invoice.totalMinor - newAmountPaid;      // no Math.max — guard above ensures >= 0
+      const newInvoiceStatus = newOutstanding === 0 ? 'paid' : 'partially_paid';
+
+      await manager.update(InvoiceEntity, { id: dto.invoiceId, tenantId }, {
+        amountPaidMinor:  newAmountPaid,
+        outstandingMinor: newOutstanding,
+        status:           newInvoiceStatus,
+        paidAt:           newInvoiceStatus === 'paid' ? now : undefined,
+        updatedById:      actorId,
       });
+
+      // Update payment running totals under lock
+      const newAllocated   = payment.allocatedMinor + dto.allocatedMinor;
+      const newUnallocated = payment.unallocatedMinor - dto.allocatedMinor; // exact — no MAX needed
+
+      await manager.update(PaymentEntityClass, { id: paymentId, tenantId }, {
+        allocatedMinor:   newAllocated,
+        unallocatedMinor: newUnallocated,
+        updatedById:      actorId,
+      });
+
+      // ISSUE 5 — verify transactional invariants before commit
+      // allocatedMinor + unallocatedMinor === capturedAmountMinor
+      if (newAllocated + newUnallocated !== payment.capturedAmountMinor) {
+        throw new Error(
+          `Payment invariant violated: allocatedMinor(${newAllocated}) + ` +
+          `unallocatedMinor(${newUnallocated}) !== ` +
+          `capturedAmountMinor(${payment.capturedAmountMinor})`,
+        );
+      }
+      // invoice.amountPaidMinor <= invoice.totalMinor
+      if (newAmountPaid > invoice.totalMinor) {
+        throw new Error(
+          `Invoice invariant violated: amountPaidMinor(${newAmountPaid}) > ` +
+          `totalMinor(${invoice.totalMinor})`,
+        );
+      }
+      // invoice.outstandingMinor === invoice.totalMinor - invoice.amountPaidMinor
+      if (newOutstanding !== invoice.totalMinor - newAmountPaid) {
+        throw new Error(
+          `Invoice outstanding invariant violated`,
+        );
+      }
+
+      return { newInvoiceStatus };
+    });
 
     const updated = await this.paymentRepository.findByIdOrFail(paymentId, tenantId);
 
@@ -486,14 +598,14 @@ export class PaymentService {
       paymentId,
       invoiceId:      dto.invoiceId,
       allocatedMinor: dto.allocatedMinor,
-      currency:       payment.currency,
+      currency:       updated.currency,
       invoiceStatus:  newInvoiceStatus,
-      timestamp:      new Date().toISOString(),
+      timestamp:      now.toISOString(),
     } as PaymentAllocatedPayload);
 
     this.logger.log(
-      `allocate: payment ${payment.reference} → invoice ${invoice.invoiceNumber ?? dto.invoiceId} ` +
-      `(${dto.allocatedMinor} ${payment.currency}) — invoice now ${newInvoiceStatus} — tenant ${tenantId}`,
+      `allocate: payment ${updated.reference} → invoice ${dto.invoiceId} ` +
+      `(${dto.allocatedMinor} ${updated.currency}) — invoice now ${newInvoiceStatus} — tenant ${tenantId}`,
     );
 
     return updated;
@@ -501,10 +613,9 @@ export class PaymentService {
 
   // ── reconcile() ──────────────────────────────────────────────────────────
   //
-  // Calls the gateway adapter to re-query payment status.
-  // Only drives capture() when status is still 'authorized' — prevents
-  // double-capture on a payment already in 'captured' state.
-  // The journalEntryId guard inside capture() provides a second line of defence.
+  // Only drives capture() when status === 'authorized'.
+  // capture() acquires a FOR UPDATE lock and re-checks journalEntryId inside
+  // the transaction — duplicate journal posting is impossible.
 
   async reconcile(
     id:       string,
@@ -527,9 +638,7 @@ export class PaymentService {
     }
 
     const previousStatus = payment.status;
-    const result = await adapter.reconcile({
-      gatewayPaymentId: payment.gatewayPaymentId,
-    });
+    const result = await adapter.reconcile({ gatewayPaymentId: payment.gatewayPaymentId });
 
     await this.paymentRepository.update(id, tenantId, {
       gatewayStatus: result.gatewayStatus,
@@ -546,8 +655,6 @@ export class PaymentService {
     let updated: PaymentEntity;
 
     if (gatewaySucceeded && payment.status === 'authorized') {
-      // Only drive capture when local status is 'authorized'.
-      // capture() also has its own journalEntryId guard as a second layer.
       updated = await this.capture(id, {}, tenantId, actorId);
     } else if (gatewayFailed && !['failed', 'cancelled', 'captured'].includes(payment.status)) {
       updated = await this.fail(id, { reason: `Reconciled: ${result.gatewayStatus}` }, tenantId, actorId);

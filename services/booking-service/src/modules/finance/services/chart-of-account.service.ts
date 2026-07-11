@@ -43,6 +43,9 @@ const SYSTEM_COA: Array<{
   { code: '2180', name: 'Refunds Payable',            type: 'liability', parentCode: '2000', isPostable: true  },
   { code: '2190', name: 'Chargebacks Payable',        type: 'liability', parentCode: '2000', isPostable: true,
     description: 'Disputed amounts pending resolution' },
+  { code: '2195', name: 'Unapplied Receipts',          type: 'liability', parentCode: '2000', isPostable: true,
+    description: 'Cash received from customers not yet allocated to a specific invoice. ' +
+                 'Cleared at allocation time by DR Unapplied Receipts / CR Accounts Receivable.' },
 
   // ── 3xxx Equity ───────────────────────────────────────────────────────────
   { code: '3000', name: 'Equity',                     type: 'equity',    parentCode: null,   isPostable: false },

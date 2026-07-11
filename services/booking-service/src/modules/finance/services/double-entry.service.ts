@@ -147,6 +147,62 @@ export class DoubleEntryService {
     });
   }
 
+  /**
+   * Validates and posts a balanced journal entry within a caller-supplied
+   * EntityManager transaction.
+   *
+   * Use this when the journal post must be atomic with other DB writes
+   * (e.g. payment status update + journal must commit or roll back together).
+   *
+   * All validation (assertBalanced, assertOpen) still runs — this method
+   * is the single accounting boundary for transactional callers.
+   * The caller is responsible for opening and committing the transaction.
+   *
+   * @param dto     Same as post()
+   * @param manager Active EntityManager from the caller's dataSource.transaction()
+   */
+  async postWithManager(
+    dto:     PostJournalDto,
+    manager: import('typeorm').EntityManager,
+  ): Promise<JournalEntryEntity> {
+    this.assertBalanced(dto.lines);
+
+    // Period validation is read-only — safe to run inside the caller's tx
+    const period = await this.periodService.assertOpen(dto.tenantId, dto.postedAt);
+
+    const lines: JournalLineInput[] = dto.lines.map((l) => ({
+      ...l,
+      currency: l.currency || dto.currency,
+    }));
+
+    const reference = await this.journalRepository.nextReference(
+      period.period,
+      dto.tenantId,
+    );
+
+    const input: JournalEntryInput = {
+      tenantId:         dto.tenantId,
+      reference,
+      entryType:        dto.entryType,
+      sourceType:       dto.sourceType,
+      sourceId:         dto.sourceId,
+      description:      dto.description,
+      postedAt:         dto.postedAt,
+      accountingPeriod: period.period,
+      lines,
+    };
+
+    const entry = await this.journalRepository.insertEntry(input, manager);
+
+    this.logger.log(
+      `Journal posted (tx): ${reference} type=${dto.entryType} ` +
+      `source=${dto.sourceType ?? 'manual'}:${dto.sourceId ?? '-'} ` +
+      `period=${period.period} tenant=${dto.tenantId}`,
+    );
+
+    return entry;
+  }
+
   // ── Reverse ───────────────────────────────────────────────────────────────
 
   /**

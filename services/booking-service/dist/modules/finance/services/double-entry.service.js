@@ -79,6 +79,31 @@ let DoubleEntryService = DoubleEntryService_1 = class DoubleEntryService {
             return entry;
         });
     }
+    async postWithManager(dto, manager) {
+        this.assertBalanced(dto.lines);
+        const period = await this.periodService.assertOpen(dto.tenantId, dto.postedAt);
+        const lines = dto.lines.map((l) => ({
+            ...l,
+            currency: l.currency || dto.currency,
+        }));
+        const reference = await this.journalRepository.nextReference(period.period, dto.tenantId);
+        const input = {
+            tenantId: dto.tenantId,
+            reference,
+            entryType: dto.entryType,
+            sourceType: dto.sourceType,
+            sourceId: dto.sourceId,
+            description: dto.description,
+            postedAt: dto.postedAt,
+            accountingPeriod: period.period,
+            lines,
+        };
+        const entry = await this.journalRepository.insertEntry(input, manager);
+        this.logger.log(`Journal posted (tx): ${reference} type=${dto.entryType} ` +
+            `source=${dto.sourceType ?? 'manual'}:${dto.sourceId ?? '-'} ` +
+            `period=${period.period} tenant=${dto.tenantId}`);
+        return entry;
+    }
     async reverse(originalId, tenantId, description, actorId, postedAt) {
         const original = await this.journalRepository.findById(originalId, tenantId);
         if (!original) {
