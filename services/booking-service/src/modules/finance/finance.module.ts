@@ -15,6 +15,7 @@ import {
   PaymentEntity,
   PaymentAllocationEntity,
 } from './entities/payment.entity';
+import { DisputeEntity }          from './entities/dispute.entity';
 
 import { AccountingPeriodRepository } from './repositories/accounting-period.repository';
 import { ChartOfAccountRepository }   from './repositories/chart-of-account.repository';
@@ -22,6 +23,7 @@ import { JournalRepository }          from './repositories/journal.repository';
 import { TaxRateRepository }          from './repositories/tax-rate.repository';
 import { InvoiceRepository }          from './repositories/invoice.repository';
 import { PaymentRepository }          from './repositories/payment.repository';
+import { DisputeRepository }          from './repositories/dispute.repository';
 
 import { AccountingPeriodService } from './services/accounting-period.service';
 import { DoubleEntryService }      from './services/double-entry.service';
@@ -29,10 +31,12 @@ import { TaxResolver }             from './services/tax-resolver.service';
 import { ChartOfAccountService }   from './services/chart-of-account.service';
 import { InvoiceService }          from './services/invoice.service';
 import { PaymentService }          from './services/payment.service';
+import { DisputeService }          from './services/dispute.service';
 
 import { FinanceAdminController }  from './controllers/finance-admin.controller';
 import { InvoiceAdminController }  from './controllers/invoice-admin.controller';
 import { PaymentAdminController }  from './controllers/payment-admin.controller';
+import { DisputeAdminController }  from './controllers/dispute-admin.controller';
 
 /**
  * FinanceModule — Finance Engine domain boundary.
@@ -40,8 +44,7 @@ import { PaymentAdminController }  from './controllers/payment-admin.controller'
  * Batch 7.1A: Accounting Periods, Chart of Accounts, Journal, Double Entry, Tax
  * Batch 7.1B: Invoice Foundation
  * Batch 7.2:  Payment Engine Foundation
- *
- * Self-contained: no Booking, Membership, Pricing, or Slot dependencies.
+ * Batch 7.3A: Disputes & Chargebacks
  */
 @Module({
   imports: [
@@ -57,12 +60,14 @@ import { PaymentAdminController }  from './controllers/payment-admin.controller'
       InvoiceReferenceEntity,
       PaymentEntity,
       PaymentAllocationEntity,
+      DisputeEntity,
     ]),
   ],
   controllers: [
     FinanceAdminController,
     InvoiceAdminController,
     PaymentAdminController,
+    DisputeAdminController,
   ],
   providers: [
     AccountingPeriodRepository,
@@ -71,12 +76,14 @@ import { PaymentAdminController }  from './controllers/payment-admin.controller'
     TaxRateRepository,
     InvoiceRepository,
     PaymentRepository,
+    DisputeRepository,
     AccountingPeriodService,
     DoubleEntryService,
     TaxResolver,
     ChartOfAccountService,
     InvoiceService,
     PaymentService,
+    DisputeService,
   ],
   exports: [
     AccountingPeriodService,
@@ -85,11 +92,13 @@ import { PaymentAdminController }  from './controllers/payment-admin.controller'
     ChartOfAccountService,
     InvoiceService,
     PaymentService,
+    DisputeService,
     TaxRateRepository,
     JournalRepository,
     ChartOfAccountRepository,
     InvoiceRepository,
     PaymentRepository,
+    DisputeRepository,
   ],
 })
 export class FinanceModule {}
