@@ -25,7 +25,8 @@
 -- * PostgreSQL enum additions are forward-only (ADD VALUE IF NOT EXISTS).
 -- * Column addition is guarded by an information_schema existence check.
 -- * Index creation uses CREATE INDEX IF NOT EXISTS.
--- * \set ON_ERROR_STOP on — aborts on unexpected errors.
+-- * \set ON_ERROR_STOP on — aborts on unexpected errors; no error suppression
+--   anywhere in this file.
 --
 -- RUN AGAINST
 -- -----------
@@ -48,47 +49,22 @@
 -- The booking state machine (BookingEntity, BookingService, BookingRepository,
 -- BookingSchedulerService) requires all 11 values below.
 --
--- ALTER TYPE ... ADD VALUE IF NOT EXISTS is forward-only and cannot be rolled
--- back within a transaction, but it is safe to run multiple times.
--- We execute each ADD VALUE in its own DO block so a single already-existing
--- value does not abort the others.
+-- ADD VALUE IF NOT EXISTS is idempotent: it is a no-op when the value already
+-- exists, and raises an error on any other unexpected condition, which psql
+-- will surface immediately under \set ON_ERROR_STOP on.
 --
--- Note: ALTER TYPE ADD VALUE cannot run inside a transaction block that has
--- already modified the enum type's rows. We use individual DO blocks per
--- value to isolate any per-value failure.
+-- Compatibility: ADD VALUE IF NOT EXISTS is available from PostgreSQL 9.3.
+-- This project requires PostgreSQL 12+ (TypeORM 0.3.x / pg ^8.x constraint).
+-- No DO block or EXCEPTION handler is needed or used — any unexpected error
+-- propagates directly to the caller.
 
-DO $$ BEGIN
-  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'reserved';
-EXCEPTION WHEN duplicate_object THEN NULL;
-         WHEN others           THEN NULL;
-END $$;
+ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'reserved';
+ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'checked_in';
+ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'in_progress';
+ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'rescheduled';
+ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'expired';
 
-DO $$ BEGIN
-  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'checked_in';
-EXCEPTION WHEN duplicate_object THEN NULL;
-         WHEN others           THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'in_progress';
-EXCEPTION WHEN duplicate_object THEN NULL;
-         WHEN others           THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'rescheduled';
-EXCEPTION WHEN duplicate_object THEN NULL;
-         WHEN others           THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'expired';
-EXCEPTION WHEN duplicate_object THEN NULL;
-         WHEN others           THEN NULL;
-END $$;
-
--- Verification comment (not executed — for DBA review):
--- After running, confirm with:
+-- Verification (not executed — for DBA review after applying):
 --   SELECT enumlabel FROM pg_enum
 --   JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
 --   WHERE typname = 'booking_status'
@@ -107,6 +83,12 @@ END $$;
 --
 -- The column is nullable TIMESTAMPTZ. Existing rows receive NULL (correct —
 -- confirmed/terminal bookings have no expiry time set).
+--
+-- The DO block uses IF NOT EXISTS to achieve idempotency without suppressing
+-- errors: if the IF condition is false the block exits normally; if the
+-- ALTER TABLE itself fails for any unexpected reason the error propagates
+-- out of the DO block and psql aborts under ON_ERROR_STOP.
+-- No EXCEPTION clause is present.
 
 DO $$
 BEGIN
@@ -135,10 +117,8 @@ END $$;
 --   WHERE status IN ('reserved','pending_payment')
 --   AND   expires_at < now()
 --
--- Without this partial index that query performs a full-table scan of the
--- bookings table. The partial index reduces it to only active reservation rows.
---
--- CREATE INDEX IF NOT EXISTS is safe to run multiple times.
+-- Without this partial index the query performs a full-table scan.
+-- CREATE INDEX IF NOT EXISTS is natively idempotent; no error suppression.
 
 CREATE INDEX IF NOT EXISTS idx_bookings_expires_at
   ON bookings (tenant_id, expires_at)
@@ -149,13 +129,10 @@ CREATE INDEX IF NOT EXISTS idx_bookings_expires_at
 -- Part D — Scheduler index on bookings.starts_at for in-progress sweep
 -- =============================================================================
 --
--- BookingRepository.findStartedConfirmed() queries:
---   WHERE status = 'confirmed'
---   AND   starts_at <= now()
---   AND   ends_at   > now()
--- This index already exists from migration 004 as idx_bookings_tenant_starts_at.
--- Listed here for completeness — CREATE INDEX IF NOT EXISTS is a no-op if
--- already present.
+-- BookingRepository.findStartedConfirmed() queries confirmed bookings by
+-- starts_at/ends_at. This index exists in migration 004 as
+-- idx_bookings_tenant_starts_at; CREATE INDEX IF NOT EXISTS is a no-op if
+-- already present. No error suppression.
 
 CREATE INDEX IF NOT EXISTS idx_bookings_tenant_starts_at
   ON bookings (tenant_id, starts_at)
