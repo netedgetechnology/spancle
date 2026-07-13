@@ -32,6 +32,13 @@ class StripeAdapter extends PaymentGatewayAdapter {
             rawResponse: { stub: true, gateway: 'stripe', input },
         };
     }
+    async refund(input) {
+        return {
+            gatewayRefundId: `re_stub_${input.idempotencyKey}`,
+            gatewayStatus: 'succeeded',
+            rawResponse: { stub: true, gateway: 'stripe', input },
+        };
+    }
 }
 exports.StripeAdapter = StripeAdapter;
 class RazorpayAdapter extends PaymentGatewayAdapter {
@@ -58,6 +65,13 @@ class RazorpayAdapter extends PaymentGatewayAdapter {
         return {
             gatewayStatus: 'captured',
             capturedMinor: null,
+            rawResponse: { stub: true, gateway: 'razorpay', input },
+        };
+    }
+    async refund(input) {
+        return {
+            gatewayRefundId: `rfd_stub_${input.idempotencyKey}`,
+            gatewayStatus: 'processed',
             rawResponse: { stub: true, gateway: 'razorpay', input },
         };
     }

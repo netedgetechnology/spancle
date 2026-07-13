@@ -32,12 +32,14 @@ import type {
 // ── Status state machine ──────────────────────────────────────────────────────
 
 const ALLOWED_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
-  draft:           ['pending', 'voided'],
-  pending:         ['issued',  'voided'],
-  issued:          ['partially_paid', 'paid', 'voided'],
-  partially_paid:  ['paid', 'voided'],
-  paid:            [],
-  voided:          [],
+  draft:              ['pending', 'voided'],
+  pending:            ['issued',  'voided'],
+  issued:             ['partially_paid', 'paid', 'voided'],
+  partially_paid:     ['paid', 'voided'],
+  partially_refunded: ['refunded', 'paid', 'partially_paid'],
+  paid:               [],
+  refunded:           [],
+  voided:             [],
 };
 
 function isTerminal(status: InvoiceStatus): boolean {

@@ -76,6 +76,10 @@ __decorate([
     __metadata("design:type", Number)
 ], InvoiceEntity.prototype, "amountPaidMinor", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'amount_refunded_minor', type: 'int', nullable: false, default: 0 }),
+    __metadata("design:type", Number)
+], InvoiceEntity.prototype, "amountRefundedMinor", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'outstanding_minor', type: 'int', nullable: false, default: 0 }),
     __metadata("design:type", Number)
 ], InvoiceEntity.prototype, "outstandingMinor", void 0);

@@ -489,7 +489,7 @@ export class PaymentService {
 
       if (!invoice) throw new BadRequestException(`Invoice ${dto.invoiceId} not found`);
 
-      if (invoice.status === 'voided' || invoice.status === 'paid') {
+      if (invoice.status === 'voided' || invoice.status === 'paid' || invoice.status === 'refunded') {
         throw new BadRequestException(
           `Cannot allocate to invoice with status "${invoice.status}"`,
         );

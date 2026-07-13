@@ -17,6 +17,7 @@ const invoice_entity_1 = require("./entities/invoice.entity");
 const invoice_line_entity_1 = require("./entities/invoice-line.entity");
 const payment_entity_1 = require("./entities/payment.entity");
 const dispute_entity_1 = require("./entities/dispute.entity");
+const refund_entity_1 = require("./entities/refund.entity");
 const accounting_period_repository_1 = require("./repositories/accounting-period.repository");
 const chart_of_account_repository_1 = require("./repositories/chart-of-account.repository");
 const journal_repository_1 = require("./repositories/journal.repository");
@@ -24,6 +25,7 @@ const tax_rate_repository_1 = require("./repositories/tax-rate.repository");
 const invoice_repository_1 = require("./repositories/invoice.repository");
 const payment_repository_1 = require("./repositories/payment.repository");
 const dispute_repository_1 = require("./repositories/dispute.repository");
+const refund_repository_1 = require("./repositories/refund.repository");
 const accounting_period_service_1 = require("./services/accounting-period.service");
 const double_entry_service_1 = require("./services/double-entry.service");
 const tax_resolver_service_1 = require("./services/tax-resolver.service");
@@ -31,10 +33,12 @@ const chart_of_account_service_1 = require("./services/chart-of-account.service"
 const invoice_service_1 = require("./services/invoice.service");
 const payment_service_1 = require("./services/payment.service");
 const dispute_service_1 = require("./services/dispute.service");
+const refund_service_1 = require("./services/refund.service");
 const finance_admin_controller_1 = require("./controllers/finance-admin.controller");
 const invoice_admin_controller_1 = require("./controllers/invoice-admin.controller");
 const payment_admin_controller_1 = require("./controllers/payment-admin.controller");
 const dispute_admin_controller_1 = require("./controllers/dispute-admin.controller");
+const refund_admin_controller_1 = require("./controllers/refund-admin.controller");
 let FinanceModule = class FinanceModule {
 };
 exports.FinanceModule = FinanceModule;
@@ -54,6 +58,8 @@ exports.FinanceModule = FinanceModule = __decorate([
                 payment_entity_1.PaymentEntity,
                 payment_entity_1.PaymentAllocationEntity,
                 dispute_entity_1.DisputeEntity,
+                refund_entity_1.RefundEntity,
+                refund_entity_1.RefundLineAllocationEntity,
             ]),
         ],
         controllers: [
@@ -61,6 +67,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             invoice_admin_controller_1.InvoiceAdminController,
             payment_admin_controller_1.PaymentAdminController,
             dispute_admin_controller_1.DisputeAdminController,
+            refund_admin_controller_1.RefundAdminController,
         ],
         providers: [
             accounting_period_repository_1.AccountingPeriodRepository,
@@ -70,6 +77,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             invoice_repository_1.InvoiceRepository,
             payment_repository_1.PaymentRepository,
             dispute_repository_1.DisputeRepository,
+            refund_repository_1.RefundRepository,
             accounting_period_service_1.AccountingPeriodService,
             double_entry_service_1.DoubleEntryService,
             tax_resolver_service_1.TaxResolver,
@@ -77,6 +85,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             invoice_service_1.InvoiceService,
             payment_service_1.PaymentService,
             dispute_service_1.DisputeService,
+            refund_service_1.RefundService,
         ],
         exports: [
             accounting_period_service_1.AccountingPeriodService,
@@ -86,12 +95,14 @@ exports.FinanceModule = FinanceModule = __decorate([
             invoice_service_1.InvoiceService,
             payment_service_1.PaymentService,
             dispute_service_1.DisputeService,
+            refund_service_1.RefundService,
             tax_rate_repository_1.TaxRateRepository,
             journal_repository_1.JournalRepository,
             chart_of_account_repository_1.ChartOfAccountRepository,
             invoice_repository_1.InvoiceRepository,
             payment_repository_1.PaymentRepository,
             dispute_repository_1.DisputeRepository,
+            refund_repository_1.RefundRepository,
         ],
     })
 ], FinanceModule);

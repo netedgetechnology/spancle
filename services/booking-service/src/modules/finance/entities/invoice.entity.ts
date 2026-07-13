@@ -25,6 +25,8 @@ export type InvoiceStatus =
   | 'issued'
   | 'partially_paid'
   | 'paid'
+  | 'partially_refunded'
+  | 'refunded'
   | 'voided';
 
 /**
@@ -138,6 +140,17 @@ export class InvoiceEntity {
    */
   @Column({ name: 'amount_paid_minor', type: 'int', nullable: false, default: 0 })
   amountPaidMinor!: number;
+
+  /**
+   * Cumulative amount refunded against this invoice.
+   * Written exclusively by RefundService under InvoiceEntity FOR UPDATE lock.
+   * Includes refunds in status: 'processing' and 'completed'.
+   * Does NOT affect outstandingMinor (= totalMinor - amountPaidMinor).
+   * Terminal 'refunded' condition:
+   *   amountRefundedMinor >= amountPaidMinor AND outstandingMinor = 0.
+   */
+  @Column({ name: 'amount_refunded_minor', type: 'int', nullable: false, default: 0 })
+  amountRefundedMinor!: number;
 
   /** Computed: totalMinor - amountPaidMinor. Maintained by PaymentService. */
   @Column({ name: 'outstanding_minor', type: 'int', nullable: false, default: 0 })

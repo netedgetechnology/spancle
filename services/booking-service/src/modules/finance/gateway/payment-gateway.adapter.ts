@@ -59,27 +59,30 @@ export interface GatewayReconcileResult {
 
 // ── Interface ─────────────────────────────────────────────────────────────────
 
+export interface GatewayRefundInput {
+  gatewayPaymentId: string;
+  amountMinor:      number;
+  currency:         string;
+  idempotencyKey:   string;   // stable: ref_<refund.id>
+}
+
+export interface GatewayRefundResult {
+  gatewayRefundId: string;
+  gatewayStatus:   string;
+  rawResponse:     Record<string, unknown>;
+}
+
 export abstract class PaymentGatewayAdapter {
-  /** Gateway identifier matching PaymentEntity.gateway (e.g. 'stripe', 'razorpay'). */
   abstract readonly gatewayName: string;
-
-  /**
-   * Creates a payment intent / order on the gateway.
-   * Returns a gateway-assigned payment ID and client secret for UI completion.
-   */
   abstract initiate(input: GatewayInitiateInput): Promise<GatewayInitiateResult>;
-
-  /**
-   * Captures an authorised payment.
-   * For gateways that auto-capture (Razorpay orders), this confirms the amount.
-   */
   abstract capture(input: GatewayCaptureInput): Promise<GatewayCaptureResult>;
-
-  /**
-   * Queries the gateway for the current status of a payment.
-   * Used by the reconciliation scheduler.
-   */
   abstract reconcile(input: GatewayReconcileInput): Promise<GatewayReconcileResult>;
+  /**
+   * Issues a refund against an existing captured payment.
+   * idempotencyKey is stable (ref_<refund.id>) — safe to retry on timeout.
+   * Batch 7.5: replace stubs with real SDK calls.
+   */
+  abstract refund(input: GatewayRefundInput): Promise<GatewayRefundResult>;
 }
 
 // ── StripeAdapter ─────────────────────────────────────────────────────────────
@@ -123,6 +126,15 @@ export class StripeAdapter extends PaymentGatewayAdapter {
       gatewayStatus: 'succeeded',
       capturedMinor: null,
       rawResponse:   { stub: true, gateway: 'stripe', input },
+    };
+  }
+
+  async refund(input: GatewayRefundInput): Promise<GatewayRefundResult> {
+    // Stub: Batch 7.5 — stripe.refunds.create({ payment_intent, amount, idempotencyKey })
+    return {
+      gatewayRefundId: `re_stub_${input.idempotencyKey}`,
+      gatewayStatus:   'succeeded',
+      rawResponse:     { stub: true, gateway: 'stripe', input },
     };
   }
 }
@@ -172,6 +184,15 @@ export class RazorpayAdapter extends PaymentGatewayAdapter {
       gatewayStatus: 'captured',
       capturedMinor: null,
       rawResponse:   { stub: true, gateway: 'razorpay', input },
+    };
+  }
+
+  async refund(input: GatewayRefundInput): Promise<GatewayRefundResult> {
+    // Stub: Batch 7.5 — razorpay.payments.refund(paymentId, { amount, notes })
+    return {
+      gatewayRefundId: `rfd_stub_${input.idempotencyKey}`,
+      gatewayStatus:   'processed',
+      rawResponse:     { stub: true, gateway: 'razorpay', input },
     };
   }
 }

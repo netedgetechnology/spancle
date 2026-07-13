@@ -28,7 +28,9 @@ const ALLOWED_TRANSITIONS = {
     pending: ['issued', 'voided'],
     issued: ['partially_paid', 'paid', 'voided'],
     partially_paid: ['paid', 'voided'],
+    partially_refunded: ['refunded', 'paid', 'partially_paid'],
     paid: [],
+    refunded: [],
     voided: [],
 };
 function isTerminal(status) {

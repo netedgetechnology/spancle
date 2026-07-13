@@ -287,7 +287,7 @@ let PaymentService = PaymentService_1 = class PaymentService {
                 .getOne();
             if (!invoice)
                 throw new common_1.BadRequestException(`Invoice ${dto.invoiceId} not found`);
-            if (invoice.status === 'voided' || invoice.status === 'paid') {
+            if (invoice.status === 'voided' || invoice.status === 'paid' || invoice.status === 'refunded') {
                 throw new common_1.BadRequestException(`Cannot allocate to invoice with status "${invoice.status}"`);
             }
             if (dto.allocatedMinor > invoice.outstandingMinor) {
