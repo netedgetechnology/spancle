@@ -39,6 +39,7 @@ const invoice_admin_controller_1 = require("./controllers/invoice-admin.controll
 const payment_admin_controller_1 = require("./controllers/payment-admin.controller");
 const dispute_admin_controller_1 = require("./controllers/dispute-admin.controller");
 const refund_admin_controller_1 = require("./controllers/refund-admin.controller");
+const booking_finance_listener_1 = require("./listeners/booking-finance.listener");
 let FinanceModule = class FinanceModule {
 };
 exports.FinanceModule = FinanceModule;
@@ -86,6 +87,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             payment_service_1.PaymentService,
             dispute_service_1.DisputeService,
             refund_service_1.RefundService,
+            booking_finance_listener_1.BookingFinanceListener,
         ],
         exports: [
             accounting_period_service_1.AccountingPeriodService,

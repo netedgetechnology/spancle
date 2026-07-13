@@ -261,7 +261,6 @@ let BookingService = BookingService_1 = class BookingService {
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.CONFIRMED, {
             tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
         });
-        void this.createInvoiceForBooking(updated, tenantId, actorId);
         return updated;
     }
     async cancel(id, dto, tenantId, actorId) {
@@ -299,7 +298,6 @@ let BookingService = BookingService_1 = class BookingService {
             tenantId, bookingId: id, slotIds: booking.slotIds,
             reason: 'cancelled', actorId, timestamp: new Date().toISOString(),
         });
-        void this.voidInvoiceForBooking(id, tenantId, actorId, dto.reason ?? 'booking cancelled');
         this.logger.log(`Booking cancelled: ${booking.reference} reason="${dto.reason}"`);
         return updated;
     }
@@ -667,12 +665,6 @@ let BookingService = BookingService_1 = class BookingService {
             timestamp: new Date().toISOString(),
         };
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.STATUS_CHANGED, payload);
-    }
-    async voidInvoiceForBooking(bookingId, _tenantId, _actorId, _reason) {
-        this.logger.debug(`voidInvoiceForBooking: finance integration pending — booking ${bookingId}`);
-    }
-    async createInvoiceForBooking(booking, _tenantId, _actorId) {
-        this.logger.debug(`createInvoiceForBooking: finance integration pending — booking ${booking.id}`);
     }
 };
 exports.BookingService = BookingService;

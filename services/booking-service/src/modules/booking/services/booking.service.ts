@@ -328,9 +328,6 @@ export class BookingService {
       tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
     });
 
-    // Auto-create invoice in finance-service (fire-and-forget; failure is non-fatal)
-    void this.createInvoiceForBooking(updated, tenantId, actorId);
-
     return updated;
   }
 
@@ -386,9 +383,6 @@ export class BookingService {
       tenantId, bookingId: id, slotIds: booking.slotIds,
       reason: 'cancelled', actorId, timestamp: new Date().toISOString(),
     });
-
-    // Void invoice if one was already issued (fire-and-forget; non-fatal)
-    void this.voidInvoiceForBooking(id, tenantId, actorId, dto.reason ?? 'booking cancelled');
 
     this.logger.log(`Booking cancelled: ${booking.reference} reason="${dto.reason}"`);
     return updated;
@@ -950,32 +944,5 @@ export class BookingService {
     await this.eventEmitter.emitAsync(BookingEvents.STATUS_CHANGED, payload);
   }
 
-  // ── Private: void invoice on cancellation ──────────────────────────────────
-
-  /**
-   * Placeholder for Finance-service integration (out of scope for Batch 3).
-   * When finance-service is implemented, restore the HTTP call here using
-   * HttpService from @nestjs/axios and re-register HttpModule in BookingModule.
-   */
-  private async voidInvoiceForBooking(
-    bookingId: string,
-    _tenantId:  string,
-    _actorId:   string,
-    _reason:    string,
-  ): Promise<void> {
-    this.logger.debug(`voidInvoiceForBooking: finance integration pending — booking ${bookingId}`);
-  }
-
-  // ── Private: auto-invoice on confirm ───────────────────────────────────────
-
-  /**
-   * Placeholder for Finance-service integration (out of scope for Batch 3).
-   */
-  private async createInvoiceForBooking(
-    booking:  BookingEntity,
-    _tenantId: string,
-    _actorId:  string,
-  ): Promise<void> {
-    this.logger.debug(`createInvoiceForBooking: finance integration pending — booking ${booking.id}`);
-  }
 }
+

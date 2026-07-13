@@ -34,6 +34,7 @@ import { InvoiceAdminController }  from './controllers/invoice-admin.controller'
 import { PaymentAdminController }  from './controllers/payment-admin.controller';
 import { DisputeAdminController }  from './controllers/dispute-admin.controller';
 import { RefundAdminController }   from './controllers/refund-admin.controller';
+import { BookingFinanceListener }   from './listeners/booking-finance.listener';
 
 /**
  * FinanceModule — Finance Engine domain boundary.
@@ -87,6 +88,7 @@ import { RefundAdminController }   from './controllers/refund-admin.controller';
     PaymentService,
     DisputeService,
     RefundService,
+    BookingFinanceListener,
   ],
   exports: [
     AccountingPeriodService,
