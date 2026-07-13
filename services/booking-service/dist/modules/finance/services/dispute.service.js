@@ -44,8 +44,12 @@ function assertTransitionAllowed(from, to) {
             `Allowed: [${ALLOWED_TRANSITIONS[from].join(', ') || 'none'}]`);
     }
 }
-function isTerminal(status) {
-    return ALLOWED_TRANSITIONS[status].length === 0;
+async function canRestorePaymentToCaptured(disputeRepository, paymentId, tenantId, manager) {
+    const [lostAmount, openCount] = await Promise.all([
+        disputeRepository.totalLostDisputedAmount(paymentId, tenantId, manager),
+        disputeRepository.countOpenDisputesForPayment(paymentId, tenantId, manager),
+    ]);
+    return lostAmount === 0 && openCount === 0;
 }
 let DisputeService = DisputeService_1 = class DisputeService {
     constructor(disputeRepository, paymentRepository, doubleEntryService, periodService, eventEmitter, dataSource) {
@@ -59,7 +63,6 @@ let DisputeService = DisputeService_1 = class DisputeService {
     }
     async openDispute(dto, tenantId, actorId) {
         const openedAt = new Date(dto.openedAt);
-        const now = new Date();
         await this.periodService.assertOpen(tenantId, openedAt);
         const disputeNumber = await this.disputeRepository.nextDisputeNumber(tenantId);
         const dispute = await this.dataSource.transaction(async (manager) => {
@@ -140,8 +143,8 @@ let DisputeService = DisputeService_1 = class DisputeService {
             }, manager);
             await this.disputeRepository.update(d.id, tenantId, { journalEntryId: entry.id, updatedById: actorId }, manager);
             d.journalEntryId = entry.id;
-            const willFullyChargeback = alreadyDisputed + dto.disputedAmountMinor === payment.capturedAmountMinor;
-            if (willFullyChargeback && payment.status === 'captured') {
+            const newTotal = alreadyDisputed + dto.disputedAmountMinor;
+            if (newTotal === payment.capturedAmountMinor && payment.status === 'captured') {
                 await manager.update(payment_entity_1.PaymentEntity, { id: dto.paymentId, tenantId }, {
                     status: 'chargedback',
                     updatedById: actorId,
@@ -165,7 +168,7 @@ let DisputeService = DisputeService_1 = class DisputeService {
             timestamp: new Date().toISOString(),
         });
         this.logger.log(`openDispute: ${dispute.disputeNumber} opened for payment ${dto.paymentId} ` +
-            `(${dto.disputedAmountMinor} ${dto.currency}) — tenant ${tenantId}`);
+            `(${dispute.disputedAmountMinor} ${dispute.currency}) — tenant ${tenantId}`);
         return dispute;
     }
     async markUnderReview(id, tenantId, actorId) {
@@ -190,11 +193,6 @@ let DisputeService = DisputeService_1 = class DisputeService {
         return updated;
     }
     async resolveWon(id, dto, tenantId, actorId) {
-        const dispute = await this.disputeRepository.findByIdOrFail(id, tenantId);
-        assertTransitionAllowed(dispute.status, 'won');
-        if (dispute.resolutionJournalEntryId) {
-            throw new common_1.ConflictException(`Dispute ${id} already has a resolution journal entry — duplicate resolution attempt`);
-        }
         const resolvedAt = dto.resolvedAt ? new Date(dto.resolvedAt) : new Date();
         await this.periodService.assertOpen(tenantId, resolvedAt);
         const resolutionEntry = await this.dataSource.transaction(async (manager) => {
@@ -210,6 +208,12 @@ let DisputeService = DisputeService_1 = class DisputeService {
                 throw new common_1.ConflictException(`Dispute ${id} already resolved — concurrent request`);
             }
             assertTransitionAllowed(locked.status, 'won');
+            const payment = await manager
+                .createQueryBuilder(payment_entity_1.PaymentEntity, 'p')
+                .setLock('pessimistic_write')
+                .where('p.id = :id', { id: locked.paymentId })
+                .andWhere('p.tenantId = :tid', { tid: tenantId })
+                .getOne();
             const entry = await this.doubleEntryService.postWithManager({
                 tenantId,
                 entryType: 'chargeback',
@@ -242,14 +246,14 @@ let DisputeService = DisputeService_1 = class DisputeService {
                 resolutionJournalEntryId: entry.id,
                 updatedById: actorId,
             });
-            const payment = await manager.findOne(payment_entity_1.PaymentEntity, {
-                where: { id: locked.paymentId, tenantId },
-            });
             if (payment?.status === 'chargedback') {
-                await manager.update(payment_entity_1.PaymentEntity, { id: locked.paymentId, tenantId }, {
-                    status: 'captured',
-                    updatedById: actorId,
-                });
+                const restore = await canRestorePaymentToCaptured(this.disputeRepository, locked.paymentId, tenantId, manager);
+                if (restore) {
+                    await manager.update(payment_entity_1.PaymentEntity, { id: locked.paymentId, tenantId }, {
+                        status: 'captured',
+                        updatedById: actorId,
+                    });
+                }
             }
             return entry;
         });
@@ -271,11 +275,6 @@ let DisputeService = DisputeService_1 = class DisputeService {
         return updated;
     }
     async resolveLost(id, dto, tenantId, actorId) {
-        const dispute = await this.disputeRepository.findByIdOrFail(id, tenantId);
-        assertTransitionAllowed(dispute.status, 'lost');
-        if (dispute.resolutionJournalEntryId) {
-            throw new common_1.ConflictException(`Dispute ${id} already has a resolution journal entry — duplicate resolution attempt`);
-        }
         const resolvedAt = dto.resolvedAt ? new Date(dto.resolvedAt) : new Date();
         await this.periodService.assertOpen(tenantId, resolvedAt);
         const resolutionEntry = await this.dataSource.transaction(async (manager) => {
@@ -291,6 +290,12 @@ let DisputeService = DisputeService_1 = class DisputeService {
                 throw new common_1.ConflictException(`Dispute ${id} already resolved — concurrent request`);
             }
             assertTransitionAllowed(locked.status, 'lost');
+            await manager
+                .createQueryBuilder(payment_entity_1.PaymentEntity, 'p')
+                .setLock('pessimistic_write')
+                .where('p.id = :id', { id: locked.paymentId })
+                .andWhere('p.tenantId = :tid', { tid: tenantId })
+                .getOne();
             const entry = await this.doubleEntryService.postWithManager({
                 tenantId,
                 entryType: 'chargeback',
@@ -343,9 +348,8 @@ let DisputeService = DisputeService_1 = class DisputeService {
         return updated;
     }
     async cancelDispute(id, dto, tenantId, actorId) {
-        const dispute = await this.disputeRepository.findByIdOrFail(id, tenantId);
-        assertTransitionAllowed(dispute.status, 'cancelled');
         const now = new Date();
+        await this.periodService.assertOpen(tenantId, now);
         await this.dataSource.transaction(async (manager) => {
             const locked = await manager
                 .createQueryBuilder(dispute_entity_1.DisputeEntity, 'd')
@@ -356,10 +360,40 @@ let DisputeService = DisputeService_1 = class DisputeService {
             if (!locked)
                 throw new common_1.BadRequestException(`Dispute ${id} not found`);
             assertTransitionAllowed(locked.status, 'cancelled');
+            await manager
+                .createQueryBuilder(payment_entity_1.PaymentEntity, 'p')
+                .setLock('pessimistic_write')
+                .where('p.id = :id', { id: locked.paymentId })
+                .andWhere('p.tenantId = :tid', { tid: tenantId })
+                .getOne();
             if (locked.journalEntryId) {
-                const reversal = await this.doubleEntryService.reverse(locked.journalEntryId, tenantId, `Dispute cancelled — ${locked.disputeNumber}: ${dto.reason ?? 'no reason'}`, actorId, now);
+                const reversalEntry = await this.doubleEntryService.postWithManager({
+                    tenantId,
+                    entryType: 'chargeback',
+                    sourceType: 'dispute',
+                    sourceId: id,
+                    description: `Dispute cancelled — principal released — ${locked.disputeNumber}`,
+                    postedAt: now,
+                    currency: locked.currency,
+                    lines: [
+                        {
+                            accountCode: GL.CHARGEBACKS_RECEIVABLE,
+                            debitMinor: 0,
+                            creditMinor: locked.disputedAmountMinor,
+                            currency: locked.currency,
+                            description: `Chargeback receivable cancelled — ${locked.disputeNumber}`,
+                        },
+                        {
+                            accountCode: GL.MERCHANT_SETTLEMENT,
+                            debitMinor: locked.disputedAmountMinor,
+                            creditMinor: 0,
+                            currency: locked.currency,
+                            description: `Principal released — dispute ${locked.disputeNumber}`,
+                        },
+                    ],
+                }, manager);
                 await manager.update(dispute_entity_1.DisputeEntity, { id, tenantId }, {
-                    resolutionJournalEntryId: reversal.id,
+                    resolutionJournalEntryId: reversalEntry.id,
                 });
             }
             await manager.update(dispute_entity_1.DisputeEntity, { id, tenantId }, {
@@ -372,8 +406,8 @@ let DisputeService = DisputeService_1 = class DisputeService {
                 where: { id: locked.paymentId, tenantId },
             });
             if (payment?.status === 'chargedback') {
-                const remaining = await this.disputeRepository.totalActiveDisputedAmount(locked.paymentId, tenantId, manager);
-                if (remaining === 0) {
+                const restore = await canRestorePaymentToCaptured(this.disputeRepository, locked.paymentId, tenantId, manager);
+                if (restore) {
                     await manager.update(payment_entity_1.PaymentEntity, { id: locked.paymentId, tenantId }, {
                         status: 'captured',
                         updatedById: actorId,

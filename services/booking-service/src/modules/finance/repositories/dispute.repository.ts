@@ -36,11 +36,6 @@ export class DisputeRepository {
 
   // ── Create ────────────────────────────────────────────────────────────────
 
-  /**
-   * Inserts a new dispute row within a caller-supplied transaction manager.
-   * The UNIQUE (tenant_id, gateway, gateway_dispute_id) constraint is the
-   * idempotency gate — a duplicate gatewayDisputeId results in a ConflictException.
-   */
   async create(
     input:   CreateDisputeInput,
     manager: EntityManager,
@@ -146,9 +141,11 @@ export class DisputeRepository {
   }
 
   /**
-   * Returns the sum of disputedAmountMinor for all non-cancelled disputes
-   * against a payment. Called inside a locked transaction to prevent
-   * concurrent over-disputing.
+   * Sum of disputedAmountMinor for all non-cancelled disputes against a payment.
+   * Used at open-time to prevent cumulative over-disputing of a single payment.
+   * Includes won/lost/opened/under_review — all statuses where funds were or
+   * could be at stake. Only 'cancelled' disputes are excluded (funds never moved
+   * or were fully reversed).
    */
   async totalActiveDisputedAmount(
     paymentId: string,
@@ -163,5 +160,50 @@ export class DisputeRepository {
       .andWhere("d.status   != 'cancelled'")
       .getRawOne<{ total: string }>();
     return parseInt(result?.total ?? '0', 10);
+  }
+
+  /**
+   * Sum of disputedAmountMinor for disputes in 'lost' status only.
+   *
+   * Used to determine payment status at resolution:
+   *   - If totalLostAmount > 0, funds are permanently forfeited;
+   *     payment must remain 'chargedback' even after a partial win.
+   *   - If totalLostAmount === 0 AND no open/under_review disputes remain,
+   *     payment can be restored to 'captured'.
+   */
+  async totalLostDisputedAmount(
+    paymentId: string,
+    tenantId:  string,
+    manager:   EntityManager,
+  ): Promise<number> {
+    const result = await manager
+      .createQueryBuilder(DisputeEntity, 'd')
+      .select('COALESCE(SUM(d.disputedAmountMinor), 0)', 'total')
+      .where('d.paymentId = :paymentId', { paymentId })
+      .andWhere('d.tenantId  = :tenantId',  { tenantId })
+      .andWhere("d.status    = 'lost'")
+      .getRawOne<{ total: string }>();
+    return parseInt(result?.total ?? '0', 10);
+  }
+
+  /**
+   * Count of disputes in 'opened' or 'under_review' status against a payment.
+   * Used to determine whether a payment can be restored to 'captured':
+   * restoration is only valid when no disputes are still in-flight AND no
+   * disputes were lost.
+   */
+  async countOpenDisputesForPayment(
+    paymentId: string,
+    tenantId:  string,
+    manager:   EntityManager,
+  ): Promise<number> {
+    const result = await manager
+      .createQueryBuilder(DisputeEntity, 'd')
+      .select('COUNT(*)', 'cnt')
+      .where('d.paymentId = :paymentId', { paymentId })
+      .andWhere('d.tenantId  = :tenantId',  { tenantId })
+      .andWhere("d.status IN ('opened', 'under_review')")
+      .getRawOne<{ cnt: string }>();
+    return parseInt(result?.cnt ?? '0', 10);
   }
 }

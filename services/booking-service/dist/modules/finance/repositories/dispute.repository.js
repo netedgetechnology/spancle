@@ -114,6 +114,26 @@ let DisputeRepository = DisputeRepository_1 = class DisputeRepository {
             .getRawOne();
         return parseInt(result?.total ?? '0', 10);
     }
+    async totalLostDisputedAmount(paymentId, tenantId, manager) {
+        const result = await manager
+            .createQueryBuilder(dispute_entity_1.DisputeEntity, 'd')
+            .select('COALESCE(SUM(d.disputedAmountMinor), 0)', 'total')
+            .where('d.paymentId = :paymentId', { paymentId })
+            .andWhere('d.tenantId  = :tenantId', { tenantId })
+            .andWhere("d.status    = 'lost'")
+            .getRawOne();
+        return parseInt(result?.total ?? '0', 10);
+    }
+    async countOpenDisputesForPayment(paymentId, tenantId, manager) {
+        const result = await manager
+            .createQueryBuilder(dispute_entity_1.DisputeEntity, 'd')
+            .select('COUNT(*)', 'cnt')
+            .where('d.paymentId = :paymentId', { paymentId })
+            .andWhere('d.tenantId  = :tenantId', { tenantId })
+            .andWhere("d.status IN ('opened', 'under_review')")
+            .getRawOne();
+        return parseInt(result?.cnt ?? '0', 10);
+    }
 };
 exports.DisputeRepository = DisputeRepository;
 exports.DisputeRepository = DisputeRepository = DisputeRepository_1 = __decorate([

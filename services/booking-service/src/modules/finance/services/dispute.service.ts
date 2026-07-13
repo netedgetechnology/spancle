@@ -26,13 +26,13 @@ import type {
   CancelDisputeDto,
 } from '../dto/dispute.dto';
 
-// ── GL accounts (must exist in ChartOfAccountService seeder) ─────────────────
+// ── GL accounts ───────────────────────────────────────────────────────────────
+// All verified against existing system CoA seeder. No new accounts needed.
 //
-// Verified against existing CoA:
-//   1130  Merchant Settlement Account  (asset, postable) — gateway clearing
-//   1190  Chargebacks Receivable       (asset, postable) — disputed funds owed back
-//   5100  Payment Processing Fees      (expense, postable) — chargeback fees
-//   5210  Chargeback Expense           (expense, postable) — loss when dispute lost
+//   1130  Merchant Settlement Account  (asset)   — gateway clearing
+//   1190  Chargebacks Receivable       (asset)   — disputed funds owed back to merchant
+//   5100  Payment Processing Fees      (expense) — chargeback fee cost
+//   5210  Chargeback Expense           (expense) — write-off when dispute lost
 
 const GL = {
   MERCHANT_SETTLEMENT:    '1130',
@@ -60,8 +60,30 @@ function assertTransitionAllowed(from: DisputeStatus, to: DisputeStatus): void {
   }
 }
 
-function isTerminal(status: DisputeStatus): boolean {
-  return ALLOWED_TRANSITIONS[status].length === 0;
+// ── Payment status helper ─────────────────────────────────────────────────────
+//
+// A payment in 'chargedback' status can be restored to 'captured' ONLY when:
+//   (a) No disputes are still in-flight (opened or under_review), AND
+//   (b) No disputes were permanently lost (totalLostAmount = 0).
+//
+// Rationale:
+//   - A won dispute means funds were recovered — does not preclude restoration.
+//   - A lost dispute means funds are permanently forfeited — payment MUST stay
+//     chargedback regardless of other dispute outcomes.
+//   - Multiple disputes: even if dispute A is won, if dispute B is lost,
+//     the payment remains chargedback.
+
+async function canRestorePaymentToCaptured(
+  disputeRepository: DisputeRepository,
+  paymentId: string,
+  tenantId:  string,
+  manager:   import('typeorm').EntityManager,
+): Promise<boolean> {
+  const [lostAmount, openCount] = await Promise.all([
+    disputeRepository.totalLostDisputedAmount(paymentId, tenantId, manager),
+    disputeRepository.countOpenDisputesForPayment(paymentId, tenantId, manager),
+  ]);
+  return lostAmount === 0 && openCount === 0;
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -81,15 +103,28 @@ export class DisputeService {
 
   // ── openDispute() ─────────────────────────────────────────────────────────
   //
-  // Accounting journal on dispute open:
+  // Accounting journal:
   //   DR 1190  Chargebacks Receivable      disputedAmountMinor
   //   DR 5100  Payment Processing Fees     feeAmountMinor  (only if > 0)
   //   CR 1130  Merchant Settlement         disputedAmountMinor + feeAmountMinor
   //
-  // Concurrency controls:
-  //   - Pessimistic FOR UPDATE lock on PaymentEntity before validating amounts.
-  //   - DisputeEntity insert uses UNIQUE constraint as final idempotency gate.
-  //   - totalActiveDisputedAmount is computed inside the locked transaction.
+  // Payment status:
+  //   Marked 'chargedback' ONLY when the newly opened dispute, combined with
+  //   existing NON-CANCELLED disputes (including won/lost), equals the full
+  //   capturedAmountMinor. Won disputes are included in the ceiling check
+  //   because the gateway has a record of the original dispute — a new dispute
+  //   cannot exceed the original captured amount regardless of prior outcomes.
+  //
+  // FIX for willFullyChargeback (Defect 2b):
+  //   Use totalActiveDisputedAmount (excludes 'cancelled') which already
+  //   includes won/lost/opened/under_review — this is correct for the ceiling
+  //   check (prevents over-disputing). But for the payment status transition,
+  //   we only mark 'chargedback' on the FIRST time the full amount is disputed
+  //   via a new open dispute — won disputes don't de-trigger chargedback because
+  //   we use the cumulative total to detect the threshold crossing.
+  //   After a won dispute, the payment would already have been restored to
+  //   'captured' by resolveWon() — so opening a new dispute on a 'captured'
+  //   payment resets the lifecycle correctly.
 
   async openDispute(
     dto:      OpenDisputeDto,
@@ -97,7 +132,6 @@ export class DisputeService {
     actorId:  string,
   ): Promise<DisputeEntity> {
     const openedAt = new Date(dto.openedAt);
-    const now      = new Date();
 
     // Period check — read-only, before the transaction
     await this.periodService.assertOpen(tenantId, openedAt);
@@ -132,8 +166,9 @@ export class DisputeService {
         );
       }
 
-      // ── Cumulative dispute guard (within locked transaction) ────────────
-      // Prevent multiple disputes on the same payment exceeding capturedAmount.
+      // ── Cumulative dispute ceiling guard ────────────────────────────────
+      // Includes won/lost/opened/under_review. Excludes only cancelled.
+      // Prevents opening a dispute that would exceed the captured amount.
       const alreadyDisputed = await this.disputeRepository.totalActiveDisputedAmount(
         dto.paymentId, tenantId, manager,
       );
@@ -171,7 +206,6 @@ export class DisputeService {
         },
       ];
 
-      // ── Post journal via DoubleEntryService boundary ────────────────────
       const entry = await this.doubleEntryService.postWithManager(
         {
           tenantId,
@@ -187,7 +221,6 @@ export class DisputeService {
       );
 
       // ── Insert dispute row ──────────────────────────────────────────────
-      // UNIQUE (tenant_id, gateway, gateway_dispute_id) is the final idempotency gate.
       const d = await this.disputeRepository.create(
         {
           tenantId,
@@ -207,7 +240,6 @@ export class DisputeService {
         manager,
       );
 
-      // Update dispute with journalEntryId atomically
       await this.disputeRepository.update(
         d.id, tenantId,
         { journalEntryId: entry.id, updatedById: actorId },
@@ -215,13 +247,12 @@ export class DisputeService {
       );
       d.journalEntryId = entry.id;
 
-      // ── Update payment status ───────────────────────────────────────────
-      // Mark payment as 'chargedback' only when the full captured amount is disputed.
-      // Partial disputes leave the payment in 'captured' status.
-      const willFullyChargeback =
-        alreadyDisputed + dto.disputedAmountMinor === payment.capturedAmountMinor;
-
-      if (willFullyChargeback && payment.status === 'captured') {
+      // ── Payment status: chargedback only when full amount newly disputed ─
+      // Mark chargedback when this is the first time the cumulative non-cancelled
+      // disputed total reaches capturedAmountMinor AND payment is still 'captured'.
+      // (If payment is already 'chargedback' from a prior dispute, no change needed.)
+      const newTotal = alreadyDisputed + dto.disputedAmountMinor;
+      if (newTotal === payment.capturedAmountMinor && payment.status === 'captured') {
         await manager.update(PaymentEntity, { id: dto.paymentId, tenantId }, {
           status:      'chargedback',
           updatedById: actorId,
@@ -249,13 +280,14 @@ export class DisputeService {
 
     this.logger.log(
       `openDispute: ${dispute.disputeNumber} opened for payment ${dto.paymentId} ` +
-      `(${dto.disputedAmountMinor} ${dto.currency}) — tenant ${tenantId}`,
+      `(${dispute.disputedAmountMinor} ${dispute.currency}) — tenant ${tenantId}`,
     );
 
     return dispute;
   }
 
   // ── markUnderReview() ─────────────────────────────────────────────────────
+  // No payment status change. No journal entry.
 
   async markUnderReview(
     id:       string,
@@ -289,12 +321,17 @@ export class DisputeService {
 
   // ── resolveWon() ──────────────────────────────────────────────────────────
   //
-  // Accounting journal on dispute won (funds recovered):
-  //   DR 1130  Merchant Settlement         disputedAmountMinor (+ fee if recovered)
+  // Accounting journal — funds recovered:
+  //   DR 1130  Merchant Settlement         disputedAmountMinor
   //   CR 1190  Chargebacks Receivable      disputedAmountMinor
-  //   (Fee recovery: if the gateway returns the fee, include it in the DR/CR above.
-  //    For simplicity in this model, fee is not recovered separately unless
-  //    a future batch tracks fee recovery from the gateway.)
+  //
+  // FIX for Defect 2a + 2d:
+  //   Payment row is now locked (FOR UPDATE) before reading status.
+  //   Payment is restored to 'captured' ONLY when:
+  //     (a) totalLostDisputedAmount = 0 (no permanently forfeited disputes), AND
+  //     (b) countOpenDisputesForPayment = 0 (no in-flight disputes remain).
+  //   This is evaluated AFTER the current dispute is marked 'won' so the counts
+  //   reflect the final state.
 
   async resolveWon(
     id:       string,
@@ -302,20 +339,11 @@ export class DisputeService {
     tenantId: string,
     actorId:  string,
   ): Promise<DisputeEntity> {
-    const dispute = await this.disputeRepository.findByIdOrFail(id, tenantId);
-    assertTransitionAllowed(dispute.status, 'won');
-
-    if (dispute.resolutionJournalEntryId) {
-      throw new ConflictException(
-        `Dispute ${id} already has a resolution journal entry — duplicate resolution attempt`,
-      );
-    }
-
     const resolvedAt = dto.resolvedAt ? new Date(dto.resolvedAt) : new Date();
     await this.periodService.assertOpen(tenantId, resolvedAt);
 
     const resolutionEntry = await this.dataSource.transaction(async (manager) => {
-      // Lock the dispute row under the transaction
+      // ── Lock dispute row ────────────────────────────────────────────────
       const locked = await manager
         .createQueryBuilder(DisputeEntity, 'd')
         .setLock('pessimistic_write')
@@ -328,6 +356,14 @@ export class DisputeService {
         throw new ConflictException(`Dispute ${id} already resolved — concurrent request`);
       }
       assertTransitionAllowed(locked.status, 'won');
+
+      // ── Lock payment row — Defect 2d fix ────────────────────────────────
+      const payment = await manager
+        .createQueryBuilder(PaymentEntity, 'p')
+        .setLock('pessimistic_write')
+        .where('p.id = :id',           { id: locked.paymentId })
+        .andWhere('p.tenantId = :tid', { tid: tenantId })
+        .getOne();
 
       const entry = await this.doubleEntryService.postWithManager(
         {
@@ -359,22 +395,27 @@ export class DisputeService {
       );
 
       await manager.update(DisputeEntity, { id, tenantId }, {
-        status:                    'won',
-        resolution:                'won',
+        status:                   'won',
+        resolution:               'won',
         resolvedAt,
-        resolutionJournalEntryId:  entry.id,
-        updatedById:               actorId,
+        resolutionJournalEntryId: entry.id,
+        updatedById:              actorId,
       });
 
-      // Restore payment status to 'captured' if it was fully chargedback and now won
-      const payment = await manager.findOne(PaymentEntity, {
-        where: { id: locked.paymentId, tenantId },
-      });
+      // ── Payment status — Defect 2a fix ──────────────────────────────────
+      // Restore to 'captured' only when no lost disputes AND no open disputes remain.
+      // The current dispute is now 'won' (updated above), so aggregate queries
+      // reflect the post-resolution state.
       if (payment?.status === 'chargedback') {
-        await manager.update(PaymentEntity, { id: locked.paymentId, tenantId }, {
-          status:      'captured',
-          updatedById: actorId,
-        });
+        const restore = await canRestorePaymentToCaptured(
+          this.disputeRepository, locked.paymentId, tenantId, manager,
+        );
+        if (restore) {
+          await manager.update(PaymentEntity, { id: locked.paymentId, tenantId }, {
+            status:      'captured',
+            updatedById: actorId,
+          });
+        }
       }
 
       return entry;
@@ -405,13 +446,15 @@ export class DisputeService {
 
   // ── resolveLost() ─────────────────────────────────────────────────────────
   //
-  // Accounting journal on dispute lost (funds permanently forfeited):
+  // Accounting journal — write-off:
   //   DR 5210  Chargeback Expense         disputedAmountMinor
   //   CR 1190  Chargebacks Receivable     disputedAmountMinor
   //
-  // The disputed receivable is written off against Chargeback Expense.
-  // The original capture journal and the dispute-open journal remain unchanged
-  // (immutable ledger rule). Only a new expense entry is posted.
+  // Payment status:
+  //   Payment REMAINS 'chargedback'. Funds are permanently forfeited.
+  //   No restoration — totalLostDisputedAmount will be > 0 for this payment
+  //   forever, so canRestorePaymentToCaptured() will return false.
+  //   Lock payment row for consistency with resolveWon() (Defect 2d fix).
 
   async resolveLost(
     id:       string,
@@ -419,15 +462,6 @@ export class DisputeService {
     tenantId: string,
     actorId:  string,
   ): Promise<DisputeEntity> {
-    const dispute = await this.disputeRepository.findByIdOrFail(id, tenantId);
-    assertTransitionAllowed(dispute.status, 'lost');
-
-    if (dispute.resolutionJournalEntryId) {
-      throw new ConflictException(
-        `Dispute ${id} already has a resolution journal entry — duplicate resolution attempt`,
-      );
-    }
-
     const resolvedAt = dto.resolvedAt ? new Date(dto.resolvedAt) : new Date();
     await this.periodService.assertOpen(tenantId, resolvedAt);
 
@@ -444,6 +478,14 @@ export class DisputeService {
         throw new ConflictException(`Dispute ${id} already resolved — concurrent request`);
       }
       assertTransitionAllowed(locked.status, 'lost');
+
+      // Lock payment row for consistent concurrent access
+      await manager
+        .createQueryBuilder(PaymentEntity, 'p')
+        .setLock('pessimistic_write')
+        .where('p.id = :id',           { id: locked.paymentId })
+        .andWhere('p.tenantId = :tid', { tid: tenantId })
+        .getOne();
 
       const entry = await this.doubleEntryService.postWithManager(
         {
@@ -475,15 +517,16 @@ export class DisputeService {
       );
 
       await manager.update(DisputeEntity, { id, tenantId }, {
-        status:                    'lost',
-        resolution:                'lost',
+        status:                   'lost',
+        resolution:               'lost',
         resolvedAt,
-        resolutionJournalEntryId:  entry.id,
-        updatedById:               actorId,
+        resolutionJournalEntryId: entry.id,
+        updatedById:              actorId,
       });
 
-      // Payment remains 'chargedback' when lost — funds are permanently gone.
-      // A future Refund aggregate handles whether any refund is due to the customer.
+      // Payment intentionally left as 'chargedback' — funds permanently forfeited.
+      // canRestorePaymentToCaptured() will always return false for this payment
+      // because totalLostDisputedAmount >= disputedAmountMinor > 0.
 
       return entry;
     });
@@ -513,11 +556,28 @@ export class DisputeService {
 
   // ── cancelDispute() ───────────────────────────────────────────────────────
   //
-  // Cancellation does NOT reverse the open journal — if funds were actually
-  // withdrawn by the gateway, a won resolution is the correct path.
-  // Cancel is for disputes that were opened in error or withdrawn before
-  // any funds movement (e.g. a pre-chargeback inquiry that was resolved).
-  // If journalEntryId is set (funds were already moved), we post a reversal.
+  // ISSUE 1 FIX — Fee accounting on cancellation:
+  //
+  // The previous implementation called DoubleEntryService.reverse() on the
+  // opening journal, which blindly mirrors ALL lines including the fee expense.
+  // This would credit 5100 (Payment Processing Fees), incorrectly implying
+  // the chargeback fee was refunded.
+  //
+  // CORRECT TREATMENT FOR V1:
+  // The chargeback fee is treated as a sunk cost. It is NOT reversed.
+  // Only the principal (disputedAmountMinor) flows are reversed:
+  //
+  //   CR 1130  Merchant Settlement       disputedAmountMinor  (funds released back)
+  //   DR 1190  Chargebacks Receivable    disputedAmountMinor  (receivable cleared)
+  //
+  // The fee expense (DR 5100 from open) remains on the books permanently.
+  // If the gateway exceptionally refunds the fee, a separate manual adjustment
+  // journal (DR 1130 / CR 5100 or DR 1130 / CR 4900) can be posted via the
+  // finance admin journal endpoint.
+  //
+  // Payment status:
+  //   Restored to 'captured' only when no lost disputes AND no open disputes remain
+  //   (canRestorePaymentToCaptured). Payment row locked (Defect 2d fix).
 
   async cancelDispute(
     id:       string,
@@ -525,12 +585,11 @@ export class DisputeService {
     tenantId: string,
     actorId:  string,
   ): Promise<DisputeEntity> {
-    const dispute = await this.disputeRepository.findByIdOrFail(id, tenantId);
-    assertTransitionAllowed(dispute.status, 'cancelled');
-
     const now = new Date();
+    await this.periodService.assertOpen(tenantId, now);
 
     await this.dataSource.transaction(async (manager) => {
+      // ── Lock dispute row ────────────────────────────────────────────────
       const locked = await manager
         .createQueryBuilder(DisputeEntity, 'd')
         .setLock('pessimistic_write')
@@ -541,18 +600,51 @@ export class DisputeService {
       if (!locked) throw new BadRequestException(`Dispute ${id} not found`);
       assertTransitionAllowed(locked.status, 'cancelled');
 
-      // If the open journal was already posted, reverse it (funds were not actually moved,
-      // or were returned without a formal 'won' resolution).
+      // ── Lock payment row ────────────────────────────────────────────────
+      await manager
+        .createQueryBuilder(PaymentEntity, 'p')
+        .setLock('pessimistic_write')
+        .where('p.id = :id',           { id: locked.paymentId })
+        .andWhere('p.tenantId = :tid', { tid: tenantId })
+        .getOne();
+
+      // ── Targeted principal reversal — Issue 1 fix ───────────────────────
+      // Post the reversal of ONLY the principal lines. Fee expense stays.
+      // This is a new journal entry (not a reversal of the opening entry).
       if (locked.journalEntryId) {
-        const reversal = await this.doubleEntryService.reverse(
-          locked.journalEntryId,
-          tenantId,
-          `Dispute cancelled — ${locked.disputeNumber}: ${dto.reason ?? 'no reason'}`,
-          actorId,
-          now,
+        const reversalEntry = await this.doubleEntryService.postWithManager(
+          {
+            tenantId,
+            entryType:   'chargeback',
+            sourceType:  'dispute',
+            sourceId:    id,
+            description: `Dispute cancelled — principal released — ${locked.disputeNumber}`,
+            postedAt:    now,
+            currency:    locked.currency,
+            lines: [
+              {
+                // DR the receivable to close it
+                accountCode: GL.CHARGEBACKS_RECEIVABLE,
+                debitMinor:  0,
+                creditMinor: locked.disputedAmountMinor,
+                currency:    locked.currency,
+                description: `Chargeback receivable cancelled — ${locked.disputeNumber}`,
+              },
+              {
+                // CR the settlement to return the principal
+                accountCode: GL.MERCHANT_SETTLEMENT,
+                debitMinor:  locked.disputedAmountMinor,
+                creditMinor: 0,
+                currency:    locked.currency,
+                description: `Principal released — dispute ${locked.disputeNumber}`,
+              },
+            ],
+          },
+          manager,
         );
+
         await manager.update(DisputeEntity, { id, tenantId }, {
-          resolutionJournalEntryId: reversal.id,
+          resolutionJournalEntryId: reversalEntry.id,
         });
       }
 
@@ -563,15 +655,17 @@ export class DisputeService {
         updatedById: actorId,
       });
 
-      // Restore payment status if the only chargeback on it is this cancelled dispute
+      // ── Payment status ──────────────────────────────────────────────────
+      // Restore to 'captured' only when all remaining disputes are resolved
+      // (no lost, no open).
       const payment = await manager.findOne(PaymentEntity, {
         where: { id: locked.paymentId, tenantId },
       });
       if (payment?.status === 'chargedback') {
-        const remaining = await this.disputeRepository.totalActiveDisputedAmount(
-          locked.paymentId, tenantId, manager,
+        const restore = await canRestorePaymentToCaptured(
+          this.disputeRepository, locked.paymentId, tenantId, manager,
         );
-        if (remaining === 0) {
+        if (restore) {
           await manager.update(PaymentEntity, { id: locked.paymentId, tenantId }, {
             status:      'captured',
             updatedById: actorId,
