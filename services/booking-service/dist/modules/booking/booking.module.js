@@ -12,6 +12,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const booking_entity_1 = require("./entities/booking.entity");
 const booking_payment_entity_1 = require("./entities/booking-payment.entity");
 const booking_refund_entity_1 = require("./entities/booking-refund.entity");
+const booking_refund_payment_allocation_entity_1 = require("./entities/booking-refund-payment-allocation.entity");
 const booking_log_entity_1 = require("./entities/booking-log.entity");
 const booking_repository_1 = require("./repositories/booking.repository");
 const booking_support_repository_1 = require("./repositories/booking-support.repository");
@@ -32,6 +33,7 @@ exports.BookingModule = BookingModule = __decorate([
                 booking_entity_1.BookingEntity,
                 booking_payment_entity_1.BookingPaymentEntity,
                 booking_refund_entity_1.BookingRefundEntity,
+                booking_refund_payment_allocation_entity_1.BookingRefundPaymentAllocationEntity,
                 booking_log_entity_1.BookingLogEntity,
             ]),
             pricing_module_1.PricingModule,

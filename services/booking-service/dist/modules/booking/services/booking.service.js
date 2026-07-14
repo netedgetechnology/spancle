@@ -61,6 +61,7 @@ const booking_entity_1 = require("../entities/booking.entity");
 const slot_repository_1 = require("../../slot/repositories/slot.repository");
 const booking_refund_entity_1 = require("../entities/booking-refund.entity");
 const booking_payment_entity_1 = require("../entities/booking-payment.entity");
+const booking_refund_payment_allocation_entity_1 = require("../entities/booking-refund-payment-allocation.entity");
 const DEFAULT_RESERVATION_TTL_MINS = 15;
 const ALLOWED_TRANSITIONS = {
     reserved: ['pending_payment', 'cancelled', 'expired'],
@@ -676,121 +677,183 @@ let BookingService = BookingService_1 = class BookingService {
         if (!Number.isInteger(dto.amountMinor) || dto.amountMinor <= 0) {
             throw new common_1.BadRequestException('amountMinor must be a positive integer (minor units)');
         }
-        const existing = await this.dataSource.getRepository(booking_refund_entity_1.BookingRefundEntity).findOne({
-            where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false },
-        });
-        if (existing) {
-            this.logger.warn(`processRefund: idempotency hit for key ${dto.idempotencyKey} → ${existing.id}`);
-            return existing;
+        const existingPre = await this.dataSource
+            .getRepository(booking_refund_entity_1.BookingRefundEntity)
+            .findOne({ where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false } });
+        if (existingPre) {
+            this.logger.warn(`processRefund: idempotency hit (pre-tx) key=${dto.idempotencyKey} → ${existingPre.id}`);
+            return existingPre;
         }
-        const result = await this.dataSource.transaction(async (manager) => {
-            const payment = await manager
-                .createQueryBuilder(booking_payment_entity_1.BookingPaymentEntity, 'p')
-                .setLock('pessimistic_write')
-                .where('p.bookingId = :bookingId', { bookingId })
-                .andWhere('p.tenantId   = :tenantId', { tenantId })
-                .andWhere("p.status     = 'paid'")
-                .andWhere('p.isDeleted  = false')
-                .orderBy('p.createdAt', 'DESC')
-                .getOne();
-            if (!payment) {
-                throw new common_1.UnprocessableEntityException(`No paid payment found for booking ${bookingId}`);
-            }
-            const availableForRefund = payment.amountMinor - payment.amountRefundedMinor;
-            if (dto.amountMinor > availableForRefund) {
-                throw new common_1.BadRequestException(`Refund amount (${dto.amountMinor}) exceeds available balance (${availableForRefund})`);
-            }
-            const booking = await manager
-                .createQueryBuilder(booking_entity_1.BookingEntity, 'b')
-                .setLock('pessimistic_write')
-                .where('b.id       = :id', { id: bookingId })
-                .andWhere('b.tenantId = :tenantId', { tenantId })
-                .andWhere('b.isDeleted = false')
-                .getOne();
-            if (!booking) {
-                throw new common_1.NotFoundException(`Booking ${bookingId} not found`);
-            }
-            if (booking.status !== 'cancelled' && booking.status !== 'no_show') {
-                throw new common_1.UnprocessableEntityException(`Booking ${bookingId} status "${booking.status}" is not eligible for refund. ` +
-                    `Only cancelled and no_show bookings can be refunded.`);
-            }
-            const sumRow = await manager
-                .createQueryBuilder(booking_refund_entity_1.BookingRefundEntity, 'r')
-                .select('COALESCE(SUM(r.amountMinor), 0)::int', 'total')
-                .where('r.bookingId = :bookingId', { bookingId })
-                .andWhere('r.tenantId  = :tenantId', { tenantId })
-                .andWhere("r.status    IN ('pending', 'processed')")
-                .andWhere('r.isDeleted = false')
-                .getRawOne();
-            const alreadyMinor = parseInt(sumRow?.total ?? '0', 10);
-            if (alreadyMinor + dto.amountMinor > availableForRefund) {
-                throw new common_1.BadRequestException(`Cumulative refunds (${alreadyMinor + dto.amountMinor}) would exceed ` +
-                    `available refund capacity (${availableForRefund})`);
-            }
-            const newRefund = manager.create(booking_refund_entity_1.BookingRefundEntity, {
-                tenantId,
-                branchId: booking.branchId,
-                bookingId,
-                paymentId: payment.id,
-                status: 'pending',
-                reason: dto.reason,
-                amountMinor: dto.amountMinor,
-                currency: payment.currency,
-                reasonNotes: dto.reasonNotes ?? null,
-                idempotencyKey: dto.idempotencyKey,
-                createdById: actorId,
-            });
-            const savedRefund = await manager.save(newRefund);
-            await manager.update(booking_payment_entity_1.BookingPaymentEntity, { id: payment.id, tenantId }, {
-                amountRefundedMinor: payment.amountRefundedMinor + dto.amountMinor,
-                updatedAt: new Date(),
-            });
-            const newTotalRefunded = booking.amountRefundedMinor + dto.amountMinor;
-            await manager.update(booking_entity_1.BookingEntity, { id: bookingId, tenantId }, {
-                amountRefundedMinor: newTotalRefunded,
-                updatedAt: new Date(),
-                updatedById: actorId,
-            });
-            const totalAfter = alreadyMinor + dto.amountMinor;
-            const isFullRefund = totalAfter >= availableForRefund;
-            if (isFullRefund) {
+        let refundResult;
+        try {
+            refundResult = await this.dataSource.transaction(async (manager) => {
+                const booking = await manager
+                    .createQueryBuilder(booking_entity_1.BookingEntity, 'b')
+                    .setLock('pessimistic_write')
+                    .where('b.id        = :id', { id: bookingId })
+                    .andWhere('b.tenantId = :tenantId', { tenantId })
+                    .andWhere('b.isDeleted = false')
+                    .getOne();
+                if (!booking) {
+                    throw new common_1.NotFoundException(`Booking ${bookingId} not found`);
+                }
+                if (booking.status !== 'cancelled' && booking.status !== 'no_show') {
+                    throw new common_1.UnprocessableEntityException(`Booking ${bookingId} status "${booking.status}" is not eligible for refund. ` +
+                        `Only cancelled and no_show bookings can be refunded.`);
+                }
+                const paidPaymentIds = await manager
+                    .createQueryBuilder(booking_payment_entity_1.BookingPaymentEntity, 'p')
+                    .select('p.id', 'id')
+                    .where('p.bookingId  = :bookingId', { bookingId })
+                    .andWhere('p.tenantId = :tenantId', { tenantId })
+                    .andWhere("p.status   = 'paid'")
+                    .andWhere('p.isDeleted = false')
+                    .orderBy('p.id', 'ASC')
+                    .getRawMany();
+                if (!paidPaymentIds.length) {
+                    throw new common_1.UnprocessableEntityException(`No paid payments found for booking ${bookingId}`);
+                }
+                const paidPayments = [];
+                for (const { id } of paidPaymentIds) {
+                    const locked = await manager
+                        .createQueryBuilder(booking_payment_entity_1.BookingPaymentEntity, 'p')
+                        .setLock('pessimistic_write')
+                        .where('p.id       = :id', { id })
+                        .andWhere('p.tenantId = :tenantId', { tenantId })
+                        .getOne();
+                    if (locked)
+                        paidPayments.push(locked);
+                }
+                const totalPaidMinor = paidPayments.reduce((s, p) => s + p.amountMinor, 0);
+                const currency = paidPayments[0].currency;
+                const sumRow = await manager
+                    .createQueryBuilder(booking_refund_entity_1.BookingRefundEntity, 'r')
+                    .select('COALESCE(SUM(r.amountMinor), 0)::int', 'total')
+                    .where('r.bookingId  = :bookingId', { bookingId })
+                    .andWhere('r.tenantId = :tenantId', { tenantId })
+                    .andWhere("r.status   IN ('pending', 'processed')")
+                    .andWhere('r.isDeleted = false')
+                    .getRawOne();
+                const committedRefundMinor = parseInt(sumRow?.total ?? '0', 10);
+                const remainingCapacity = totalPaidMinor - committedRefundMinor;
+                if (dto.amountMinor > remainingCapacity) {
+                    throw new common_1.BadRequestException(`Refund amount (${dto.amountMinor}) exceeds remaining refund capacity ` +
+                        `(${remainingCapacity} of ${totalPaidMinor} total paid)`);
+                }
+                const primaryPaymentId = paidPayments[0].id;
+                const newRefund = manager.create(booking_refund_entity_1.BookingRefundEntity, {
+                    tenantId,
+                    branchId: booking.branchId,
+                    bookingId,
+                    paymentId: primaryPaymentId,
+                    status: 'pending',
+                    reason: dto.reason,
+                    amountMinor: dto.amountMinor,
+                    currency,
+                    reasonNotes: dto.reasonNotes ?? null,
+                    idempotencyKey: dto.idempotencyKey,
+                    createdById: actorId,
+                });
+                const savedRefund = await manager.save(newRefund);
+                const allocations = [];
+                let remaining = dto.amountMinor;
+                for (const payment of paidPayments) {
+                    if (remaining <= 0)
+                        break;
+                    const refundable = payment.amountMinor - payment.amountRefundedMinor;
+                    if (refundable <= 0)
+                        continue;
+                    const allocAmount = Math.min(remaining, refundable);
+                    allocations.push({ paymentId: payment.id, allocAmount });
+                    remaining -= allocAmount;
+                }
+                if (remaining !== 0) {
+                    throw new Error(`BUG: Allocation remainder ${remaining} ≠ 0 after distributing ${dto.amountMinor}`);
+                }
+                const allocSum = allocations.reduce((s, a) => s + a.allocAmount, 0);
+                if (allocSum !== dto.amountMinor) {
+                    throw new Error(`BUG: Allocation sum ${allocSum} ≠ dto.amountMinor ${dto.amountMinor}`);
+                }
+                for (const alloc of allocations) {
+                    const allocRow = manager.create(booking_refund_payment_allocation_entity_1.BookingRefundPaymentAllocationEntity, {
+                        tenantId,
+                        bookingRefundId: savedRefund.id,
+                        bookingPaymentId: alloc.paymentId,
+                        amountMinor: alloc.allocAmount,
+                    });
+                    await manager.save(allocRow);
+                    const payment = paidPayments.find((p) => p.id === alloc.paymentId);
+                    await manager.update(booking_payment_entity_1.BookingPaymentEntity, { id: alloc.paymentId, tenantId }, {
+                        amountRefundedMinor: payment.amountRefundedMinor + alloc.allocAmount,
+                        updatedAt: new Date(),
+                    });
+                }
+                const totalRefundedAfter = committedRefundMinor + dto.amountMinor;
                 await manager.update(booking_entity_1.BookingEntity, { id: bookingId, tenantId }, {
-                    status: 'refunded',
+                    amountRefundedMinor: totalRefundedAfter,
                     updatedAt: new Date(),
                     updatedById: actorId,
                 });
+                const isFullRefund = totalRefundedAfter >= totalPaidMinor;
+                if (isFullRefund) {
+                    await manager.update(booking_entity_1.BookingEntity, { id: bookingId, tenantId }, {
+                        status: 'refunded',
+                        updatedAt: new Date(),
+                        updatedById: actorId,
+                    });
+                }
+                return {
+                    refund: savedRefund,
+                    previousStatus: booking.status,
+                    newStatus: isFullRefund ? 'refunded' : booking.status,
+                    totalRefundedAfter,
+                    totalPaidMinor,
+                    currency,
+                };
+            });
+        }
+        catch (err) {
+            const msg = err.message ?? '';
+            const isUniqueViolation = msg.includes('uq_booking_refunds_idempotency') ||
+                (err.code === '23505' &&
+                    (msg.includes('idempotency_key') || msg.includes('idempotency')));
+            if (isUniqueViolation) {
+                this.logger.warn(`processRefund: 23505 race on idempotency key ${dto.idempotencyKey} — ` +
+                    `loading winner row and returning idempotent result`);
+                const winner = await this.dataSource
+                    .getRepository(booking_refund_entity_1.BookingRefundEntity)
+                    .findOne({ where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false } });
+                if (!winner) {
+                    throw new common_1.ConflictException(`Concurrent refund with the same idempotency key. Please retry.`);
+                }
+                return winner;
             }
-            return {
-                refund: savedRefund,
-                previousStatus: booking.status,
-                newStatus: isFullRefund ? 'refunded' : booking.status,
-                totalAfter,
-                availableForRefund,
-                currency: payment.currency,
-            };
-        });
+            throw err;
+        }
         await this.logRepository.insert({
             tenantId,
             bookingId,
             action: 'refunded',
             actorId,
             actorType: 'user',
-            previousStatus: result.previousStatus,
-            newStatus: result.newStatus,
-            note: `Refund ${result.refund.id}: ${dto.amountMinor} ${result.currency}`,
+            previousStatus: refundResult.previousStatus,
+            newStatus: refundResult.newStatus,
+            note: `Refund ${refundResult.refund.id}: ${dto.amountMinor} ${refundResult.currency}`,
         });
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.REFUNDED, {
             tenantId,
             bookingId,
-            bookingRefundId: result.refund.id,
+            bookingRefundId: refundResult.refund.id,
             amountMinor: dto.amountMinor,
-            currency: result.currency,
+            currency: refundResult.currency,
             actorId,
             timestamp: new Date().toISOString(),
         });
-        this.logger.log(`processRefund: booking ${bookingId} — refund ${result.refund.id} ` +
-            `(${dto.amountMinor} ${result.currency}) status=${result.newStatus} — tenant ${tenantId}`);
-        return result.refund;
+        this.logger.log(`processRefund: booking ${bookingId} — refund ${refundResult.refund.id} ` +
+            `(${dto.amountMinor} ${refundResult.currency}) status=${refundResult.newStatus} ` +
+            `totalPaid=${refundResult.totalPaidMinor} totalRefunded=${refundResult.totalRefundedAfter} ` +
+            `— tenant ${tenantId}`);
+        return refundResult.refund;
     }
 };
 exports.BookingService = BookingService;

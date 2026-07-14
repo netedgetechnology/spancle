@@ -120,10 +120,15 @@ let BookingFinanceListener = BookingFinanceListener_1 = class BookingFinanceList
             }
             const allocations = await this.paymentRepository.findAllocationsByInvoice(ref.invoiceId, tenantId);
             if (!allocations.length) {
-                this.logger.warn(`onBookingRefunded: no payment allocations for invoice ${ref.invoiceId} — skip`);
+                this.logger.warn(`onBookingRefunded: no Finance payment allocations for invoice ${ref.invoiceId} — skip`);
                 return;
             }
-            const allocation = allocations[allocations.length - 1];
+            if (allocations.length > 1) {
+                this.logger.warn(`onBookingRefunded: invoice ${ref.invoiceId} has ${allocations.length} Finance payment ` +
+                    `allocations. Using first allocation (paymentId=${allocations[0].paymentId}). ` +
+                    `Full multi-Finance-payment refund support requires correlation field — see Batch 7.5D gap doc.`);
+            }
+            const allocation = allocations[0];
             await this.refundService.requestRefund({
                 paymentId: allocation.paymentId,
                 invoiceId: ref.invoiceId,

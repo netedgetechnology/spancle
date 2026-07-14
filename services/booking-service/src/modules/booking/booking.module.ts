@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BookingEntity }         from './entities/booking.entity';
 import { BookingPaymentEntity }  from './entities/booking-payment.entity';
 import { BookingRefundEntity }   from './entities/booking-refund.entity';
+import { BookingRefundPaymentAllocationEntity } from './entities/booking-refund-payment-allocation.entity';
 import { BookingLogEntity }      from './entities/booking-log.entity';
 
 import { BookingRepository } from './repositories/booking.repository';
@@ -28,6 +29,7 @@ import { PricingModule }            from '../pricing/pricing.module';
       BookingEntity,
       BookingPaymentEntity,
       BookingRefundEntity,
+      BookingRefundPaymentAllocationEntity,
       BookingLogEntity,
     ]),
     PricingModule,   // re-exports SlotModule — provides SlotRepository + PricingService

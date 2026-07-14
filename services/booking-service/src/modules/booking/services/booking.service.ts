@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -38,6 +39,7 @@ import type {
 } from '../dto/update-booking.dto';
 import { BookingRefundEntity } from '../entities/booking-refund.entity';
 import { BookingPaymentEntity } from '../entities/booking-payment.entity';
+import { BookingRefundPaymentAllocationEntity } from '../entities/booking-refund-payment-allocation.entity';
 
 /** Reservation TTL in minutes — configurable via BOOKING_RESERVATION_TTL_MINS */
 const DEFAULT_RESERVATION_TTL_MINS = 15;
@@ -955,19 +957,36 @@ export class BookingService {
   // ── Process Refund ────────────────────────────────────────────────────────
 
   /**
-   * Records a booking-level refund and emits BookingEvents.REFUNDED.
+   * Records a booking-level refund across ALL eligible paid payments and
+   * emits BookingEvents.REFUNDED.
    *
-   * Eligibility: only 'cancelled' and 'no_show' bookings are refund-eligible
-   * (state machine: cancelled → refunded, no_show → refunded).
+   * Defects corrected (Batch 7.5D):
+   *   1. Capacity is now aggregated across ALL paid payments, not just the
+   *      most-recent one.
+   *   2. Full-refund condition: totalRefundedAfter >= totalPaidMinor
+   *      (not compared against remainingCapacity).
+   *   3. Refund is allocated across multiple payments deterministically
+   *      (ascending by id) via booking_refund_payment_allocations.
+   *   4. Concurrent same-key requests: raw 23505 is caught and resolved
+   *      to a clean idempotent return.
    *
-   * Idempotency: duplicate requests with the same idempotencyKey return the
-   * existing BookingRefundEntity without creating a new row.
+   * Lock order (deterministic, no deadlock):
+   *   1. BookingEntity FOR UPDATE
+   *   2. ALL eligible BookingPaymentEntity rows FOR UPDATE (ascending by id)
    *
-   * Lock order:
-   *   1. BookingPaymentEntity FOR UPDATE  (capacity read + update)
-   *   2. BookingEntity FOR UPDATE         (amountRefundedMinor + status update)
+   * Capacity formula:
+   *   totalPaidMinor        = SUM(paidPayment.amountMinor)
+   *   committedRefundMinor  = SUM(booking_refunds.amountMinor)
+   *                           WHERE status IN ('pending','processed')
+   *   remainingCapacity     = totalPaidMinor - committedRefundMinor
+   *   Guard: dto.amountMinor <= remainingCapacity
    *
-   * BookingEvents.REFUNDED is emitted ONLY after all DB writes commit.
+   * Full-refund condition:
+   *   totalRefundedAfter = committedRefundMinor + dto.amountMinor
+   *   isFullRefund       = totalRefundedAfter >= totalPaidMinor
+   *
+   * BookingEvents.REFUNDED emitted ONLY after transaction commits.
+   * Idempotent retry: returns existing row, no DB mutation, no event.
    */
   async processRefund(
     bookingId: string,
@@ -979,163 +998,267 @@ export class BookingService {
       throw new BadRequestException('amountMinor must be a positive integer (minor units)');
     }
 
-    // Idempotency check outside transaction — returns existing without DB write
-    const existing = await this.dataSource.getRepository(BookingRefundEntity).findOne({
-      where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false },
-    });
-    if (existing) {
+    // ── Pre-transaction idempotency check ─────────────────────────────────
+    // If the key is already committed, return the existing row immediately.
+    // This is the normal idempotent-retry path (no DB mutation, no event).
+    const existingPre = await this.dataSource
+      .getRepository(BookingRefundEntity)
+      .findOne({ where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false } });
+    if (existingPre) {
       this.logger.warn(
-        `processRefund: idempotency hit for key ${dto.idempotencyKey} → ${existing.id}`,
+        `processRefund: idempotency hit (pre-tx) key=${dto.idempotencyKey} → ${existingPre.id}`,
       );
-      return existing;
+      return existingPre;
     }
 
-    const result = await this.dataSource.transaction(async (manager) => {
-      // ── 1. Lock payment row first ─────────────────────────────────────
-      const payment = await manager
-        .createQueryBuilder(BookingPaymentEntity, 'p')
-        .setLock('pessimistic_write')
-        .where('p.bookingId = :bookingId', { bookingId })
-        .andWhere('p.tenantId   = :tenantId',   { tenantId })
-        .andWhere("p.status     = 'paid'")
-        .andWhere('p.isDeleted  = false')
-        .orderBy('p.createdAt', 'DESC')
-        .getOne();
+    let refundResult: {
+      refund:           BookingRefundEntity;
+      previousStatus:   string;
+      newStatus:        string;
+      totalRefundedAfter: number;
+      totalPaidMinor:   number;
+      currency:         string;
+    };
 
-      if (!payment) {
-        throw new UnprocessableEntityException(
-          `No paid payment found for booking ${bookingId}`,
-        );
-      }
+    try {
+      refundResult = await this.dataSource.transaction(async (manager) => {
 
-      const availableForRefund = payment.amountMinor - payment.amountRefundedMinor;
-      if (dto.amountMinor > availableForRefund) {
-        throw new BadRequestException(
-          `Refund amount (${dto.amountMinor}) exceeds available balance (${availableForRefund})`,
-        );
-      }
+        // ── 1. Lock BookingEntity first ────────────────────────────────
+        const booking = await manager
+          .createQueryBuilder(BookingEntity, 'b')
+          .setLock('pessimistic_write')
+          .where('b.id        = :id',        { id: bookingId })
+          .andWhere('b.tenantId = :tenantId', { tenantId })
+          .andWhere('b.isDeleted = false')
+          .getOne();
 
-      // ── 2. Lock booking row second ────────────────────────────────────
-      const booking = await manager
-        .createQueryBuilder(BookingEntity, 'b')
-        .setLock('pessimistic_write')
-        .where('b.id       = :id',         { id: bookingId })
-        .andWhere('b.tenantId = :tenantId', { tenantId })
-        .andWhere('b.isDeleted = false')
-        .getOne();
+        if (!booking) {
+          throw new NotFoundException(`Booking ${bookingId} not found`);
+        }
+        if (booking.status !== 'cancelled' && booking.status !== 'no_show') {
+          throw new UnprocessableEntityException(
+            `Booking ${bookingId} status "${booking.status}" is not eligible for refund. ` +
+            `Only cancelled and no_show bookings can be refunded.`,
+          );
+        }
 
-      if (!booking) {
-        throw new NotFoundException(`Booking ${bookingId} not found`);
-      }
+        // ── 2. Load ALL paid payments (IDs only) then lock in id order ─
+        // Consistent ascending-id lock order prevents deadlock.
+        const paidPaymentIds = await manager
+          .createQueryBuilder(BookingPaymentEntity, 'p')
+          .select('p.id', 'id')
+          .where('p.bookingId  = :bookingId', { bookingId })
+          .andWhere('p.tenantId = :tenantId',  { tenantId })
+          .andWhere("p.status   = 'paid'")
+          .andWhere('p.isDeleted = false')
+          .orderBy('p.id', 'ASC')   // deterministic lock order
+          .getRawMany<{ id: string }>();
 
-      // Validate refund-eligible state (derived from actual state machine)
-      if (booking.status !== 'cancelled' && booking.status !== 'no_show') {
-        throw new UnprocessableEntityException(
-          `Booking ${bookingId} status "${booking.status}" is not eligible for refund. ` +
-          `Only cancelled and no_show bookings can be refunded.`,
-        );
-      }
+        if (!paidPaymentIds.length) {
+          throw new UnprocessableEntityException(
+            `No paid payments found for booking ${bookingId}`,
+          );
+        }
 
-      // Cumulative capacity check under lock
-      const sumRow = await manager
-        .createQueryBuilder(BookingRefundEntity, 'r')
-        .select('COALESCE(SUM(r.amountMinor), 0)::int', 'total')
-        .where('r.bookingId = :bookingId', { bookingId })
-        .andWhere('r.tenantId  = :tenantId',  { tenantId })
-        .andWhere("r.status    IN ('pending', 'processed')")
-        .andWhere('r.isDeleted = false')
-        .getRawOne<{ total: string }>();
+        // Lock each payment row FOR UPDATE in deterministic id order
+        const paidPayments: BookingPaymentEntity[] = [];
+        for (const { id } of paidPaymentIds) {
+          const locked = await manager
+            .createQueryBuilder(BookingPaymentEntity, 'p')
+            .setLock('pessimistic_write')
+            .where('p.id       = :id',       { id })
+            .andWhere('p.tenantId = :tenantId', { tenantId })
+            .getOne();
+          if (locked) paidPayments.push(locked);
+        }
 
-      const alreadyMinor = parseInt(sumRow?.total ?? '0', 10);
-      if (alreadyMinor + dto.amountMinor > availableForRefund) {
-        throw new BadRequestException(
-          `Cumulative refunds (${alreadyMinor + dto.amountMinor}) would exceed ` +
-          `available refund capacity (${availableForRefund})`,
-        );
-      }
+        // ── 3. Booking-level capacity ─────────────────────────────────
+        //   totalPaidMinor = SUM(payment.amountMinor) across ALL paid payments
+        const totalPaidMinor = paidPayments.reduce((s, p) => s + p.amountMinor, 0);
+        const currency = paidPayments[0]!.currency;
 
-      // ── 3. Persist BookingRefundEntity ───────────────────────────────
-      const newRefund = manager.create(BookingRefundEntity, {
-        tenantId,
-        branchId:       booking.branchId,
-        bookingId,
-        paymentId:      payment.id,
-        status:         'pending',
-        reason:         dto.reason,
-        amountMinor:    dto.amountMinor,
-        currency:       payment.currency,
-        reasonNotes:    dto.reasonNotes ?? null,
-        idempotencyKey: dto.idempotencyKey,
-        createdById:    actorId,
-      });
-      const savedRefund = await manager.save(newRefund);
+        //   committedRefundMinor = SUM of non-failed/rejected booking refunds
+        const sumRow = await manager
+          .createQueryBuilder(BookingRefundEntity, 'r')
+          .select('COALESCE(SUM(r.amountMinor), 0)::int', 'total')
+          .where('r.bookingId  = :bookingId', { bookingId })
+          .andWhere('r.tenantId = :tenantId',  { tenantId })
+          .andWhere("r.status   IN ('pending', 'processed')")
+          .andWhere('r.isDeleted = false')
+          .getRawOne<{ total: string }>();
+        const committedRefundMinor = parseInt(sumRow?.total ?? '0', 10);
 
-      // ── 4. Update BookingPaymentEntity.amountRefundedMinor ───────────
-      await manager.update(BookingPaymentEntity, { id: payment.id, tenantId }, {
-        amountRefundedMinor: payment.amountRefundedMinor + dto.amountMinor,
-        updatedAt:           new Date(),
-      });
+        const remainingCapacity = totalPaidMinor - committedRefundMinor;
+        if (dto.amountMinor > remainingCapacity) {
+          throw new BadRequestException(
+            `Refund amount (${dto.amountMinor}) exceeds remaining refund capacity ` +
+            `(${remainingCapacity} of ${totalPaidMinor} total paid)`,
+          );
+        }
 
-      // ── 5. Update BookingEntity.amountRefundedMinor ──────────────────
-      const newTotalRefunded = booking.amountRefundedMinor + dto.amountMinor;
-      await manager.update(BookingEntity, { id: bookingId, tenantId }, {
-        amountRefundedMinor: newTotalRefunded,
-        updatedAt:           new Date(),
-        updatedById:         actorId,
-      });
-
-      // ── 6. Status transition ─────────────────────────────────────────
-      // → 'refunded' only when cumulative refunds cover the full paid amount.
-      // Partial refund: booking remains 'cancelled' or 'no_show'.
-      const totalAfter = alreadyMinor + dto.amountMinor;
-      const isFullRefund = totalAfter >= availableForRefund;
-      if (isFullRefund) {
-        await manager.update(BookingEntity, { id: bookingId, tenantId }, {
-          status:      'refunded',
-          updatedAt:   new Date(),
-          updatedById: actorId,
+        // ── 4. Persist BookingRefundEntity ────────────────────────────
+        // primaryPaymentId = first paid payment (for the legacy paymentId column)
+        const primaryPaymentId = paidPayments[0]!.id;
+        const newRefund = manager.create(BookingRefundEntity, {
+          tenantId,
+          branchId:       booking.branchId,
+          bookingId,
+          paymentId:      primaryPaymentId,
+          status:         'pending',
+          reason:         dto.reason,
+          amountMinor:    dto.amountMinor,
+          currency,
+          reasonNotes:    dto.reasonNotes ?? null,
+          idempotencyKey: dto.idempotencyKey,
+          createdById:    actorId,
         });
+        const savedRefund = await manager.save(newRefund);
+
+        // ── 5. Allocate refund across payments (ascending id order) ───
+        // For each payment compute paymentRefundableMinor and fill from it
+        // until dto.amountMinor is exhausted. Deterministic: ascending id.
+        const allocations: { paymentId: string; allocAmount: number }[] = [];
+        let remaining = dto.amountMinor;
+
+        for (const payment of paidPayments) {
+          if (remaining <= 0) break;
+          const refundable = payment.amountMinor - payment.amountRefundedMinor;
+          if (refundable <= 0) continue;
+          const allocAmount = Math.min(remaining, refundable);
+          allocations.push({ paymentId: payment.id, allocAmount });
+          remaining -= allocAmount;
+        }
+
+        if (remaining !== 0) {
+          // Should never happen — guard above ensures dto.amountMinor <= remainingCapacity
+          throw new Error(
+            `BUG: Allocation remainder ${remaining} ≠ 0 after distributing ${dto.amountMinor}`,
+          );
+        }
+
+        // Assert allocation integrity
+        const allocSum = allocations.reduce((s, a) => s + a.allocAmount, 0);
+        if (allocSum !== dto.amountMinor) {
+          throw new Error(
+            `BUG: Allocation sum ${allocSum} ≠ dto.amountMinor ${dto.amountMinor}`,
+          );
+        }
+
+        // Insert allocation rows and update each payment's amountRefundedMinor
+        for (const alloc of allocations) {
+          const allocRow = manager.create(BookingRefundPaymentAllocationEntity, {
+            tenantId,
+            bookingRefundId:  savedRefund.id,
+            bookingPaymentId: alloc.paymentId,
+            amountMinor:      alloc.allocAmount,
+          });
+          await manager.save(allocRow);
+
+          // Update payment.amountRefundedMinor atomically
+          const payment = paidPayments.find((p) => p.id === alloc.paymentId)!;
+          await manager.update(BookingPaymentEntity, { id: alloc.paymentId, tenantId }, {
+            amountRefundedMinor: payment.amountRefundedMinor + alloc.allocAmount,
+            updatedAt:           new Date(),
+          });
+        }
+
+        // ── 6. Update BookingEntity.amountRefundedMinor ───────────────
+        const totalRefundedAfter = committedRefundMinor + dto.amountMinor;
+        await manager.update(BookingEntity, { id: bookingId, tenantId }, {
+          amountRefundedMinor: totalRefundedAfter,
+          updatedAt:           new Date(),
+          updatedById:         actorId,
+        });
+
+        // ── 7. Status transition ──────────────────────────────────────
+        // Full refund: totalRefundedAfter >= totalPaidMinor (NOT vs remainingCapacity)
+        // paid=100, prior=30, new=40 → totalAfter=70 < 100 → NOT full  ✅
+        // paid=100, prior=30, new=70 → totalAfter=100 >= 100 → full    ✅
+        const isFullRefund = totalRefundedAfter >= totalPaidMinor;
+        if (isFullRefund) {
+          await manager.update(BookingEntity, { id: bookingId, tenantId }, {
+            status:      'refunded',
+            updatedAt:   new Date(),
+            updatedById: actorId,
+          });
+        }
+
+        return {
+          refund:             savedRefund,
+          previousStatus:     booking.status,
+          newStatus:          isFullRefund ? 'refunded' : booking.status,
+          totalRefundedAfter,
+          totalPaidMinor,
+          currency,
+        };
+      });
+
+    } catch (err: unknown) {
+      // ── Idempotency race: catch 23505 on uq_booking_refunds_idempotency ─
+      // Two concurrent requests with the same key both pass the pre-tx check,
+      // both enter the transaction; the second hits the UNIQUE constraint.
+      // We catch it here, load the winner's row, and return it cleanly.
+      const msg = (err as Error).message ?? '';
+      const isUniqueViolation =
+        msg.includes('uq_booking_refunds_idempotency') ||
+        ((err as any).code === '23505' &&
+          (msg.includes('idempotency_key') || msg.includes('idempotency')));
+
+      if (isUniqueViolation) {
+        this.logger.warn(
+          `processRefund: 23505 race on idempotency key ${dto.idempotencyKey} — ` +
+          `loading winner row and returning idempotent result`,
+        );
+        const winner = await this.dataSource
+          .getRepository(BookingRefundEntity)
+          .findOne({ where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false } });
+        if (!winner) {
+          // Extremely rare: winner row was soft-deleted between the violation and this read.
+          throw new ConflictException(
+            `Concurrent refund with the same idempotency key. Please retry.`,
+          );
+        }
+        return winner;
       }
 
-      return {
-        refund:            savedRefund,
-        previousStatus:    booking.status,
-        newStatus:         isFullRefund ? 'refunded' : booking.status,
-        totalAfter,
-        availableForRefund,
-        currency:          payment.currency,
-      };
-    });
+      // Any other error (capacity exceeded, bad booking status, etc.) re-throws normally
+      throw err;
+    }
 
-    // Audit log — after commit
+    // ── Post-commit operations ────────────────────────────────────────────
+    // Audit log and event only fire when a NEW refund was created.
+
     await this.logRepository.insert({
       tenantId,
       bookingId,
       action:         'refunded',
       actorId,
       actorType:      'user',
-      previousStatus: result.previousStatus,
-      newStatus:      result.newStatus,
-      note: `Refund ${result.refund.id}: ${dto.amountMinor} ${result.currency}`,
+      previousStatus: refundResult.previousStatus,
+      newStatus:      refundResult.newStatus,
+      note: `Refund ${refundResult.refund.id}: ${dto.amountMinor} ${refundResult.currency}`,
     });
 
-    // BookingEvents.REFUNDED — emitted after successful persistence only
+    // BookingEvents.REFUNDED — emitted after successful persistence only.
+    // Idempotent retries (pre-tx or 23505 path) do NOT reach this line.
     await this.eventEmitter.emitAsync(BookingEvents.REFUNDED, {
       tenantId,
       bookingId,
-      bookingRefundId: result.refund.id,
+      bookingRefundId: refundResult.refund.id,
       amountMinor:     dto.amountMinor,
-      currency:        result.currency,
+      currency:        refundResult.currency,
       actorId,
       timestamp:       new Date().toISOString(),
     });
 
     this.logger.log(
-      `processRefund: booking ${bookingId} — refund ${result.refund.id} ` +
-      `(${dto.amountMinor} ${result.currency}) status=${result.newStatus} — tenant ${tenantId}`,
+      `processRefund: booking ${bookingId} — refund ${refundResult.refund.id} ` +
+      `(${dto.amountMinor} ${refundResult.currency}) status=${refundResult.newStatus} ` +
+      `totalPaid=${refundResult.totalPaidMinor} totalRefunded=${refundResult.totalRefundedAfter} ` +
+      `— tenant ${tenantId}`,
     );
 
-    return result.refund;
+    return refundResult.refund;
   }
 
 }

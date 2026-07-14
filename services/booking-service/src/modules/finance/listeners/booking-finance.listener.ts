@@ -254,9 +254,28 @@ export class BookingFinanceListener {
    *   UNIQUE (tenant_id, idempotency_key) on finance_refunds prevents duplicate
    *   Finance refunds for the same BookingRefundEntity.id.
    *
-   * Lookup path:
-   *   bookingId → InvoiceReference → invoiceId → PaymentAllocation → paymentId
-   *   Finance never reads from the `booking_refunds` table directly.
+   * ─────────────────────────────────────────────────────────────────────────
+   * KNOWN INTEGRATION LIMITATION (Batch 7.5D — blocking gap documented):
+   *
+   * Finance PaymentEntity has NO field linking it to BookingPaymentEntity.
+   * The booking_refund_payment_allocations table records which Booking payment
+   * received which portion of the refund, but there is no correlation field
+   * allowing Finance to resolve BookingPaymentEntity.id → Finance PaymentEntity.id.
+   *
+   * Until a correlation field (e.g. booking_payment_id on finance_payments, or
+   * a shared provider_payment_id lookup) is implemented, this handler:
+   *   - Uses the invoice allocation approach (resolves the Finance payment that
+   *     was allocated to this invoice — works correctly for single-payment bookings)
+   *   - Issues a SINGLE Finance refund for the full booking refund amount
+   *
+   * For multi-payment bookings where the Finance payment allocation covers the
+   * full booking refund amount, this works correctly.
+   * For split-Finance-payment bookings where multiple Finance payments were
+   * allocated, a future batch must implement the correlation field and issue
+   * per-Finance-payment refunds matching booking_refund_payment_allocations.
+   *
+   * This limitation is logged as a WARN when multiple Finance allocations exist.
+   * ─────────────────────────────────────────────────────────────────────────
    */
   @OnEvent(BOOKING_REFUNDED, { async: true })
   async onBookingRefunded(payload: {
@@ -282,19 +301,30 @@ export class BookingFinanceListener {
         return;
       }
 
-      // Find payment allocation(s) for this invoice — last allocation = most recent payment
+      // Find Finance payment allocations for this invoice (ORDER BY allocatedAt ASC)
       const allocations = await this.paymentRepository.findAllocationsByInvoice(
         ref.invoiceId, tenantId,
       );
       if (!allocations.length) {
         this.logger.warn(
-          `onBookingRefunded: no payment allocations for invoice ${ref.invoiceId} — skip`,
+          `onBookingRefunded: no Finance payment allocations for invoice ${ref.invoiceId} — skip`,
         );
         return;
       }
 
-      // Use the most recent allocation's payment as the refund source
-      const allocation = allocations[allocations.length - 1]!;
+      // Log a warning when multiple Finance payment allocations exist.
+      // In this case we use the FIRST allocation (earliest allocation).
+      // For single-payment bookings (the common case) this is always correct.
+      // Multi-Finance-payment support requires a correlation field — see above.
+      if (allocations.length > 1) {
+        this.logger.warn(
+          `onBookingRefunded: invoice ${ref.invoiceId} has ${allocations.length} Finance payment ` +
+          `allocations. Using first allocation (paymentId=${allocations[0]!.paymentId}). ` +
+          `Full multi-Finance-payment refund support requires correlation field — see Batch 7.5D gap doc.`,
+        );
+      }
+
+      const allocation = allocations[0]!;   // earliest allocation = primary Finance payment
 
       // requestRefund is idempotent via idempotencyKey = bkref_<bookingRefundId>
       await this.refundService.requestRefund(
