@@ -56,6 +56,11 @@ __decorate([
     __metadata("design:type", String)
 ], RefundEntity.prototype, "idempotencyKey", void 0);
 __decorate([
+    (0, typeorm_1.Index)({ unique: true, where: '"caller_idempotency_key" IS NOT NULL' }),
+    (0, typeorm_1.Column)({ name: 'caller_idempotency_key', type: 'varchar', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], RefundEntity.prototype, "callerIdempotencyKey", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'gateway_refund_id', type: 'varchar', length: 100, nullable: true }),
     __metadata("design:type", Object)
 ], RefundEntity.prototype, "gatewayRefundId", void 0);

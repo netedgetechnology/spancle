@@ -19,20 +19,16 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const invoice_service_1 = require("../services/invoice.service");
-const refund_service_1 = require("../services/refund.service");
 const invoice_repository_1 = require("../repositories/invoice.repository");
-const payment_repository_1 = require("../repositories/payment.repository");
-const payment_correlation_repository_1 = require("../repositories/payment-correlation.repository");
+const finance_booking_refund_job_service_1 = require("../services/finance-booking-refund-job.service");
 const BOOKING_CONFIRMED = 'spancle.booking.confirmed';
 const BOOKING_CANCELLED = 'spancle.booking.cancelled';
 const BOOKING_REFUNDED = 'spancle.booking.refunded';
 let BookingFinanceListener = BookingFinanceListener_1 = class BookingFinanceListener {
-    constructor(invoiceService, refundService, invoiceRepository, paymentRepository, correlationRepo, dataSource) {
+    constructor(invoiceService, invoiceRepository, jobService, dataSource) {
         this.invoiceService = invoiceService;
-        this.refundService = refundService;
         this.invoiceRepository = invoiceRepository;
-        this.paymentRepository = paymentRepository;
-        this.correlationRepo = correlationRepo;
+        this.jobService = jobService;
         this.dataSource = dataSource;
         this.logger = new common_1.Logger(BookingFinanceListener_1.name);
     }
@@ -114,74 +110,19 @@ let BookingFinanceListener = BookingFinanceListener_1 = class BookingFinanceList
     async onBookingRefunded(payload) {
         const { tenantId, bookingId, bookingRefundId, amountMinor, currency, actorId } = payload;
         try {
-            const ref = await this.invoiceRepository.findReference('booking', bookingId, tenantId);
-            if (!ref) {
-                this.logger.warn(`onBookingRefunded [${bookingRefundId}]: no Finance invoice for ` +
-                    `booking ${bookingId} — cannot create Finance refunds`);
-                return;
-            }
-            const allocRows = await this.dataSource.query(`SELECT booking_payment_id, amount_minor
-         FROM booking_refund_payment_allocations
-         WHERE tenant_id = $1 AND booking_refund_id = $2
-         ORDER BY booking_payment_id ASC`, [tenantId, bookingRefundId]);
-            if (!allocRows.length) {
-                this.logger.error(`onBookingRefunded [${bookingRefundId}]: no booking_refund_payment_allocations ` +
-                    `found for tenantId=${tenantId} bookingId=${bookingId} — aborting`);
-                return;
-            }
-            const allocSum = allocRows.reduce((s, r) => s + r.amount_minor, 0);
-            if (allocSum !== amountMinor) {
-                this.logger.error(`onBookingRefunded [${bookingRefundId}]: allocation sum ${allocSum} ≠ ` +
-                    `event amountMinor ${amountMinor} — invariant violation, aborting`);
-                return;
-            }
-            const correlationPlan = [];
-            for (const alloc of allocRows) {
-                const bookingPaymentId = alloc.booking_payment_id;
-                const allocationMinor = alloc.amount_minor;
-                const mappings = await this.correlationRepo.findByBookingPaymentId(bookingPaymentId, tenantId);
-                if (!mappings.length) {
-                    this.logger.error(`onBookingRefunded [${bookingRefundId}]: no explicit correlation found for ` +
-                        `tenantId=${tenantId} bookingId=${bookingId} bookingRefundId=${bookingRefundId} ` +
-                        `bookingPaymentId=${bookingPaymentId}. ` +
-                        `Create a mapping via POST /finance/admin/payment-correlations before retrying.`);
-                    return;
-                }
-                if (mappings.length > 1) {
-                    this.logger.error(`onBookingRefunded [${bookingRefundId}]: multiple Finance payment mappings ` +
-                        `(${mappings.length}) found for bookingPaymentId=${bookingPaymentId} ` +
-                        `tenantId=${tenantId}. Cannot determine which Finance payment to refund. ` +
-                        `Aborting all Finance refunds.`);
-                    return;
-                }
-                const financePaymentId = mappings[0].financePaymentId;
-                correlationPlan.push({
-                    bookingPaymentId,
-                    financePaymentId,
-                    allocationMinor,
-                    idempotencyKey: `bkref_${bookingRefundId}_${bookingPaymentId}`,
-                });
-            }
-            for (const plan of correlationPlan) {
-                await this.refundService.requestRefund({
-                    paymentId: plan.financePaymentId,
-                    invoiceId: ref.invoiceId,
-                    amountMinor: plan.allocationMinor,
-                    currency,
-                    idempotencyKey: plan.idempotencyKey,
-                    sourceType: 'booking',
-                    sourceId: bookingId,
-                }, tenantId, actorId);
-                this.logger.log(`onBookingRefunded [${bookingRefundId}]: Finance refund created — ` +
-                    `financePaymentId=${plan.financePaymentId} ` +
-                    `bookingPaymentId=${plan.bookingPaymentId} ` +
-                    `amount=${plan.allocationMinor} ${currency} — tenant ${tenantId}`);
-            }
-            this.logger.log(`onBookingRefunded [${bookingRefundId}]: ${correlationPlan.length} Finance ` +
-                `refund(s) issued totalling ${amountMinor} ${currency} — tenant ${tenantId}`);
+            const job = await this.jobService.enqueueBookingRefund({
+                tenantId,
+                bookingRefundId,
+                bookingId,
+                amountMinor,
+                currency,
+                actorId,
+            });
+            this.logger.log(`onBookingRefunded [${bookingRefundId}]: enqueued job ${job.id} ` +
+                `status=${job.status} — tenant ${tenantId}`);
         }
         catch (err) {
-            this.logger.error(`onBookingRefunded [${bookingRefundId}]: unexpected error — ${err.message}`, err.stack);
+            this.logger.error(`onBookingRefunded [${bookingRefundId}]: failed to enqueue — ${err.message}`, err.stack);
         }
     }
 };
@@ -206,12 +147,10 @@ __decorate([
 ], BookingFinanceListener.prototype, "onBookingRefunded", null);
 exports.BookingFinanceListener = BookingFinanceListener = BookingFinanceListener_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(5, (0, typeorm_1.InjectDataSource)()),
+    __param(3, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [invoice_service_1.InvoiceService,
-        refund_service_1.RefundService,
         invoice_repository_1.InvoiceRepository,
-        payment_repository_1.PaymentRepository,
-        payment_correlation_repository_1.PaymentCorrelationRepository,
+        finance_booking_refund_job_service_1.FinanceBookingRefundJobService,
         typeorm_2.DataSource])
 ], BookingFinanceListener);
 //# sourceMappingURL=booking-finance.listener.js.map

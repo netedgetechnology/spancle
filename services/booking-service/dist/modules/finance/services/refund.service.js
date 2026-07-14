@@ -109,6 +109,21 @@ let RefundService = RefundService_1 = class RefundService {
             throw new common_1.BadRequestException('amountMinor must be a positive integer (minor units)');
         }
         await this.periodService.assertOpen(tenantId, new Date());
+        if (dto.idempotencyKey) {
+            const existing = await this.refundRepository.findByCallerIdempotencyKey(dto.idempotencyKey, tenantId);
+            if (existing) {
+                if (existing.paymentId !== dto.paymentId ||
+                    existing.invoiceId !== dto.invoiceId ||
+                    existing.amountMinor !== dto.amountMinor ||
+                    existing.currency !== dto.currency) {
+                    throw new common_1.ConflictException(`Caller idempotency key "${dto.idempotencyKey}" already used for a different ` +
+                        `refund operation (paymentId/invoiceId/amount/currency mismatch). ` +
+                        `This key cannot be reused with different parameters.`);
+                }
+                this.logger.debug(`prepareRefund: callerIdempotencyKey hit "${dto.idempotencyKey}" → returning ${existing.id}`);
+                return existing;
+            }
+        }
         const refundNumber = await this.refundRepository.nextRefundNumber(tenantId);
         const refund = await this.dataSource.transaction(async (manager) => {
             const payment = await manager
@@ -150,7 +165,7 @@ let RefundService = RefundService_1 = class RefundService {
                 throw new common_1.BadRequestException(`Total active refunds (${alreadyActive + dto.amountMinor}) would exceed ` +
                     `invoice amountPaidMinor (${invoice.amountPaidMinor})`);
             }
-            const tmpKey = `tmp_${dto.idempotencyKey}`;
+            const tmpKey = `tmp_${Date.now()}_${Math.random()}`;
             const created = await this.refundRepository.create({
                 tenantId,
                 refundNumber,
@@ -160,6 +175,7 @@ let RefundService = RefundService_1 = class RefundService {
                 currency: dto.currency,
                 method: payment.method,
                 idempotencyKey: tmpKey,
+                callerIdempotencyKey: dto.idempotencyKey || undefined,
                 sourceType: dto.sourceType,
                 sourceId: dto.sourceId,
                 createdById: actorId,

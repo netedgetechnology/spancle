@@ -171,6 +171,33 @@ export class RefundService {
     // Period check — read-only, before tx
     await this.periodService.assertOpen(tenantId, new Date());
 
+    // ── Caller idempotency pre-check ─────────────────────────────────────────
+    // If a callerIdempotencyKey is provided, check for an existing refund first.
+    if (dto.idempotencyKey) {
+      const existing = await this.refundRepository.findByCallerIdempotencyKey(
+        dto.idempotencyKey, tenantId,
+      );
+      if (existing) {
+        // Validate immutable operation identity
+        if (
+          existing.paymentId  !== dto.paymentId ||
+          existing.invoiceId  !== dto.invoiceId  ||
+          existing.amountMinor !== dto.amountMinor ||
+          existing.currency   !== dto.currency
+        ) {
+          throw new ConflictException(
+            `Caller idempotency key "${dto.idempotencyKey}" already used for a different ` +
+            `refund operation (paymentId/invoiceId/amount/currency mismatch). ` +
+            `This key cannot be reused with different parameters.`,
+          );
+        }
+        this.logger.debug(
+          `prepareRefund: callerIdempotencyKey hit "${dto.idempotencyKey}" → returning ${existing.id}`,
+        );
+        return existing;
+      }
+    }
+
     const refundNumber = await this.refundRepository.nextRefundNumber(tenantId);
 
     const refund = await this.dataSource.transaction(async (manager) => {
@@ -234,27 +261,28 @@ export class RefundService {
       }
 
       // Insert RefundEntity with status = 'pending'
-      // idempotencyKey = ref_<refund.id> but we don't have refund.id yet.
-      // Use a temporary key; we update it immediately after insert.
-      const tmpKey = `tmp_${dto.idempotencyKey}`;
+      // idempotencyKey = ref_<refund.id> (gateway key) — set after insert
+      // callerIdempotencyKey = dto.idempotencyKey (upstream business key) — stored immediately
+      const tmpKey = `tmp_${Date.now()}_${Math.random()}`;
       const created = await this.refundRepository.create(
         {
           tenantId,
           refundNumber,
-          paymentId:    dto.paymentId,
-          invoiceId:    dto.invoiceId,
-          amountMinor:  dto.amountMinor,
-          currency:     dto.currency,
-          method:       payment.method,
-          idempotencyKey: tmpKey,
-          sourceType:   dto.sourceType,
-          sourceId:     dto.sourceId,
-          createdById:  actorId,
+          paymentId:           dto.paymentId,
+          invoiceId:           dto.invoiceId,
+          amountMinor:         dto.amountMinor,
+          currency:            dto.currency,
+          method:              payment.method,
+          idempotencyKey:      tmpKey,
+          callerIdempotencyKey: dto.idempotencyKey || undefined,
+          sourceType:          dto.sourceType,
+          sourceId:            dto.sourceId,
+          createdById:         actorId,
         },
         manager,
       );
 
-      // Set stable idempotency key = ref_<refund.id>
+      // Set stable gateway idempotency key = ref_<refund.id>
       const stableKey = `ref_${created.id}`;
       await manager.update(RefundEntity, { id: created.id, tenantId }, {
         idempotencyKey: stableKey,

@@ -19,6 +19,7 @@ const payment_entity_1 = require("./entities/payment.entity");
 const dispute_entity_1 = require("./entities/dispute.entity");
 const refund_entity_1 = require("./entities/refund.entity");
 const booking_payment_finance_payment_map_entity_1 = require("./entities/booking-payment-finance-payment-map.entity");
+const finance_booking_refund_job_entity_1 = require("./entities/finance-booking-refund-job.entity");
 const accounting_period_repository_1 = require("./repositories/accounting-period.repository");
 const chart_of_account_repository_1 = require("./repositories/chart-of-account.repository");
 const journal_repository_1 = require("./repositories/journal.repository");
@@ -28,6 +29,7 @@ const payment_repository_1 = require("./repositories/payment.repository");
 const dispute_repository_1 = require("./repositories/dispute.repository");
 const refund_repository_1 = require("./repositories/refund.repository");
 const payment_correlation_repository_1 = require("./repositories/payment-correlation.repository");
+const finance_booking_refund_job_repository_1 = require("./repositories/finance-booking-refund-job.repository");
 const accounting_period_service_1 = require("./services/accounting-period.service");
 const double_entry_service_1 = require("./services/double-entry.service");
 const tax_resolver_service_1 = require("./services/tax-resolver.service");
@@ -37,12 +39,14 @@ const payment_service_1 = require("./services/payment.service");
 const dispute_service_1 = require("./services/dispute.service");
 const refund_service_1 = require("./services/refund.service");
 const payment_correlation_service_1 = require("./services/payment-correlation.service");
+const finance_booking_refund_job_service_1 = require("./services/finance-booking-refund-job.service");
 const finance_admin_controller_1 = require("./controllers/finance-admin.controller");
 const invoice_admin_controller_1 = require("./controllers/invoice-admin.controller");
 const payment_admin_controller_1 = require("./controllers/payment-admin.controller");
 const dispute_admin_controller_1 = require("./controllers/dispute-admin.controller");
 const refund_admin_controller_1 = require("./controllers/refund-admin.controller");
 const payment_correlation_admin_controller_1 = require("./controllers/payment-correlation-admin.controller");
+const finance_booking_refund_job_admin_controller_1 = require("./controllers/finance-booking-refund-job-admin.controller");
 const booking_finance_listener_1 = require("./listeners/booking-finance.listener");
 let FinanceModule = class FinanceModule {
 };
@@ -66,6 +70,7 @@ exports.FinanceModule = FinanceModule = __decorate([
                 refund_entity_1.RefundEntity,
                 refund_entity_1.RefundLineAllocationEntity,
                 booking_payment_finance_payment_map_entity_1.BookingPaymentFinancePaymentMapEntity,
+                finance_booking_refund_job_entity_1.FinanceBookingRefundJobEntity,
             ]),
         ],
         controllers: [
@@ -75,6 +80,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             dispute_admin_controller_1.DisputeAdminController,
             refund_admin_controller_1.RefundAdminController,
             payment_correlation_admin_controller_1.PaymentCorrelationAdminController,
+            finance_booking_refund_job_admin_controller_1.FinanceBookingRefundJobAdminController,
         ],
         providers: [
             accounting_period_repository_1.AccountingPeriodRepository,
@@ -86,6 +92,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             dispute_repository_1.DisputeRepository,
             refund_repository_1.RefundRepository,
             payment_correlation_repository_1.PaymentCorrelationRepository,
+            finance_booking_refund_job_repository_1.FinanceBookingRefundJobRepository,
             accounting_period_service_1.AccountingPeriodService,
             double_entry_service_1.DoubleEntryService,
             tax_resolver_service_1.TaxResolver,
@@ -95,6 +102,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             dispute_service_1.DisputeService,
             refund_service_1.RefundService,
             payment_correlation_service_1.PaymentCorrelationService,
+            finance_booking_refund_job_service_1.FinanceBookingRefundJobService,
             booking_finance_listener_1.BookingFinanceListener,
         ],
         exports: [
@@ -107,6 +115,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             dispute_service_1.DisputeService,
             refund_service_1.RefundService,
             payment_correlation_service_1.PaymentCorrelationService,
+            finance_booking_refund_job_service_1.FinanceBookingRefundJobService,
             tax_rate_repository_1.TaxRateRepository,
             journal_repository_1.JournalRepository,
             chart_of_account_repository_1.ChartOfAccountRepository,
@@ -115,6 +124,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             dispute_repository_1.DisputeRepository,
             refund_repository_1.RefundRepository,
             payment_correlation_repository_1.PaymentCorrelationRepository,
+            finance_booking_refund_job_repository_1.FinanceBookingRefundJobRepository,
         ],
     })
 ], FinanceModule);

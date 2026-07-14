@@ -40,6 +40,7 @@ let RefundRepository = RefundRepository_1 = class RefundRepository {
             currency: input.currency,
             method: input.method,
             idempotencyKey: input.idempotencyKey,
+            callerIdempotencyKey: input.callerIdempotencyKey ?? null,
             status: 'pending',
             pendingAt: new Date(),
             sourceType: input.sourceType ?? null,
@@ -54,6 +55,14 @@ let RefundRepository = RefundRepository_1 = class RefundRepository {
             const msg = err.message ?? '';
             if (msg.includes('uq_finance_refunds_idempotency')) {
                 throw new common_1.ConflictException(`Refund already exists for idempotency key: ${input.idempotencyKey}`);
+            }
+            if (msg.includes('uq_finance_refunds_caller_idempotency_key')) {
+                const winner = await manager.findOne(refund_entity_1.RefundEntity, {
+                    where: { tenantId: input.tenantId, callerIdempotencyKey: input.callerIdempotencyKey },
+                });
+                if (winner)
+                    return winner;
+                throw new common_1.ConflictException(`Concurrent refund with caller key "${input.callerIdempotencyKey}" — please retry`);
             }
             throw err;
         }
@@ -71,6 +80,10 @@ let RefundRepository = RefundRepository_1 = class RefundRepository {
         return this.scopedQb('r', tenantId)
             .andWhere('r.idempotencyKey = :idempotencyKey', { idempotencyKey })
             .getOne();
+    }
+    async findByCallerIdempotencyKey(callerIdempotencyKey, tenantId, manager) {
+        const repo = manager ? manager.getRepository(refund_entity_1.RefundEntity) : this.refundRepo;
+        return repo.findOne({ where: { tenantId, callerIdempotencyKey } });
     }
     async findByInvoice(invoiceId, tenantId) {
         return this.scopedQb('r', tenantId)

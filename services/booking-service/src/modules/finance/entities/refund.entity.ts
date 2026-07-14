@@ -85,6 +85,17 @@ export class RefundEntity {
   @Column({ name: 'idempotency_key', type: 'varchar', length: 64, nullable: false })
   idempotencyKey!: string;
 
+  /**
+   * Caller / business idempotency key supplied by the upstream operation.
+   * Format for Booking refunds: bkref_<bookingRefundId>_<bookingPaymentId>.
+   * Preserved unchanged from the caller. Used for replay-safe deduplication
+   * independent of the gateway key (idempotencyKey). Nullable for legacy rows.
+   * UNIQUE (tenant_id, caller_idempotency_key) WHERE NOT NULL (migration 017).
+   */
+  @Index({ unique: true, where: '"caller_idempotency_key" IS NOT NULL' })
+  @Column({ name: 'caller_idempotency_key', type: 'varchar', length: 255, nullable: true })
+  callerIdempotencyKey!: string | null;
+
   /** Gateway-assigned refund ID. Set after Phase B. Null for cash/manual. */
   @Column({ name: 'gateway_refund_id', type: 'varchar', length: 100, nullable: true })
   gatewayRefundId!: string | null;

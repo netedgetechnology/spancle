@@ -9,17 +9,18 @@ import {
 } from '../entities/refund.entity';
 
 export interface CreateRefundInput {
-  tenantId:       string;
-  refundNumber:   string;
-  paymentId:      string;
-  invoiceId:      string;
-  amountMinor:    number;
-  currency:       string;
-  method:         string;
-  idempotencyKey: string;
-  sourceType?:    string;
-  sourceId?:      string;
-  createdById?:   string;
+  tenantId:             string;
+  refundNumber:         string;
+  paymentId:            string;
+  invoiceId:            string;
+  amountMinor:          number;
+  currency:             string;
+  method:               string;
+  idempotencyKey:       string;
+  callerIdempotencyKey?: string;   // bkref_* key from upstream caller
+  sourceType?:          string;
+  sourceId?:            string;
+  createdById?:         string;
 }
 
 @Injectable()
@@ -45,20 +46,21 @@ export class RefundRepository {
    */
   async create(input: CreateRefundInput, manager: EntityManager): Promise<RefundEntity> {
     const refund = manager.create(RefundEntity, {
-      tenantId:       input.tenantId,
-      refundNumber:   input.refundNumber,
-      paymentId:      input.paymentId,
-      invoiceId:      input.invoiceId,
-      amountMinor:    input.amountMinor,
-      currency:       input.currency,
-      method:         input.method,
-      idempotencyKey: input.idempotencyKey,
-      status:         'pending',
-      pendingAt:      new Date(),
-      sourceType:     input.sourceType ?? null,
-      sourceId:       input.sourceId   ?? null,
-      createdById:    input.createdById ?? null,
-      updatedById:    input.createdById ?? null,
+      tenantId:            input.tenantId,
+      refundNumber:        input.refundNumber,
+      paymentId:           input.paymentId,
+      invoiceId:           input.invoiceId,
+      amountMinor:         input.amountMinor,
+      currency:            input.currency,
+      method:              input.method,
+      idempotencyKey:      input.idempotencyKey,
+      callerIdempotencyKey: input.callerIdempotencyKey ?? null,
+      status:              'pending',
+      pendingAt:           new Date(),
+      sourceType:          input.sourceType ?? null,
+      sourceId:            input.sourceId   ?? null,
+      createdById:         input.createdById ?? null,
+      updatedById:         input.createdById ?? null,
     });
     try {
       return await manager.save(refund);
@@ -67,6 +69,16 @@ export class RefundRepository {
       if (msg.includes('uq_finance_refunds_idempotency')) {
         throw new ConflictException(
           `Refund already exists for idempotency key: ${input.idempotencyKey}`,
+        );
+      }
+      if (msg.includes('uq_finance_refunds_caller_idempotency_key')) {
+        // Concurrent race on callerIdempotencyKey — load winner and return
+        const winner = await manager.findOne(RefundEntity, {
+          where: { tenantId: input.tenantId, callerIdempotencyKey: input.callerIdempotencyKey },
+        });
+        if (winner) return winner;
+        throw new ConflictException(
+          `Concurrent refund with caller key "${input.callerIdempotencyKey}" — please retry`,
         );
       }
       throw err;
@@ -92,6 +104,15 @@ export class RefundRepository {
     return this.scopedQb('r', tenantId)
       .andWhere('r.idempotencyKey = :idempotencyKey', { idempotencyKey })
       .getOne();
+  }
+
+  async findByCallerIdempotencyKey(
+    callerIdempotencyKey: string,
+    tenantId:             string,
+    manager?:             import('typeorm').EntityManager,
+  ): Promise<RefundEntity | null> {
+    const repo = manager ? manager.getRepository(RefundEntity) : this.refundRepo;
+    return repo.findOne({ where: { tenantId, callerIdempotencyKey } });
   }
 
   async findByInvoice(invoiceId: string, tenantId: string): Promise<RefundEntity[]> {

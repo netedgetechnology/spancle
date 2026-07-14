@@ -37,6 +37,17 @@ let PaymentCorrelationService = PaymentCorrelationService_1 = class PaymentCorre
         if (!bkPayRows.length) {
             throw new common_1.BadRequestException(`Booking payment ${dto.bookingPaymentId} not found for tenant ${tenantId}`);
         }
+        const existingMappings = await this.correlationRepo.findByBookingPaymentId(dto.bookingPaymentId, tenantId);
+        if (existingMappings.length > 0) {
+            const exact = existingMappings.find((m) => m.financePaymentId === dto.financePaymentId);
+            if (exact) {
+                this.logger.debug(`createMapping: exact mapping ${exact.id} already exists — returning idempotent`);
+                return exact;
+            }
+            throw new common_1.ConflictException(`Booking payment ${dto.bookingPaymentId} is already mapped to Finance payment ` +
+                `${existingMappings[0].financePaymentId} (v1 invariant: one Booking payment → ` +
+                `one Finance payment). Cannot add a second mapping.`);
+        }
         const input = {
             bookingPaymentId: dto.bookingPaymentId,
             financePaymentId: dto.financePaymentId,
@@ -44,11 +55,26 @@ let PaymentCorrelationService = PaymentCorrelationService_1 = class PaymentCorre
             externalReference: dto.externalReference,
             metadata: dto.metadata ?? {},
         };
-        const mapping = await this.correlationRepo.createMapping(input, tenantId, actorId);
-        this.logger.log(`createMapping: ${mapping.id} ` +
-            `bookingPayment=${dto.bookingPaymentId} ↔ financePayment=${dto.financePaymentId} ` +
-            `source=${dto.correlationSource} — tenant ${tenantId}`);
-        return mapping;
+        try {
+            const mapping = await this.correlationRepo.createMapping(input, tenantId, actorId);
+            this.logger.log(`createMapping: ${mapping.id} ` +
+                `bookingPayment=${dto.bookingPaymentId} ↔ financePayment=${dto.financePaymentId} ` +
+                `source=${dto.correlationSource} — tenant ${tenantId}`);
+            return mapping;
+        }
+        catch (err) {
+            const msg = err.message ?? '';
+            if (msg.includes('uq_bpfpm_booking_payment') ||
+                (err.code === '23505' && msg.includes('booking_payment_id'))) {
+                const existing = await this.correlationRepo.findByBookingPaymentId(dto.bookingPaymentId, tenantId);
+                if (existing.length > 0 && existing[0].financePaymentId === dto.financePaymentId) {
+                    return existing[0];
+                }
+                throw new common_1.ConflictException(`Concurrent mapping conflict for Booking payment ${dto.bookingPaymentId}. ` +
+                    `It is already mapped to a different Finance payment.`);
+            }
+            throw err;
+        }
     }
     async findByBookingPaymentId(bookingPaymentId, tenantId) {
         return this.correlationRepo.findByBookingPaymentId(bookingPaymentId, tenantId);
