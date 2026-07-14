@@ -172,144 +172,176 @@ export class RefundService {
     await this.periodService.assertOpen(tenantId, new Date());
 
     // ── Caller idempotency pre-check ─────────────────────────────────────────
-    // If a callerIdempotencyKey is provided, check for an existing refund first.
     if (dto.idempotencyKey) {
       const existing = await this.refundRepository.findByCallerIdempotencyKey(
         dto.idempotencyKey, tenantId,
       );
       if (existing) {
-        // Validate immutable operation identity
-        if (
-          existing.paymentId  !== dto.paymentId ||
-          existing.invoiceId  !== dto.invoiceId  ||
-          existing.amountMinor !== dto.amountMinor ||
-          existing.currency   !== dto.currency
-        ) {
+        // Validate immutable identity using the authoritative shared validator
+        if (!this.refundRepository.validateImmutableIdentity(existing, dto)) {
           throw new ConflictException(
             `Caller idempotency key "${dto.idempotencyKey}" already used for a different ` +
-            `refund operation (paymentId/invoiceId/amount/currency mismatch). ` +
-            `This key cannot be reused with different parameters.`,
+            `refund operation (paymentId/invoiceId/amount/currency mismatch).`,
+          );
+        }
+        // Gate rejected refunds — they cannot re-enter gateway/accounting execution
+        if (existing.status === 'rejected') {
+          throw new ConflictException(
+            `Caller idempotency key "${dto.idempotencyKey}" belongs to rejected ` +
+            `refund ${existing.id}. Rejected refunds cannot be re-entered through ` +
+            `requestRefund. Admin intervention required.`,
           );
         }
         this.logger.debug(
-          `prepareRefund: callerIdempotencyKey hit "${dto.idempotencyKey}" → returning ${existing.id}`,
+          `prepareRefund: callerIdempotencyKey hit "${dto.idempotencyKey}" ` +
+          `status=${existing.status} → returning ${existing.id}`,
         );
         return existing;
       }
     }
 
+    // ── Phase A: Create pending row ───────────────────────────────────────────
+    // The transaction acquires payment + invoice locks, validates capacity,
+    // and inserts the RefundEntity.
+    //
+    // If the caller-idempotency unique constraint fires (23505), the transaction
+    // rolls back. TypeORM propagates the QueryFailedError out of the transaction
+    // callback. We then reload the winner OUTSIDE the transaction using
+    // DataSource.getRepository() — never inside the aborted PG transaction.
     const refundNumber = await this.refundRepository.nextRefundNumber(tenantId);
 
-    const refund = await this.dataSource.transaction(async (manager) => {
-      // Lock payment first (consistent with PaymentService.allocate)
-      const payment = await manager
-        .createQueryBuilder(PaymentEntity, 'p')
-        .setLock('pessimistic_write')
-        .where('p.id = :id',           { id: dto.paymentId })
-        .andWhere('p.tenantId = :tid', { tid: tenantId })
-        .getOne();
+    let refund: RefundEntity;
+    try {
+      refund = await this.dataSource.transaction(async (manager) => {
+        // Lock payment row first (consistent with Finance lock order)
+        const payment = await manager
+          .createQueryBuilder(PaymentEntity, 'p')
+          .setLock('pessimistic_write')
+          .where('p.id = :id',           { id: dto.paymentId })
+          .andWhere('p.tenantId = :tid', { tid: tenantId })
+          .getOne();
 
-      if (!payment) throw new BadRequestException(`Payment ${dto.paymentId} not found`);
-      if (payment.status !== 'captured' && payment.status !== 'chargedback') {
-        throw new BadRequestException(
-          `Cannot refund payment with status "${payment.status}"`,
+        if (!payment) throw new BadRequestException(`Payment ${dto.paymentId} not found`);
+        if (payment.status !== 'captured' && payment.status !== 'chargedback') {
+          throw new BadRequestException(
+            `Cannot refund payment with status "${payment.status}"`,
+          );
+        }
+
+        // Lock invoice second
+        const invoice = await manager
+          .createQueryBuilder(InvoiceEntity, 'inv')
+          .setLock('pessimistic_write')
+          .where('inv.id = :id',           { id: dto.invoiceId })
+          .andWhere('inv.tenantId = :tid', { tid: tenantId })
+          .getOne();
+
+        if (!invoice) throw new BadRequestException(`Invoice ${dto.invoiceId} not found`);
+        if (['voided', 'refunded', 'draft', 'issued', 'pending'].includes(invoice.status)) {
+          throw new BadRequestException(
+            `Cannot refund invoice with status "${invoice.status}"`,
+          );
+        }
+        if (invoice.amountPaidMinor <= 0) {
+          throw new BadRequestException('Invoice has no paid amount to refund');
+        }
+        if (dto.amountMinor > invoice.amountPaidMinor) {
+          throw new BadRequestException(
+            `Refund amount (${dto.amountMinor}) exceeds invoice amountPaidMinor (${invoice.amountPaidMinor})`,
+          );
+        }
+
+        const allocationExists = await manager.findOne(PaymentAllocationEntity, {
+          where: { paymentId: dto.paymentId, invoiceId: dto.invoiceId, tenantId },
+        });
+        if (!allocationExists) {
+          throw new BadRequestException(
+            `Payment ${dto.paymentId} has not been allocated to invoice ${dto.invoiceId}`,
+          );
+        }
+
+        const alreadyActive = await this.refundRepository.totalActiveRefundedAmount(
+          dto.invoiceId, tenantId, manager,
         );
-      }
+        if (alreadyActive + dto.amountMinor > invoice.amountPaidMinor) {
+          throw new BadRequestException(
+            `Total active refunds (${alreadyActive + dto.amountMinor}) would exceed ` +
+            `invoice amountPaidMinor (${invoice.amountPaidMinor})`,
+          );
+        }
 
-      // Lock invoice second
-      const invoice = await manager
-        .createQueryBuilder(InvoiceEntity, 'inv')
-        .setLock('pessimistic_write')
-        .where('inv.id = :id',           { id: dto.invoiceId })
-        .andWhere('inv.tenantId = :tid', { tid: tenantId })
-        .getOne();
-
-      if (!invoice) throw new BadRequestException(`Invoice ${dto.invoiceId} not found`);
-      if (['voided', 'refunded', 'draft', 'issued', 'pending'].includes(invoice.status)) {
-        throw new BadRequestException(
-          `Cannot refund invoice with status "${invoice.status}"`,
+        const tmpKey  = `tmp_${Date.now()}_${Math.random()}`;
+        const created = await this.refundRepository.create(
+          {
+            tenantId,
+            refundNumber,
+            paymentId:           dto.paymentId,
+            invoiceId:           dto.invoiceId,
+            amountMinor:         dto.amountMinor,
+            currency:            dto.currency,
+            method:              payment.method,
+            idempotencyKey:      tmpKey,
+            callerIdempotencyKey: dto.idempotencyKey || undefined,
+            sourceType:          dto.sourceType,
+            sourceId:            dto.sourceId,
+            createdById:         actorId,
+          },
+          manager,
         );
-      }
-      if (invoice.amountPaidMinor <= 0) {
-        throw new BadRequestException('Invoice has no paid amount to refund');
-      }
-      if (dto.amountMinor > invoice.amountPaidMinor) {
-        throw new BadRequestException(
-          `Refund amount (${dto.amountMinor}) exceeds invoice amountPaidMinor (${invoice.amountPaidMinor})`,
-        );
-      }
 
-      // Verify payment was actually allocated to this invoice
-      const allocationExists = await manager.findOne(PaymentAllocationEntity, {
-        where: { paymentId: dto.paymentId, invoiceId: dto.invoiceId, tenantId },
+        const stableKey = `ref_${created.id}`;
+        await manager.update(RefundEntity, { id: created.id, tenantId }, {
+          idempotencyKey: stableKey,
+          updatedById:    actorId,
+        });
+        created.idempotencyKey = stableKey;
+        return created;
       });
-      if (!allocationExists) {
-        throw new BadRequestException(
-          `Payment ${dto.paymentId} has not been allocated to invoice ${dto.invoiceId}`,
-        );
+
+    } catch (err: unknown) {
+      const msg  = (err as Error).message ?? '';
+      const code = (err as any).code;
+
+      // Caller-idempotency race: 23505 on uq_finance_refunds_caller_idempotency_key
+      // Reload the winner OUTSIDE the aborted transaction using DataSource directly.
+      if (
+        code === '23505' &&
+        (msg.includes('uq_finance_refunds_caller_idempotency_key') ||
+         (dto.idempotencyKey && msg.includes('caller_idempotency_key')))
+      ) {
+        const winner = await this.dataSource
+          .getRepository(RefundEntity)
+          .findOne({ where: { tenantId, callerIdempotencyKey: dto.idempotencyKey } });
+
+        if (!winner) {
+          throw new ConflictException(
+            `Concurrent caller-idempotency race on key "${dto.idempotencyKey}" — please retry`,
+          );
+        }
+        // Validate immutable identity using the shared authoritative validator
+        if (!this.refundRepository.validateImmutableIdentity(winner, dto)) {
+          throw new ConflictException(
+            `Caller idempotency key "${dto.idempotencyKey}" already used for a different ` +
+            `refund operation (concurrent race, paymentId/invoiceId/amount/currency mismatch).`,
+          );
+        }
+        // Rejected refund gate — same rule as the pre-check path
+        if (winner.status === 'rejected') {
+          throw new ConflictException(
+            `Caller idempotency key "${dto.idempotencyKey}" belongs to rejected ` +
+            `refund ${winner.id}. Rejected refunds cannot be re-entered through requestRefund.`,
+          );
+        }
+        return winner;
       }
 
-      // Capacity check: pending + processing + completed refunds for this invoice
-      const alreadyActive = await this.refundRepository.totalActiveRefundedAmount(
-        dto.invoiceId, tenantId, manager,
-      );
-      if (alreadyActive + dto.amountMinor > invoice.amountPaidMinor) {
-        throw new BadRequestException(
-          `Total active refunds (${alreadyActive + dto.amountMinor}) would exceed ` +
-          `invoice amountPaidMinor (${invoice.amountPaidMinor})`,
-        );
-      }
-
-      // Insert RefundEntity with status = 'pending'
-      // idempotencyKey = ref_<refund.id> (gateway key) — set after insert
-      // callerIdempotencyKey = dto.idempotencyKey (upstream business key) — stored immediately
-      const tmpKey = `tmp_${Date.now()}_${Math.random()}`;
-      const created = await this.refundRepository.create(
-        {
-          tenantId,
-          refundNumber,
-          paymentId:           dto.paymentId,
-          invoiceId:           dto.invoiceId,
-          amountMinor:         dto.amountMinor,
-          currency:            dto.currency,
-          method:              payment.method,
-          idempotencyKey:      tmpKey,
-          callerIdempotencyKey: dto.idempotencyKey || undefined,
-          sourceType:          dto.sourceType,
-          sourceId:            dto.sourceId,
-          createdById:         actorId,
-        },
-        manager,
-      );
-
-      // Set stable gateway idempotency key = ref_<refund.id>
-      const stableKey = `ref_${created.id}`;
-      await manager.update(RefundEntity, { id: created.id, tenantId }, {
-        idempotencyKey: stableKey,
-        updatedById:    actorId,
-      });
-      created.idempotencyKey = stableKey;
-
-      return created;
-    });
-
-    await this.eventEmitter.emitAsync(RefundEvents.PENDING, {
-      tenantId,
-      refundId:     refund.id,
-      refundNumber: refund.refundNumber,
-      paymentId:    refund.paymentId,
-      invoiceId:    refund.invoiceId,
-      amountMinor:  refund.amountMinor,
-      currency:     refund.currency,
-      status:       'pending',
-      timestamp:    new Date().toISOString(),
-    } as RefundPendingPayload);
+      throw err;
+    }
 
     this.logger.log(
       `prepareRefund: ${refundNumber} pending (${refund.amountMinor} ${refund.currency}) ` +
       `— payment ${refund.paymentId} → invoice ${refund.invoiceId} — tenant ${tenantId}`,
     );
-
     return refund;
   }
 
@@ -698,6 +730,20 @@ export class RefundService {
   ): Promise<RefundEntity> {
     // Phase A — create pending row, reserve capacity
     const pending = await this.prepareRefund(dto, tenantId, actorId);
+
+    // ── Explicit status branching — no gateway call for non-pending rows ──────
+    // prepareRefund() may return an existing row in any state.
+    // Only 'pending' rows proceed to Phase B (gateway call) and Phase C (accounting).
+    // 'processing' and 'completed' are already in Finance's committed refund workflow.
+    // 'rejected' is gated by prepareRefund() which throws ConflictException.
+    if (pending.status === 'processing' || pending.status === 'completed') {
+      this.logger.debug(
+        `requestRefund: refund ${pending.id} already in status="${pending.status}" ` +
+        `(callerKey=${dto.idempotencyKey}) — returning without gateway or accounting replay`,
+      );
+      return pending;
+    }
+    // status must be 'pending' here (rejected throws in prepareRefund)
 
     // Phase B — gateway call (outside DB transaction)
     let gatewayRefundId: string | null = null;

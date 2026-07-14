@@ -22,6 +22,19 @@ const finance_booking_refund_job_repository_1 = require("../repositories/finance
 const payment_correlation_repository_1 = require("../repositories/payment-correlation.repository");
 const invoice_repository_1 = require("../repositories/invoice.repository");
 const refund_service_1 = require("./refund.service");
+function parseLeaseDurationSeconds() {
+    const raw = process.env['FINANCE_BOOKING_REFUND_JOB_LEASE_SECONDS'];
+    if (!raw)
+        return 600;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0)
+        return 600;
+    return parsed;
+}
+const LEASE_DURATION_SECONDS = parseLeaseDurationSeconds();
+function staleBefore() {
+    return new Date(Date.now() - LEASE_DURATION_SECONDS * 1000);
+}
 const JOB_BATCH_SIZE = 20;
 let FinanceBookingRefundJobService = FinanceBookingRefundJobService_1 = class FinanceBookingRefundJobService {
     constructor(jobRepo, correlationRepo, invoiceRepo, refundService, dataSource) {
@@ -37,56 +50,46 @@ let FinanceBookingRefundJobService = FinanceBookingRefundJobService_1 = class Fi
     }
     async processDueJobs() {
         try {
-            const jobs = await this.jobRepo.findDueJobs(undefined, JOB_BATCH_SIZE);
+            const jobs = await this.jobRepo.findDueJobs(staleBefore(), undefined, JOB_BATCH_SIZE);
             if (!jobs.length)
                 return;
-            this.logger.log(`[cron:booking_refund_jobs] Processing ${jobs.length} job(s)`);
+            this.logger.log(`[cron] Processing ${jobs.length} booking-refund job(s)`);
             for (const job of jobs) {
                 try {
-                    await this.processJob(job.id, job.tenantId);
+                    await this.processJob(job.id, job.tenantId, 'scheduler');
                 }
                 catch (err) {
-                    this.logger.error(`[cron:booking_refund_jobs] job ${job.id} threw: ${err.message}`);
+                    this.logger.error(`[cron] job ${job.id} threw: ${err.message}`);
                 }
             }
         }
         catch (err) {
-            this.logger.error(`[cron:booking_refund_jobs] sweep error: ${err.message}`, err.stack);
+            this.logger.error(`[cron] sweep error: ${err.message}`, err.stack);
         }
     }
-    async processJob(jobId, tenantId) {
-        let job;
-        const claimed = await this.dataSource.transaction(async (manager) => {
-            const locked = await this.jobRepo.lockById(jobId, tenantId, manager);
-            if (!locked)
-                throw new Error(`Job ${jobId} not found`);
-            if (locked.status === 'completed') {
-                return { job: locked, proceed: false };
-            }
-            if (locked.status === 'processing') {
-                this.logger.warn(`processJob: job ${jobId} already in processing — skipping`);
-                return { job: locked, proceed: false };
-            }
-            if (locked.status !== 'pending' && locked.status !== 'retry') {
-                return { job: locked, proceed: false };
-            }
-            await this.jobRepo.markProcessing(jobId, tenantId, manager);
-            return { job: locked, proceed: true };
-        });
-        job = claimed.job;
-        if (!claimed.proceed)
-            return job;
+    async processJob(jobId, tenantId, source = 'scheduler') {
+        const { job: lockedJob, proceed, isConflict } = await this.dataSource.transaction(async (manager) => this.jobRepo.claimOrReclaim(jobId, tenantId, staleBefore(), source === 'admin', manager));
+        if (isConflict) {
+            throw new common_1.ConflictException(`Job ${jobId} is currently being processed by another worker. ` +
+                `It cannot be manually retried until the processing lease expires ` +
+                `(${LEASE_DURATION_SECONDS}s from when it was last claimed). ` +
+                `started_at=${lockedJob.startedAt?.toISOString() ?? 'null'}`);
+        }
+        if (!proceed) {
+            return lockedJob;
+        }
+        const job = await this.jobRepo.findByIdOrFail(jobId, tenantId);
         let plan;
         try {
             plan = await this.buildRefundPlan(job);
         }
         catch (err) {
-            await this.markJobRetry(jobId, tenantId, job.attemptCount + 1, err);
+            await this.markJobRetry(jobId, tenantId, job.attemptCount, err);
             return this.jobRepo.findByIdOrFail(jobId, tenantId);
         }
         try {
             for (const item of plan) {
-                await this.refundService.requestRefund({
+                const refund = await this.refundService.requestRefund({
                     paymentId: item.financePaymentId,
                     invoiceId: item.invoiceId,
                     amountMinor: item.allocationMinor,
@@ -95,6 +98,12 @@ let FinanceBookingRefundJobService = FinanceBookingRefundJobService_1 = class Fi
                     sourceType: 'booking',
                     sourceId: job.bookingId,
                 }, tenantId, job.actorId ?? 'system');
+                if (refund.status !== 'processing' && refund.status !== 'completed') {
+                    throw new Error(`Finance refund ${refund.id} for bookingPaymentId=${item.bookingPaymentId} ` +
+                        `is in status="${refund.status}" which is not a committed workflow state. ` +
+                        `Expected: processing or completed. ` +
+                        `For status="rejected": admin intervention required (callerKey=${item.callerIdempotencyKey}).`);
+                }
             }
             await this.dataSource.transaction(async (manager) => {
                 const locked = await this.jobRepo.lockById(jobId, tenantId, manager);
@@ -102,11 +111,11 @@ let FinanceBookingRefundJobService = FinanceBookingRefundJobService_1 = class Fi
                     await this.jobRepo.markCompleted(jobId, tenantId, manager);
                 }
             });
-            this.logger.log(`processJob: job ${jobId} completed — ${plan.length} Finance refund(s) ` +
-                `for bookingRefund=${job.bookingRefundId} — tenant ${tenantId}`);
+            this.logger.log(`processJob [${source}]: job ${jobId} completed — ` +
+                `${plan.length} Finance refund(s) for bookingRefundId=${job.bookingRefundId} — tenant ${tenantId}`);
         }
         catch (err) {
-            await this.markJobRetry(jobId, tenantId, job.attemptCount + 1, err);
+            await this.markJobRetry(jobId, tenantId, job.attemptCount, err);
         }
         return this.jobRepo.findByIdOrFail(jobId, tenantId);
     }
@@ -114,8 +123,7 @@ let FinanceBookingRefundJobService = FinanceBookingRefundJobService_1 = class Fi
         const { tenantId, bookingRefundId, bookingId, amountMinor } = job;
         const ref = await this.invoiceRepo.findReference('booking', bookingId, tenantId);
         if (!ref) {
-            throw new Error(`No Finance invoice found for booking ${bookingId} — ` +
-                `create an invoice before processing the refund job`);
+            throw new Error(`No Finance invoice for booking ${bookingId} — create invoice first`);
         }
         const allocRows = await this.dataSource.query(`SELECT booking_payment_id, amount_minor
        FROM booking_refund_payment_allocations
@@ -134,12 +142,11 @@ let FinanceBookingRefundJobService = FinanceBookingRefundJobService_1 = class Fi
             const mappings = await this.correlationRepo.findByBookingPaymentId(bookingPaymentId, tenantId);
             if (!mappings.length) {
                 throw new Error(`No Finance payment correlation for bookingPaymentId=${bookingPaymentId} ` +
-                    `tenantId=${tenantId}. ` +
-                    `Create via POST /finance/admin/payment-correlations before retrying.`);
+                    `tenantId=${tenantId}. Create via POST /finance/admin/payment-correlations.`);
             }
             if (mappings.length > 1) {
                 throw new Error(`Multiple Finance payment correlations (${mappings.length}) for ` +
-                    `bookingPaymentId=${bookingPaymentId} — invariant violation (migration 017 unique index)`);
+                    `bookingPaymentId=${bookingPaymentId} — invariant violation`);
             }
             plan.push({
                 bookingPaymentId,

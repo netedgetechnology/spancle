@@ -65,24 +65,35 @@ export class RefundRepository {
     try {
       return await manager.save(refund);
     } catch (err: unknown) {
-      const msg = (err as Error).message ?? '';
-      if (msg.includes('uq_finance_refunds_idempotency')) {
-        throw new ConflictException(
-          `Refund already exists for idempotency key: ${input.idempotencyKey}`,
-        );
-      }
-      if (msg.includes('uq_finance_refunds_caller_idempotency_key')) {
-        // Concurrent race on callerIdempotencyKey — load winner and return
-        const winner = await manager.findOne(RefundEntity, {
-          where: { tenantId: input.tenantId, callerIdempotencyKey: input.callerIdempotencyKey },
-        });
-        if (winner) return winner;
-        throw new ConflictException(
-          `Concurrent refund with caller key "${input.callerIdempotencyKey}" — please retry`,
-        );
-      }
+      // Do NOT reload here — the PostgreSQL transaction is aborted after any error.
+      // Querying the same manager inside an aborted transaction causes
+      // "current transaction is aborted" errors.
+      // Propagate the original error; caller (prepareRefund) catches and reloads
+      // outside the transaction using DataSource.getRepository().
       throw err;
     }
+  }
+
+  // ── validateImmutableIdentity ─────────────────────────────────────────────
+
+  /**
+   * Validates that a reloaded Finance refund matches the caller's intended
+   * immutable operation identity. Used by prepareRefund() for both:
+   *   1. Normal caller-key pre-check path.
+   *   2. Concurrent 23505 winner reload path (outside the failed transaction).
+   *
+   * Currency comparison is case-insensitive uppercase to match RefundService conventions.
+   */
+  validateImmutableIdentity(
+    existing: RefundEntity,
+    dto:      { paymentId: string; invoiceId: string; amountMinor: number; currency: string },
+  ): boolean {
+    return (
+      existing.paymentId   === dto.paymentId &&
+      existing.invoiceId   === dto.invoiceId &&
+      existing.amountMinor === dto.amountMinor &&
+      existing.currency.toUpperCase() === dto.currency.toUpperCase()
+    );
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────

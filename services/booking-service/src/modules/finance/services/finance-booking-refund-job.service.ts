@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectDataSource }     from '@nestjs/typeorm';
 import { DataSource }           from 'typeorm';
@@ -7,6 +7,34 @@ import { PaymentCorrelationRepository }     from '../repositories/payment-correl
 import { InvoiceRepository }               from '../repositories/invoice.repository';
 import { RefundService }                   from './refund.service';
 import { FinanceBookingRefundJobEntity }   from '../entities/finance-booking-refund-job.entity';
+
+// ── Lease configuration ───────────────────────────────────────────────────────
+
+/**
+ * Processing lease duration in seconds.
+ * A job in 'processing' state is considered stale (reclaimable) when:
+ *   started_at <= NOW() - leaseDurationSeconds
+ *
+ * Configurable via FINANCE_BOOKING_REFUND_JOB_LEASE_SECONDS (default: 600).
+ * Invalid / zero / negative / NaN / non-integer values fall back to 600.
+ */
+function parseLeaseDurationSeconds(): number {
+  const raw    = process.env['FINANCE_BOOKING_REFUND_JOB_LEASE_SECONDS'];
+  if (!raw) return 600;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) return 600;
+  return parsed;
+}
+
+const LEASE_DURATION_SECONDS = parseLeaseDurationSeconds();
+
+function staleBefore(): Date {
+  return new Date(Date.now() - LEASE_DURATION_SECONDS * 1000);
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type ProcessSource = 'scheduler' | 'admin';
 
 interface EnqueueInput {
   tenantId:        string;
@@ -18,28 +46,34 @@ interface EnqueueInput {
 }
 
 interface RefundPlanItem {
-  bookingPaymentId: string;
-  financePaymentId: string;
-  invoiceId:        string;
-  allocationMinor:  number;
+  bookingPaymentId:     string;
+  financePaymentId:     string;
+  invoiceId:            string;
+  allocationMinor:      number;
   callerIdempotencyKey: string;   // bkref_<bookingRefundId>_<bookingPaymentId>
 }
 
 const JOB_BATCH_SIZE = 20;
 
 /**
- * FinanceBookingRefundJobService — processes durable Finance refund jobs.
+ * FinanceBookingRefundJobService — durable Booking→Finance refund orchestrator.
  *
  * Architecture:
- *   1. BookingFinanceListener.onBookingRefunded() calls enqueueBookingRefund().
- *   2. enqueueBookingRefund() creates (or finds existing) a FinanceBookingRefundJobEntity.
- *   3. @Cron every minute calls processDueJobs() → processJob() for each due job.
- *   4. processJob() rebuilds the Finance refund plan from:
- *        booking_refund_payment_allocations + booking_payment_finance_payment_map
- *      then calls RefundService.requestRefund() for each allocation using
- *      a stable callerIdempotencyKey = bkref_<bookingRefundId>_<bookingPaymentId>.
- *   5. If any allocation fails, the job is marked retry with exponential backoff.
- *   6. Replay is idempotent: completed allocations return existing Finance refunds.
+ *   1. onBookingRefunded listener calls enqueueBookingRefund() → creates one job per event.
+ *   2. @Cron every minute calls processDueJobs() → processJob(id, tenantId, 'scheduler').
+ *   3. processJob() claims/reclaims the job under FOR UPDATE, builds the refund plan,
+ *      and executes RefundService.requestRefund() for each allocation.
+ *   4. Each requestRefund() call is idempotent via callerIdempotencyKey.
+ *   5. Failed attempts set status='retry' with exponential backoff.
+ *   6. Stale processing jobs (started_at older than lease) are reclaimed.
+ *
+ * Lease duration: FINANCE_BOOKING_REFUND_JOB_LEASE_SECONDS (default 600s = 10min).
+ *
+ * Booking refund job completion semantics:
+ *   The job is completed when every Finance refund allocation has entered Finance's
+ *   committed refund workflow (status='processing' or 'completed'). Final cash
+ *   disbursement (Finance status='completed' via completeRefund()) may complete
+ *   asynchronously and is NOT awaited by this job.
  */
 @Injectable()
 export class FinanceBookingRefundJobService {
@@ -55,10 +89,6 @@ export class FinanceBookingRefundJobService {
 
   // ── Enqueue ───────────────────────────────────────────────────────────────
 
-  /**
-   * Creates or finds a durable job for the given booking refund event.
-   * Idempotent: duplicate BOOKING_REFUNDED events create one job only.
-   */
   async enqueueBookingRefund(input: EnqueueInput): Promise<FinanceBookingRefundJobEntity> {
     return this.jobRepo.createOrFindJob(input);
   }
@@ -68,22 +98,21 @@ export class FinanceBookingRefundJobService {
   @Cron(CronExpression.EVERY_MINUTE, { name: 'finance:booking_refund_jobs' })
   async processDueJobs(): Promise<void> {
     try {
-      const jobs = await this.jobRepo.findDueJobs(undefined, JOB_BATCH_SIZE);
+      const jobs = await this.jobRepo.findDueJobs(staleBefore(), undefined, JOB_BATCH_SIZE);
       if (!jobs.length) return;
-      this.logger.log(`[cron:booking_refund_jobs] Processing ${jobs.length} job(s)`);
+      this.logger.log(`[cron] Processing ${jobs.length} booking-refund job(s)`);
       for (const job of jobs) {
         try {
-          await this.processJob(job.id, job.tenantId);
+          await this.processJob(job.id, job.tenantId, 'scheduler');
         } catch (err) {
-          // Individual job failures are isolated — sweep continues
           this.logger.error(
-            `[cron:booking_refund_jobs] job ${job.id} threw: ${(err as Error).message}`,
+            `[cron] job ${job.id} threw: ${(err as Error).message}`,
           );
         }
       }
     } catch (err) {
       this.logger.error(
-        `[cron:booking_refund_jobs] sweep error: ${(err as Error).message}`,
+        `[cron] sweep error: ${(err as Error).message}`,
         (err as Error).stack,
       );
     }
@@ -91,46 +120,57 @@ export class FinanceBookingRefundJobService {
 
   // ── Process a single job ──────────────────────────────────────────────────
 
-  async processJob(jobId: string, tenantId: string): Promise<FinanceBookingRefundJobEntity> {
-    // ── Phase A: Claim (short tx) ─────────────────────────────────────────
-    let job: FinanceBookingRefundJobEntity;
+  /**
+   * source='scheduler': silently no-ops for fresh processing jobs.
+   * source='admin':     throws ConflictException for fresh processing jobs,
+   *                     so the admin knows a retry was NOT performed.
+   */
+  async processJob(
+    jobId:   string,
+    tenantId: string,
+    source:   ProcessSource = 'scheduler',
+  ): Promise<FinanceBookingRefundJobEntity> {
 
-    const claimed = await this.dataSource.transaction(async (manager) => {
-      const locked = await this.jobRepo.lockById(jobId, tenantId, manager);
-      if (!locked) throw new Error(`Job ${jobId} not found`);
+    // ── Phase A: Claim or reclaim (short tx) ─────────────────────────────
+    const { job: lockedJob, proceed, isConflict } = await this.dataSource.transaction(
+      async (manager) => this.jobRepo.claimOrReclaim(
+        jobId, tenantId, staleBefore(), source === 'admin', manager,
+      ),
+    );
 
-      if (locked.status === 'completed') {
-        return { job: locked, proceed: false };
-      }
-      if (locked.status === 'processing') {
-        // Another instance is already processing — skip
-        this.logger.warn(`processJob: job ${jobId} already in processing — skipping`);
-        return { job: locked, proceed: false };
-      }
-      if (locked.status !== 'pending' && locked.status !== 'retry') {
-        return { job: locked, proceed: false };
-      }
+    if (isConflict) {
+      // admin source hits a fresh processing job
+      throw new ConflictException(
+        `Job ${jobId} is currently being processed by another worker. ` +
+        `It cannot be manually retried until the processing lease expires ` +
+        `(${LEASE_DURATION_SECONDS}s from when it was last claimed). ` +
+        `started_at=${lockedJob.startedAt?.toISOString() ?? 'null'}`,
+      );
+    }
+    if (!proceed) {
+      return lockedJob;   // completed, or scheduler no-ops for fresh processing
+    }
 
-      await this.jobRepo.markProcessing(jobId, tenantId, manager);
-      return { job: locked, proceed: true };
-    });
+    const job = await this.jobRepo.findByIdOrFail(jobId, tenantId);  // read fresh after claim
 
-    job = claimed.job;
-    if (!claimed.proceed) return job;
-
-    // ── Phase B: Build complete plan (outside tx — read-only) ─────────────
+    // ── Phase B: Build complete plan ─────────────────────────────────────
     let plan: RefundPlanItem[];
     try {
       plan = await this.buildRefundPlan(job);
     } catch (err) {
-      await this.markJobRetry(jobId, tenantId, job.attemptCount + 1, err as Error);
+      await this.markJobRetry(jobId, tenantId, job.attemptCount, err as Error);
       return this.jobRepo.findByIdOrFail(jobId, tenantId);
     }
 
     // ── Phase C: Execute plan items sequentially (idempotent via callerKey) ─
+    //
+    // Booking refund job completion means all allocations have entered Finance's
+    // committed refund workflow (status='processing' or 'completed').
+    // Final cash disbursement (completeRefund() → status='completed') may
+    // complete asynchronously and is NOT waited for here.
     try {
       for (const item of plan) {
-        await this.refundService.requestRefund(
+        const refund = await this.refundService.requestRefund(
           {
             paymentId:      item.financePaymentId,
             invoiceId:      item.invoiceId,
@@ -143,9 +183,19 @@ export class FinanceBookingRefundJobService {
           tenantId,
           job.actorId ?? 'system',
         );
+
+        // Explicit convergence check: only 'processing' or 'completed' count
+        if (refund.status !== 'processing' && refund.status !== 'completed') {
+          throw new Error(
+            `Finance refund ${refund.id} for bookingPaymentId=${item.bookingPaymentId} ` +
+            `is in status="${refund.status}" which is not a committed workflow state. ` +
+            `Expected: processing or completed. ` +
+            `For status="rejected": admin intervention required (callerKey=${item.callerIdempotencyKey}).`,
+          );
+        }
       }
 
-      // All allocations succeeded — mark completed
+      // All allocations converged — mark job completed
       await this.dataSource.transaction(async (manager) => {
         const locked = await this.jobRepo.lockById(jobId, tenantId, manager);
         if (locked && locked.status !== 'completed') {
@@ -154,11 +204,11 @@ export class FinanceBookingRefundJobService {
       });
 
       this.logger.log(
-        `processJob: job ${jobId} completed — ${plan.length} Finance refund(s) ` +
-        `for bookingRefund=${job.bookingRefundId} — tenant ${tenantId}`,
+        `processJob [${source}]: job ${jobId} completed — ` +
+        `${plan.length} Finance refund(s) for bookingRefundId=${job.bookingRefundId} — tenant ${tenantId}`,
       );
     } catch (err) {
-      await this.markJobRetry(jobId, tenantId, job.attemptCount + 1, err as Error);
+      await this.markJobRetry(jobId, tenantId, job.attemptCount, err as Error);
     }
 
     return this.jobRepo.findByIdOrFail(jobId, tenantId);
@@ -169,16 +219,13 @@ export class FinanceBookingRefundJobService {
   private async buildRefundPlan(job: FinanceBookingRefundJobEntity): Promise<RefundPlanItem[]> {
     const { tenantId, bookingRefundId, bookingId, amountMinor } = job;
 
-    // Resolve Finance invoice for this booking
     const ref = await this.invoiceRepo.findReference('booking', bookingId, tenantId);
     if (!ref) {
       throw new Error(
-        `No Finance invoice found for booking ${bookingId} — ` +
-        `create an invoice before processing the refund job`,
+        `No Finance invoice for booking ${bookingId} — create invoice first`,
       );
     }
 
-    // Load booking refund payment allocations
     const allocRows = await this.dataSource.query<{
       booking_payment_id: string;
       amount_minor:       number;
@@ -191,9 +238,7 @@ export class FinanceBookingRefundJobService {
     );
 
     if (!allocRows.length) {
-      throw new Error(
-        `No booking_refund_payment_allocations for bookingRefundId=${bookingRefundId}`,
-      );
+      throw new Error(`No booking_refund_payment_allocations for bookingRefundId=${bookingRefundId}`);
     }
 
     const allocSum = allocRows.reduce((s, r) => s + r.amount_minor, 0);
@@ -203,24 +248,20 @@ export class FinanceBookingRefundJobService {
       );
     }
 
-    // Resolve correlation for EVERY allocation before returning any plan
     const plan: RefundPlanItem[] = [];
     for (const alloc of allocRows) {
       const bookingPaymentId = alloc.booking_payment_id;
-      const mappings = await this.correlationRepo.findByBookingPaymentId(
-        bookingPaymentId, tenantId,
-      );
+      const mappings = await this.correlationRepo.findByBookingPaymentId(bookingPaymentId, tenantId);
       if (!mappings.length) {
         throw new Error(
           `No Finance payment correlation for bookingPaymentId=${bookingPaymentId} ` +
-          `tenantId=${tenantId}. ` +
-          `Create via POST /finance/admin/payment-correlations before retrying.`,
+          `tenantId=${tenantId}. Create via POST /finance/admin/payment-correlations.`,
         );
       }
       if (mappings.length > 1) {
         throw new Error(
           `Multiple Finance payment correlations (${mappings.length}) for ` +
-          `bookingPaymentId=${bookingPaymentId} — invariant violation (migration 017 unique index)`,
+          `bookingPaymentId=${bookingPaymentId} — invariant violation`,
         );
       }
       plan.push({
@@ -243,9 +284,7 @@ export class FinanceBookingRefundJobService {
     err:          Error,
   ): Promise<void> {
     const safeMsg = (err.message ?? 'unknown error').slice(0, 2000);
-    this.logger.warn(
-      `processJob: job ${jobId} failed attempt ${attemptCount} — ${safeMsg}`,
-    );
+    this.logger.warn(`processJob: job ${jobId} failed attempt ${attemptCount} — ${safeMsg}`);
     await this.dataSource.transaction(async (manager) => {
       const locked = await this.jobRepo.lockById(jobId, tenantId, manager);
       if (locked && locked.status !== 'completed') {

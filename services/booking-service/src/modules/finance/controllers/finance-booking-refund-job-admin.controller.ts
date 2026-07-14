@@ -38,7 +38,12 @@ export class FinanceBookingRefundJobAdminController {
 
   /**
    * POST /api/v1/finance/admin/booking-refund-jobs/:id/retry
-   * Manually triggers processJob() for a pending/retry/processing job.
+   * Manually triggers processJob() for a pending/retry/stale-processing job.
+   *
+   * Throws 409 Conflict if the job is CURRENTLY processing (fresh lease).
+   * The admin cannot bypass the processing lease — this prevents concurrent
+   * double-execution.
+   *
    * TENANT_ADMIN only.
    */
   @Post(':id/retry')
@@ -49,6 +54,6 @@ export class FinanceBookingRefundJobAdminController {
     @TenantCtx() tenant: TenantContext,
     @BookingActor() _actor: BookingActorContext,
   ): Promise<unknown> {
-    return this.jobService.processJob(id, tenant.tenantId);
+    return this.jobService.processJob(id, tenant.tenantId, 'admin');
   }
 }

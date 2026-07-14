@@ -67,16 +67,48 @@ let FinanceBookingRefundJobRepository = FinanceBookingRefundJobRepository_1 = cl
             throw new common_1.NotFoundException(`Booking refund job ${id} not found`);
         return j;
     }
-    async findDueJobs(tenantId, limit = 20) {
+    async findDueJobs(leaseStaleBefore, tenantId, limit = 20) {
         const qb = this.repo
             .createQueryBuilder('j')
-            .where("j.status IN ('pending', 'retry')")
-            .andWhere('j.nextAttemptAt <= NOW()')
+            .where("(j.status IN ('pending', 'retry') AND j.nextAttemptAt <= NOW())" +
+            ' OR ' +
+            '(j.status = :processing AND j.startedAt IS NOT NULL AND j.startedAt <= :staleBefore)', { processing: 'processing', staleBefore: leaseStaleBefore })
             .orderBy('j.nextAttemptAt', 'ASC')
             .take(limit);
         if (tenantId)
             qb.andWhere('j.tenantId = :tenantId', { tenantId });
         return qb.getMany();
+    }
+    async claimOrReclaim(jobId, tenantId, leaseStaleBefore, isAdmin, manager) {
+        const locked = await this.lockById(jobId, tenantId, manager);
+        if (!locked)
+            throw new Error(`Job ${jobId} not found`);
+        if (locked.status === 'completed') {
+            return { job: locked, proceed: false, isConflict: false };
+        }
+        if (locked.status === 'processing') {
+            const isStale = locked.startedAt !== null && locked.startedAt <= leaseStaleBefore;
+            if (isStale) {
+                await manager.update(finance_booking_refund_job_entity_1.FinanceBookingRefundJobEntity, { id: jobId, tenantId }, {
+                    status: 'processing',
+                    startedAt: new Date(),
+                    attemptCount: () => 'attempt_count + 1',
+                    updatedAt: new Date(),
+                });
+                return { job: locked, proceed: true, isConflict: false };
+            }
+            return { job: locked, proceed: false, isConflict: isAdmin };
+        }
+        if (locked.status === 'pending' || locked.status === 'retry') {
+            await manager.update(finance_booking_refund_job_entity_1.FinanceBookingRefundJobEntity, { id: jobId, tenantId }, {
+                status: 'processing',
+                startedAt: new Date(),
+                attemptCount: () => 'attempt_count + 1',
+                updatedAt: new Date(),
+            });
+            return { job: locked, proceed: true, isConflict: false };
+        }
+        return { job: locked, proceed: false, isConflict: false };
     }
     async lockById(id, tenantId, manager) {
         return manager

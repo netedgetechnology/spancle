@@ -52,20 +52,14 @@ let RefundRepository = RefundRepository_1 = class RefundRepository {
             return await manager.save(refund);
         }
         catch (err) {
-            const msg = err.message ?? '';
-            if (msg.includes('uq_finance_refunds_idempotency')) {
-                throw new common_1.ConflictException(`Refund already exists for idempotency key: ${input.idempotencyKey}`);
-            }
-            if (msg.includes('uq_finance_refunds_caller_idempotency_key')) {
-                const winner = await manager.findOne(refund_entity_1.RefundEntity, {
-                    where: { tenantId: input.tenantId, callerIdempotencyKey: input.callerIdempotencyKey },
-                });
-                if (winner)
-                    return winner;
-                throw new common_1.ConflictException(`Concurrent refund with caller key "${input.callerIdempotencyKey}" — please retry`);
-            }
             throw err;
         }
+    }
+    validateImmutableIdentity(existing, dto) {
+        return (existing.paymentId === dto.paymentId &&
+            existing.invoiceId === dto.invoiceId &&
+            existing.amountMinor === dto.amountMinor &&
+            existing.currency.toUpperCase() === dto.currency.toUpperCase());
     }
     async findById(id, tenantId) {
         return this.scopedQb('r', tenantId).andWhere('r.id = :id', { id }).getOne();

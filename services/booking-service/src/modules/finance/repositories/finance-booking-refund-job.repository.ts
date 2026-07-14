@@ -88,21 +88,86 @@ export class FinanceBookingRefundJobRepository {
   }
 
   /**
-   * Returns due jobs (pending or retry, nextAttemptAt <= NOW())
-   * in ascending nextAttemptAt order (oldest first).
+   * Returns jobs that are due for processing:
+   *   1. Normal due jobs: status IN ('pending','retry') AND next_attempt_at <= NOW()
+   *   2. Stale processing jobs: status='processing' AND started_at <= staleBefore
+   *      (process crashed after claiming but before completing)
+   *
+   * Both conditions are ORed. Jobs are returned in ascending nextAttemptAt order.
+   * The stale/fresh decision is confirmed again under FOR UPDATE in claimOrReclaim().
    */
   async findDueJobs(
+    leaseStaleBefore: Date,
     tenantId?: string,
     limit = 20,
   ): Promise<FinanceBookingRefundJobEntity[]> {
     const qb = this.repo
       .createQueryBuilder('j')
-      .where("j.status IN ('pending', 'retry')")
-      .andWhere('j.nextAttemptAt <= NOW()')
+      .where(
+        "(j.status IN ('pending', 'retry') AND j.nextAttemptAt <= NOW())" +
+        ' OR ' +
+        '(j.status = :processing AND j.startedAt IS NOT NULL AND j.startedAt <= :staleBefore)',
+        { processing: 'processing', staleBefore: leaseStaleBefore },
+      )
       .orderBy('j.nextAttemptAt', 'ASC')
       .take(limit);
     if (tenantId) qb.andWhere('j.tenantId = :tenantId', { tenantId });
     return qb.getMany();
+  }
+
+  /**
+   * Atomically claims or reclaims a job inside a caller-supplied transaction.
+   * Returns { proceed: true } if this worker owns the job.
+   * Returns { proceed: false } if another worker owns it (fresh processing or completed).
+   *
+   * Stale/fresh decision is made under FOR UPDATE to prevent concurrent double-claim.
+   */
+  async claimOrReclaim(
+    jobId:            string,
+    tenantId:         string,
+    leaseStaleBefore: Date,
+    isAdmin:          boolean,
+    manager:          EntityManager,
+  ): Promise<{
+    job:        FinanceBookingRefundJobEntity;
+    proceed:    boolean;
+    isConflict: boolean;  // true when admin hits a fresh processing job
+  }> {
+    const locked = await this.lockById(jobId, tenantId, manager);
+    if (!locked) throw new Error(`Job ${jobId} not found`);
+
+    if (locked.status === 'completed') {
+      return { job: locked, proceed: false, isConflict: false };
+    }
+
+    if (locked.status === 'processing') {
+      const isStale = locked.startedAt !== null && locked.startedAt <= leaseStaleBefore;
+      if (isStale) {
+        // Reclaim: reset startedAt + increment attemptCount
+        await manager.update(FinanceBookingRefundJobEntity, { id: jobId, tenantId }, {
+          status:       'processing',
+          startedAt:    new Date(),
+          attemptCount: () => 'attempt_count + 1',
+          updatedAt:    new Date(),
+        });
+        return { job: locked, proceed: true, isConflict: false };
+      }
+      // Fresh processing: another worker owns this job
+      return { job: locked, proceed: false, isConflict: isAdmin };
+    }
+
+    // pending or retry — normal claim
+    if (locked.status === 'pending' || locked.status === 'retry') {
+      await manager.update(FinanceBookingRefundJobEntity, { id: jobId, tenantId }, {
+        status:       'processing',
+        startedAt:    new Date(),
+        attemptCount: () => 'attempt_count + 1',
+        updatedAt:    new Date(),
+      });
+      return { job: locked, proceed: true, isConflict: false };
+    }
+
+    return { job: locked, proceed: false, isConflict: false };
   }
 
   // ── Locks ─────────────────────────────────────────────────────────────────

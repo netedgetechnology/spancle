@@ -31,7 +31,7 @@ let FinanceBookingRefundJobAdminController = class FinanceBookingRefundJobAdminC
         return this.jobService.findByBookingRefundId(bookingRefundId, tenant.tenantId);
     }
     retry(id, tenant, _actor) {
-        return this.jobService.processJob(id, tenant.tenantId);
+        return this.jobService.processJob(id, tenant.tenantId, 'admin');
     }
 };
 exports.FinanceBookingRefundJobAdminController = FinanceBookingRefundJobAdminController;
