@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PaymentFailedDto = exports.WaiveNoShowDto = exports.MarkNoShowDto = exports.CheckInDto = exports.RescheduleBookingDto = exports.CancelBookingDto = exports.UpdateBookingDto = void 0;
+exports.ProcessBookingRefundDto = exports.PaymentFailedDto = exports.WaiveNoShowDto = exports.MarkNoShowDto = exports.CheckInDto = exports.RescheduleBookingDto = exports.CancelBookingDto = exports.UpdateBookingDto = void 0;
 const class_validator_1 = require("class-validator");
 const UPDATABLE_STATUSES = [
     'confirmed', 'completed', 'cancelled', 'no_show', 'refunded',
@@ -130,4 +130,32 @@ __decorate([
     (0, class_validator_1.MaxLength)(255),
     __metadata("design:type", String)
 ], PaymentFailedDto.prototype, "providerErrorMessage", void 0);
+const REFUND_REASONS = [
+    'customer_cancellation', 'admin_cancellation', 'no_show_waiver',
+    'reschedule', 'system_error', 'other',
+];
+class ProcessBookingRefundDto {
+}
+exports.ProcessBookingRefundDto = ProcessBookingRefundDto;
+__decorate([
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], ProcessBookingRefundDto.prototype, "amountMinor", void 0);
+__decorate([
+    (0, class_validator_1.IsEnum)(REFUND_REASONS),
+    __metadata("design:type", Object)
+], ProcessBookingRefundDto.prototype, "reason", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(1000),
+    __metadata("design:type", String)
+], ProcessBookingRefundDto.prototype, "reasonNotes", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(255),
+    __metadata("design:type", String)
+], ProcessBookingRefundDto.prototype, "idempotencyKey", void 0);
 //# sourceMappingURL=update-booking.dto.js.map

@@ -80,6 +80,9 @@ let BookingController = class BookingController {
             await this.bookingService.cancel(id, { reason: 'Deleted by admin', cancelledById: actor.actorId }, tenant.tenantId, actor.actorId);
         }
     }
+    processRefund(id, dto, tenant, actor) {
+        return this.bookingService.processRefund(id, dto, tenant.tenantId, actor.actorId);
+    }
 };
 exports.BookingController = BookingController;
 __decorate([
@@ -264,6 +267,19 @@ __decorate([
     __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], BookingController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Post)(':id/refunds'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    (0, common_1.UseInterceptors)(audit_interceptor_1.AuditInterceptor),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, tenant_decorator_1.TenantCtx)()),
+    __param(3, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_booking_dto_1.ProcessBookingRefundDto, Object, Object]),
+    __metadata("design:returntype", void 0)
+], BookingController.prototype, "processRefund", null);
 exports.BookingController = BookingController = __decorate([
     (0, common_1.Controller)('bookings'),
     (0, common_1.UseInterceptors)(audit_interceptor_1.AuditInterceptor),

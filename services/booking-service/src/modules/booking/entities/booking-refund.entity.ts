@@ -61,6 +61,15 @@ export class BookingRefundEntity {
   @Column({ name: 'provider_refund_id', type: 'varchar', length: 255, nullable: true })
   providerRefundId!: string | null;
 
+  /**
+   * Caller-supplied idempotency key. Prevents duplicate refund records on HTTP retry.
+   * UNIQUE (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL.
+   * Added in migration 014.
+   */
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 255, nullable: true })
+  @Index({ unique: true, where: '"idempotency_key" IS NOT NULL' })
+  idempotencyKey!: string | null;
+
   @Column({ name: 'processed_at', type: 'timestamptz', nullable: true })
   processedAt!: Date | null;
 

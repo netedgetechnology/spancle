@@ -36,6 +36,7 @@ import {
   CheckInDto          as CheckInDtoClass,
   MarkNoShowDto       as MarkNoShowDtoClass,
   WaiveNoShowDto      as WaiveNoShowDtoClass,
+  ProcessBookingRefundDto,
 } from '../dto/update-booking.dto';
 
 /**
@@ -270,5 +271,24 @@ export class BookingController {
     // Soft-delete is handled inside the service; repository already has softDelete
     // We surface it via the cancel+log path above; no separate delete endpoint needed
     // for compliance (audit trail must be preserved)
+  }
+
+  /**
+   * POST /api/v1/bookings/:id/refunds
+   * Process a booking refund.
+   * Booking must be in 'cancelled' or 'no_show' status.
+   * TENANT_ADMIN, TENANT_MANAGER only (PLAYER cannot self-serve refunds).
+   */
+  @Post(':id/refunds')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(AuditInterceptor)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
+  processRefund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ProcessBookingRefundDto,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ) {
+    return this.bookingService.processRefund(id, dto, tenant.tenantId, actor.actorId);
   }
 }

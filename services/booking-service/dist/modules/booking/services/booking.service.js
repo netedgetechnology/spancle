@@ -50,6 +50,8 @@ const config_1 = require("@nestjs/config");
 const typeorm_1 = require("typeorm");
 const booking_repository_1 = require("../repositories/booking.repository");
 const booking_support_repository_1 = require("../repositories/booking-support.repository");
+const booking_support_repository_2 = require("../repositories/booking-support.repository");
+const booking_support_repository_3 = require("../repositories/booking-support.repository");
 const booking_validation_service_1 = require("./booking-validation.service");
 const booking_utils_1 = require("../utils/booking.utils");
 const booking_events_1 = require("../events/booking.events");
@@ -57,6 +59,8 @@ const slot_events_1 = require("../../slot/events/slot.events");
 const pricing_rule_repository_1 = require("../../slot/repositories/pricing-rule.repository");
 const booking_entity_1 = require("../entities/booking.entity");
 const slot_repository_1 = require("../../slot/repositories/slot.repository");
+const booking_refund_entity_1 = require("../entities/booking-refund.entity");
+const booking_payment_entity_1 = require("../entities/booking-payment.entity");
 const DEFAULT_RESERVATION_TTL_MINS = 15;
 const ALLOWED_TRANSITIONS = {
     reserved: ['pending_payment', 'cancelled', 'expired'],
@@ -72,9 +76,11 @@ const ALLOWED_TRANSITIONS = {
     expired: [],
 };
 let BookingService = BookingService_1 = class BookingService {
-    constructor(bookingRepository, logRepository, validationService, slotRepository, pricingRuleRepository, eventEmitter, dataSource, configService) {
+    constructor(bookingRepository, logRepository, paymentRepository, refundRepository, validationService, slotRepository, pricingRuleRepository, eventEmitter, dataSource, configService) {
         this.bookingRepository = bookingRepository;
         this.logRepository = logRepository;
+        this.paymentRepository = paymentRepository;
+        this.refundRepository = refundRepository;
         this.validationService = validationService;
         this.slotRepository = slotRepository;
         this.pricingRuleRepository = pricingRuleRepository;
@@ -666,12 +672,134 @@ let BookingService = BookingService_1 = class BookingService {
         };
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.STATUS_CHANGED, payload);
     }
+    async processRefund(bookingId, dto, tenantId, actorId) {
+        if (!Number.isInteger(dto.amountMinor) || dto.amountMinor <= 0) {
+            throw new common_1.BadRequestException('amountMinor must be a positive integer (minor units)');
+        }
+        const existing = await this.dataSource.getRepository(booking_refund_entity_1.BookingRefundEntity).findOne({
+            where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false },
+        });
+        if (existing) {
+            this.logger.warn(`processRefund: idempotency hit for key ${dto.idempotencyKey} → ${existing.id}`);
+            return existing;
+        }
+        const result = await this.dataSource.transaction(async (manager) => {
+            const payment = await manager
+                .createQueryBuilder(booking_payment_entity_1.BookingPaymentEntity, 'p')
+                .setLock('pessimistic_write')
+                .where('p.bookingId = :bookingId', { bookingId })
+                .andWhere('p.tenantId   = :tenantId', { tenantId })
+                .andWhere("p.status     = 'paid'")
+                .andWhere('p.isDeleted  = false')
+                .orderBy('p.createdAt', 'DESC')
+                .getOne();
+            if (!payment) {
+                throw new common_1.UnprocessableEntityException(`No paid payment found for booking ${bookingId}`);
+            }
+            const availableForRefund = payment.amountMinor - payment.amountRefundedMinor;
+            if (dto.amountMinor > availableForRefund) {
+                throw new common_1.BadRequestException(`Refund amount (${dto.amountMinor}) exceeds available balance (${availableForRefund})`);
+            }
+            const booking = await manager
+                .createQueryBuilder(booking_entity_1.BookingEntity, 'b')
+                .setLock('pessimistic_write')
+                .where('b.id       = :id', { id: bookingId })
+                .andWhere('b.tenantId = :tenantId', { tenantId })
+                .andWhere('b.isDeleted = false')
+                .getOne();
+            if (!booking) {
+                throw new common_1.NotFoundException(`Booking ${bookingId} not found`);
+            }
+            if (booking.status !== 'cancelled' && booking.status !== 'no_show') {
+                throw new common_1.UnprocessableEntityException(`Booking ${bookingId} status "${booking.status}" is not eligible for refund. ` +
+                    `Only cancelled and no_show bookings can be refunded.`);
+            }
+            const sumRow = await manager
+                .createQueryBuilder(booking_refund_entity_1.BookingRefundEntity, 'r')
+                .select('COALESCE(SUM(r.amountMinor), 0)::int', 'total')
+                .where('r.bookingId = :bookingId', { bookingId })
+                .andWhere('r.tenantId  = :tenantId', { tenantId })
+                .andWhere("r.status    IN ('pending', 'processed')")
+                .andWhere('r.isDeleted = false')
+                .getRawOne();
+            const alreadyMinor = parseInt(sumRow?.total ?? '0', 10);
+            if (alreadyMinor + dto.amountMinor > availableForRefund) {
+                throw new common_1.BadRequestException(`Cumulative refunds (${alreadyMinor + dto.amountMinor}) would exceed ` +
+                    `available refund capacity (${availableForRefund})`);
+            }
+            const newRefund = manager.create(booking_refund_entity_1.BookingRefundEntity, {
+                tenantId,
+                branchId: booking.branchId,
+                bookingId,
+                paymentId: payment.id,
+                status: 'pending',
+                reason: dto.reason,
+                amountMinor: dto.amountMinor,
+                currency: payment.currency,
+                reasonNotes: dto.reasonNotes ?? null,
+                idempotencyKey: dto.idempotencyKey,
+                createdById: actorId,
+            });
+            const savedRefund = await manager.save(newRefund);
+            await manager.update(booking_payment_entity_1.BookingPaymentEntity, { id: payment.id, tenantId }, {
+                amountRefundedMinor: payment.amountRefundedMinor + dto.amountMinor,
+                updatedAt: new Date(),
+            });
+            const newTotalRefunded = booking.amountRefundedMinor + dto.amountMinor;
+            await manager.update(booking_entity_1.BookingEntity, { id: bookingId, tenantId }, {
+                amountRefundedMinor: newTotalRefunded,
+                updatedAt: new Date(),
+                updatedById: actorId,
+            });
+            const totalAfter = alreadyMinor + dto.amountMinor;
+            const isFullRefund = totalAfter >= availableForRefund;
+            if (isFullRefund) {
+                await manager.update(booking_entity_1.BookingEntity, { id: bookingId, tenantId }, {
+                    status: 'refunded',
+                    updatedAt: new Date(),
+                    updatedById: actorId,
+                });
+            }
+            return {
+                refund: savedRefund,
+                previousStatus: booking.status,
+                newStatus: isFullRefund ? 'refunded' : booking.status,
+                totalAfter,
+                availableForRefund,
+                currency: payment.currency,
+            };
+        });
+        await this.logRepository.insert({
+            tenantId,
+            bookingId,
+            action: 'refunded',
+            actorId,
+            actorType: 'user',
+            previousStatus: result.previousStatus,
+            newStatus: result.newStatus,
+            note: `Refund ${result.refund.id}: ${dto.amountMinor} ${result.currency}`,
+        });
+        await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.REFUNDED, {
+            tenantId,
+            bookingId,
+            bookingRefundId: result.refund.id,
+            amountMinor: dto.amountMinor,
+            currency: result.currency,
+            actorId,
+            timestamp: new Date().toISOString(),
+        });
+        this.logger.log(`processRefund: booking ${bookingId} — refund ${result.refund.id} ` +
+            `(${dto.amountMinor} ${result.currency}) status=${result.newStatus} — tenant ${tenantId}`);
+        return result.refund;
+    }
 };
 exports.BookingService = BookingService;
 exports.BookingService = BookingService = BookingService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [booking_repository_1.BookingRepository,
         booking_support_repository_1.BookingLogRepository,
+        booking_support_repository_2.BookingPaymentRepository,
+        booking_support_repository_3.BookingRefundRepository,
         booking_validation_service_1.BookingValidationService,
         slot_repository_1.SlotRepository,
         pricing_rule_repository_1.PricingRuleRepository,

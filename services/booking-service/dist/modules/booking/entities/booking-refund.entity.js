@@ -69,6 +69,11 @@ __decorate([
     __metadata("design:type", Object)
 ], BookingRefundEntity.prototype, "providerRefundId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'idempotency_key', type: 'varchar', length: 255, nullable: true }),
+    (0, typeorm_1.Index)({ unique: true, where: '"idempotency_key" IS NOT NULL' }),
+    __metadata("design:type", Object)
+], BookingRefundEntity.prototype, "idempotencyKey", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'processed_at', type: 'timestamptz', nullable: true }),
     __metadata("design:type", Object)
 ], BookingRefundEntity.prototype, "processedAt", void 0);

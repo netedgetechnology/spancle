@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { EventEmitter2 }    from '@nestjs/event-emitter';
 import { ConfigService }     from '@nestjs/config';
@@ -10,6 +11,8 @@ import { DataSource }    from 'typeorm';
 
 import { BookingRepository }          from '../repositories/booking.repository';
 import { BookingLogRepository }       from '../repositories/booking-support.repository';
+import { BookingPaymentRepository }    from '../repositories/booking-support.repository';
+import { BookingRefundRepository }     from '../repositories/booking-support.repository';
 import { BookingValidationService }   from './booking-validation.service';
 import { BookingUtils }               from '../utils/booking.utils';
 import { BookingEvents }              from '../events/booking.events';
@@ -31,7 +34,10 @@ import type {
   MarkNoShowDto,
   WaiveNoShowDto,
   PaymentFailedDto,
+  ProcessBookingRefundDto,
 } from '../dto/update-booking.dto';
+import { BookingRefundEntity } from '../entities/booking-refund.entity';
+import { BookingPaymentEntity } from '../entities/booking-payment.entity';
 
 /** Reservation TTL in minutes — configurable via BOOKING_RESERVATION_TTL_MINS */
 const DEFAULT_RESERVATION_TTL_MINS = 15;
@@ -57,6 +63,8 @@ export class BookingService {
   constructor(
     private readonly bookingRepository:    BookingRepository,
     private readonly logRepository:        BookingLogRepository,
+    private readonly paymentRepository:    BookingPaymentRepository,
+    private readonly refundRepository:     BookingRefundRepository,
     private readonly validationService:    BookingValidationService,
     private readonly slotRepository:       SlotRepository,
     private readonly pricingRuleRepository: PricingRuleRepository,
@@ -942,6 +950,192 @@ export class BookingService {
       timestamp: new Date().toISOString(),
     };
     await this.eventEmitter.emitAsync(BookingEvents.STATUS_CHANGED, payload);
+  }
+
+  // ── Process Refund ────────────────────────────────────────────────────────
+
+  /**
+   * Records a booking-level refund and emits BookingEvents.REFUNDED.
+   *
+   * Eligibility: only 'cancelled' and 'no_show' bookings are refund-eligible
+   * (state machine: cancelled → refunded, no_show → refunded).
+   *
+   * Idempotency: duplicate requests with the same idempotencyKey return the
+   * existing BookingRefundEntity without creating a new row.
+   *
+   * Lock order:
+   *   1. BookingPaymentEntity FOR UPDATE  (capacity read + update)
+   *   2. BookingEntity FOR UPDATE         (amountRefundedMinor + status update)
+   *
+   * BookingEvents.REFUNDED is emitted ONLY after all DB writes commit.
+   */
+  async processRefund(
+    bookingId: string,
+    dto:       ProcessBookingRefundDto,
+    tenantId:  string,
+    actorId:   string,
+  ): Promise<BookingRefundEntity> {
+    if (!Number.isInteger(dto.amountMinor) || dto.amountMinor <= 0) {
+      throw new BadRequestException('amountMinor must be a positive integer (minor units)');
+    }
+
+    // Idempotency check outside transaction — returns existing without DB write
+    const existing = await this.dataSource.getRepository(BookingRefundEntity).findOne({
+      where: { tenantId, idempotencyKey: dto.idempotencyKey, isDeleted: false },
+    });
+    if (existing) {
+      this.logger.warn(
+        `processRefund: idempotency hit for key ${dto.idempotencyKey} → ${existing.id}`,
+      );
+      return existing;
+    }
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      // ── 1. Lock payment row first ─────────────────────────────────────
+      const payment = await manager
+        .createQueryBuilder(BookingPaymentEntity, 'p')
+        .setLock('pessimistic_write')
+        .where('p.bookingId = :bookingId', { bookingId })
+        .andWhere('p.tenantId   = :tenantId',   { tenantId })
+        .andWhere("p.status     = 'paid'")
+        .andWhere('p.isDeleted  = false')
+        .orderBy('p.createdAt', 'DESC')
+        .getOne();
+
+      if (!payment) {
+        throw new UnprocessableEntityException(
+          `No paid payment found for booking ${bookingId}`,
+        );
+      }
+
+      const availableForRefund = payment.amountMinor - payment.amountRefundedMinor;
+      if (dto.amountMinor > availableForRefund) {
+        throw new BadRequestException(
+          `Refund amount (${dto.amountMinor}) exceeds available balance (${availableForRefund})`,
+        );
+      }
+
+      // ── 2. Lock booking row second ────────────────────────────────────
+      const booking = await manager
+        .createQueryBuilder(BookingEntity, 'b')
+        .setLock('pessimistic_write')
+        .where('b.id       = :id',         { id: bookingId })
+        .andWhere('b.tenantId = :tenantId', { tenantId })
+        .andWhere('b.isDeleted = false')
+        .getOne();
+
+      if (!booking) {
+        throw new NotFoundException(`Booking ${bookingId} not found`);
+      }
+
+      // Validate refund-eligible state (derived from actual state machine)
+      if (booking.status !== 'cancelled' && booking.status !== 'no_show') {
+        throw new UnprocessableEntityException(
+          `Booking ${bookingId} status "${booking.status}" is not eligible for refund. ` +
+          `Only cancelled and no_show bookings can be refunded.`,
+        );
+      }
+
+      // Cumulative capacity check under lock
+      const sumRow = await manager
+        .createQueryBuilder(BookingRefundEntity, 'r')
+        .select('COALESCE(SUM(r.amountMinor), 0)::int', 'total')
+        .where('r.bookingId = :bookingId', { bookingId })
+        .andWhere('r.tenantId  = :tenantId',  { tenantId })
+        .andWhere("r.status    IN ('pending', 'processed')")
+        .andWhere('r.isDeleted = false')
+        .getRawOne<{ total: string }>();
+
+      const alreadyMinor = parseInt(sumRow?.total ?? '0', 10);
+      if (alreadyMinor + dto.amountMinor > availableForRefund) {
+        throw new BadRequestException(
+          `Cumulative refunds (${alreadyMinor + dto.amountMinor}) would exceed ` +
+          `available refund capacity (${availableForRefund})`,
+        );
+      }
+
+      // ── 3. Persist BookingRefundEntity ───────────────────────────────
+      const newRefund = manager.create(BookingRefundEntity, {
+        tenantId,
+        branchId:       booking.branchId,
+        bookingId,
+        paymentId:      payment.id,
+        status:         'pending',
+        reason:         dto.reason,
+        amountMinor:    dto.amountMinor,
+        currency:       payment.currency,
+        reasonNotes:    dto.reasonNotes ?? null,
+        idempotencyKey: dto.idempotencyKey,
+        createdById:    actorId,
+      });
+      const savedRefund = await manager.save(newRefund);
+
+      // ── 4. Update BookingPaymentEntity.amountRefundedMinor ───────────
+      await manager.update(BookingPaymentEntity, { id: payment.id, tenantId }, {
+        amountRefundedMinor: payment.amountRefundedMinor + dto.amountMinor,
+        updatedAt:           new Date(),
+      });
+
+      // ── 5. Update BookingEntity.amountRefundedMinor ──────────────────
+      const newTotalRefunded = booking.amountRefundedMinor + dto.amountMinor;
+      await manager.update(BookingEntity, { id: bookingId, tenantId }, {
+        amountRefundedMinor: newTotalRefunded,
+        updatedAt:           new Date(),
+        updatedById:         actorId,
+      });
+
+      // ── 6. Status transition ─────────────────────────────────────────
+      // → 'refunded' only when cumulative refunds cover the full paid amount.
+      // Partial refund: booking remains 'cancelled' or 'no_show'.
+      const totalAfter = alreadyMinor + dto.amountMinor;
+      const isFullRefund = totalAfter >= availableForRefund;
+      if (isFullRefund) {
+        await manager.update(BookingEntity, { id: bookingId, tenantId }, {
+          status:      'refunded',
+          updatedAt:   new Date(),
+          updatedById: actorId,
+        });
+      }
+
+      return {
+        refund:            savedRefund,
+        previousStatus:    booking.status,
+        newStatus:         isFullRefund ? 'refunded' : booking.status,
+        totalAfter,
+        availableForRefund,
+        currency:          payment.currency,
+      };
+    });
+
+    // Audit log — after commit
+    await this.logRepository.insert({
+      tenantId,
+      bookingId,
+      action:         'refunded',
+      actorId,
+      actorType:      'user',
+      previousStatus: result.previousStatus,
+      newStatus:      result.newStatus,
+      note: `Refund ${result.refund.id}: ${dto.amountMinor} ${result.currency}`,
+    });
+
+    // BookingEvents.REFUNDED — emitted after successful persistence only
+    await this.eventEmitter.emitAsync(BookingEvents.REFUNDED, {
+      tenantId,
+      bookingId,
+      bookingRefundId: result.refund.id,
+      amountMinor:     dto.amountMinor,
+      currency:        result.currency,
+      actorId,
+      timestamp:       new Date().toISOString(),
+    });
+
+    this.logger.log(
+      `processRefund: booking ${bookingId} — refund ${result.refund.id} ` +
+      `(${dto.amountMinor} ${result.currency}) status=${result.newStatus} — tenant ${tenantId}`,
+    );
+
+    return result.refund;
   }
 
 }

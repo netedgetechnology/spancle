@@ -73,3 +73,30 @@ export class PaymentFailedDto {
   providerErrorMessage?: string;
 }
 
+
+// ── Booking Refund ─────────────────────────────────────────────────────────
+
+const REFUND_REASONS = [
+  'customer_cancellation', 'admin_cancellation', 'no_show_waiver',
+  'reschedule', 'system_error', 'other',
+] as const;
+
+export class ProcessBookingRefundDto {
+  /** Amount to refund in minor currency units. Must be > 0. */
+  @IsInt() @Min(1)
+  amountMinor!: number;
+
+  @IsEnum(REFUND_REASONS)
+  reason!: typeof REFUND_REASONS[number];
+
+  @IsString() @IsOptional() @MaxLength(1000)
+  reasonNotes?: string;
+
+  /**
+   * Caller-supplied idempotency key. Duplicate requests with the same key
+   * return the existing BookingRefundEntity without creating a new row.
+   * Recommended format: <client-uuid-v4>.
+   */
+  @IsString() @IsNotEmpty() @MaxLength(255)
+  idempotencyKey!: string;
+}
