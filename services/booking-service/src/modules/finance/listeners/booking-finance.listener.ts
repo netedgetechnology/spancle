@@ -245,37 +245,38 @@ export class BookingFinanceListener {
   // ── BOOKING_REFUNDED ──────────────────────────────────────────────────────
 
   /**
-   * Creates a Finance refund when a booking refund is recorded.
+   * Creates Finance refunds when a booking refund is recorded.
    *
    * Producer: BookingService.processRefund() — emits after transaction commits.
    *
-   * Idempotency:
-   *   RefundService uses idempotencyKey = bkref_<bookingRefundId>.
-   *   UNIQUE (tenant_id, idempotency_key) on finance_refunds prevents duplicate
-   *   Finance refunds for the same BookingRefundEntity.id.
-   *
+   * CORRELATION MODEL (Batch 7.5E):
    * ─────────────────────────────────────────────────────────────────────────
-   * KNOWN INTEGRATION LIMITATION (Batch 7.5D — blocking gap documented):
+   * BookingPaymentEntity.providerPaymentId is the gateway payment ID recorded
+   * when a payment is captured externally (Stripe PaymentIntent, Razorpay order, etc).
+   * Finance PaymentEntity.gatewayPaymentId is the same gateway payment ID,
+   * recorded when PaymentService.capture() completes.
    *
-   * Finance PaymentEntity has NO field linking it to BookingPaymentEntity.
-   * The booking_refund_payment_allocations table records which Booking payment
-   * received which portion of the refund, but there is no correlation field
-   * allowing Finance to resolve BookingPaymentEntity.id → Finance PaymentEntity.id.
+   * Correlation: providerPaymentId → gatewayPaymentId
+   *   BookingPayment → Finance Payment is resolved as:
+   *     SELECT FROM finance_payments WHERE gatewayPaymentId = booking_payment.providerPaymentId
    *
-   * Until a correlation field (e.g. booking_payment_id on finance_payments, or
-   * a shared provider_payment_id lookup) is implemented, this handler:
-   *   - Uses the invoice allocation approach (resolves the Finance payment that
-   *     was allocated to this invoice — works correctly for single-payment bookings)
-   *   - Issues a SINGLE Finance refund for the full booking refund amount
+   * This is explicit, stable, gateway-assigned, and set independently by both domains.
+   * No inference by amount, timestamp, allocation order, or customer ID.
    *
-   * For multi-payment bookings where the Finance payment allocation covers the
-   * full booking refund amount, this works correctly.
-   * For split-Finance-payment bookings where multiple Finance payments were
-   * allocated, a future batch must implement the correlation field and issue
-   * per-Finance-payment refunds matching booking_refund_payment_allocations.
+   * CASH / NO-GATEWAY PAYMENTS:
+   *   If BookingPaymentEntity.providerPaymentId is NULL (cash, voucher, manual),
+   *   the correlation cannot be established. This allocation is logged as a
+   *   BLOCKING error and NO Finance refund is issued. The Finance refund for
+   *   that portion must be handled manually or via a future cash payment correlation.
    *
-   * This limitation is logged as a WARN when multiple Finance allocations exist.
-   * ─────────────────────────────────────────────────────────────────────────
+   * ATOMICITY:
+   *   All correlations are resolved BEFORE any RefundService call.
+   *   If any correlation fails, NO Finance refund calls are made.
+   *   This prevents partial Finance refund execution.
+   *
+   * IDEMPOTENCY:
+   *   Each Finance refund uses key: bkref_<bookingRefundId>_<bookingPaymentId>
+   *   UNIQUE (tenant_id, idempotency_key) on finance_refunds prevents duplicates.
    */
   @OnEvent(BOOKING_REFUNDED, { async: true })
   async onBookingRefunded(payload: {
@@ -289,66 +290,150 @@ export class BookingFinanceListener {
   }): Promise<void> {
     const { tenantId, bookingId, bookingRefundId, amountMinor, currency, actorId } = payload;
     try {
-      // Resolve Finance invoice for this booking
+      // ── Step 1: Resolve Finance invoice ─────────────────────────────
       const ref = await this.invoiceRepository.findReference(
         'booking', bookingId, tenantId,
       );
       if (!ref) {
         this.logger.warn(
-          `onBookingRefunded: no Finance invoice for booking ${bookingId} — ` +
-          `cannot create Finance refund for bookingRefundId ${bookingRefundId}`,
+          `onBookingRefunded [${bookingRefundId}]: no Finance invoice for ` +
+          `booking ${bookingId} — cannot create Finance refund`,
         );
         return;
       }
 
-      // Find Finance payment allocations for this invoice (ORDER BY allocatedAt ASC)
-      const allocations = await this.paymentRepository.findAllocationsByInvoice(
-        ref.invoiceId, tenantId,
+      // ── Step 2: Load booking refund payment allocations ──────────────
+      // Direct SQL — Finance never imports BookingModule.
+      const allocRows = await this.dataSource.query<{
+        booking_payment_id: string;
+        amount_minor:       number;
+      }[]>(
+        `SELECT booking_payment_id, amount_minor
+         FROM booking_refund_payment_allocations
+         WHERE tenant_id = $1 AND booking_refund_id = $2
+         ORDER BY booking_payment_id ASC`,
+        [tenantId, bookingRefundId],
       );
-      if (!allocations.length) {
-        this.logger.warn(
-          `onBookingRefunded: no Finance payment allocations for invoice ${ref.invoiceId} — skip`,
+
+      if (!allocRows.length) {
+        this.logger.error(
+          `onBookingRefunded [${bookingRefundId}]: no booking_refund_payment_allocations ` +
+          `found — cannot create Finance refunds`,
         );
         return;
       }
 
-      // Log a warning when multiple Finance payment allocations exist.
-      // In this case we use the FIRST allocation (earliest allocation).
-      // For single-payment bookings (the common case) this is always correct.
-      // Multi-Finance-payment support requires a correlation field — see above.
-      if (allocations.length > 1) {
-        this.logger.warn(
-          `onBookingRefunded: invoice ${ref.invoiceId} has ${allocations.length} Finance payment ` +
-          `allocations. Using first allocation (paymentId=${allocations[0]!.paymentId}). ` +
-          `Full multi-Finance-payment refund support requires correlation field — see Batch 7.5D gap doc.`,
+      // ── Step 3: Verify allocation sum ────────────────────────────────
+      const allocSum = allocRows.reduce((s, r) => s + r.amount_minor, 0);
+      if (allocSum !== amountMinor) {
+        this.logger.error(
+          `onBookingRefunded [${bookingRefundId}]: allocation sum ${allocSum} ≠ ` +
+          `event amountMinor ${amountMinor} — invariant violation, aborting`,
         );
+        return;
       }
 
-      const allocation = allocations[0]!;   // earliest allocation = primary Finance payment
+      // ── Step 4: Resolve ALL Finance payments before any RefundService call ─
+      // Load each booking payment's providerPaymentId, then find Finance payment.
+      const correlationPlan: Array<{
+        bookingPaymentId:  string;
+        financePaymentId:  string;
+        allocationMinor:   number;
+        idempotencyKey:    string;
+      }> = [];
 
-      // requestRefund is idempotent via idempotencyKey = bkref_<bookingRefundId>
-      await this.refundService.requestRefund(
-        {
-          paymentId:      allocation.paymentId,
-          invoiceId:      ref.invoiceId,
-          amountMinor,
-          currency,
-          idempotencyKey: `bkref_${bookingRefundId}`,
-          sourceType:     'booking',
-          sourceId:       bookingId,
-        },
-        tenantId,
-        actorId,
-      );
+      for (const alloc of allocRows) {
+        const bkPaymentId     = alloc.booking_payment_id;
+        const allocationMinor = alloc.amount_minor;
+
+        // Read booking payment's gateway ID
+        const bkPayRows = await this.dataSource.query<{
+          provider_payment_id: string | null;
+        }[]>(
+          `SELECT provider_payment_id
+           FROM booking_payments
+           WHERE id = $1 AND tenant_id = $2 AND is_deleted = FALSE
+           LIMIT 1`,
+          [bkPaymentId, tenantId],
+        );
+
+        const bkPay = bkPayRows[0];
+        if (!bkPay) {
+          this.logger.error(
+            `onBookingRefunded [${bookingRefundId}]: booking_payment ${bkPaymentId} ` +
+            `not found — aborting all Finance refunds for this event`,
+          );
+          return;   // abort entire event — do not partially process
+        }
+
+        const providerPaymentId = bkPay.provider_payment_id;
+        if (!providerPaymentId) {
+          // Cash / voucher / manual — no gateway correlation possible
+          this.logger.error(
+            `onBookingRefunded [${bookingRefundId}]: booking_payment ${bkPaymentId} ` +
+            `has no providerPaymentId (cash/manual). Finance refund for this ` +
+            `allocation (${allocationMinor} ${currency}) cannot be automated. ` +
+            `Manual Finance refund required. Aborting all Finance refunds for this event.`,
+          );
+          return;   // abort entire event — do not partially process
+        }
+
+        // Resolve Finance payment by gatewayPaymentId
+        const financePayment = await this.paymentRepository.findByGatewayPaymentId(
+          providerPaymentId, tenantId,
+        );
+        if (!financePayment) {
+          this.logger.error(
+            `onBookingRefunded [${bookingRefundId}]: no Finance payment with ` +
+            `gatewayPaymentId="${providerPaymentId}" for tenant ${tenantId}. ` +
+            `Aborting all Finance refunds for this event. ` +
+            `Ensure Finance payment was captured with the same gateway ID.`,
+          );
+          return;   // abort entire event — do not partially process
+        }
+
+        // Invariant: exactly one Finance payment per gateway ID (enforced by index)
+        correlationPlan.push({
+          bookingPaymentId:  bkPaymentId,
+          financePaymentId:  financePayment.id,
+          allocationMinor,
+          idempotencyKey:    `bkref_${bookingRefundId}_${bkPaymentId}`,
+        });
+      }
+
+      // ── Step 5: All correlations resolved — now call RefundService ───
+      // RefundService.requestRefund() is idempotent per idempotencyKey.
+      for (const plan of correlationPlan) {
+        await this.refundService.requestRefund(
+          {
+            paymentId:      plan.financePaymentId,
+            invoiceId:      ref.invoiceId,
+            amountMinor:    plan.allocationMinor,
+            currency,
+            idempotencyKey: plan.idempotencyKey,
+            sourceType:     'booking',
+            sourceId:       bookingId,
+          },
+          tenantId,
+          actorId,
+        );
+
+        this.logger.log(
+          `onBookingRefunded [${bookingRefundId}]: Finance refund created — ` +
+          `financePaymentId=${plan.financePaymentId} ` +
+          `bookingPaymentId=${plan.bookingPaymentId} ` +
+          `amount=${plan.allocationMinor} ${currency} — tenant ${tenantId}`,
+        );
+      }
 
       this.logger.log(
-        `onBookingRefunded: Finance refund created for booking ${bookingId} ` +
-        `(${amountMinor} ${currency}) bookingRefundId=${bookingRefundId} — tenant ${tenantId}`,
+        `onBookingRefunded [${bookingRefundId}]: ${correlationPlan.length} Finance ` +
+        `refund(s) created totalling ${amountMinor} ${currency} — tenant ${tenantId}`,
       );
+
     } catch (err) {
       this.logger.error(
-        `onBookingRefunded: failed for booking ${bookingId} bookingRefundId=${bookingRefundId} — ` +
-        `${(err as Error).message}`,
+        `onBookingRefunded [${bookingRefundId}]: unexpected error — ${(err as Error).message}`,
         (err as Error).stack,
       );
       // Do not rethrow — Booking must not fail because Finance fails

@@ -114,36 +114,82 @@ let BookingFinanceListener = BookingFinanceListener_1 = class BookingFinanceList
         try {
             const ref = await this.invoiceRepository.findReference('booking', bookingId, tenantId);
             if (!ref) {
-                this.logger.warn(`onBookingRefunded: no Finance invoice for booking ${bookingId} — ` +
-                    `cannot create Finance refund for bookingRefundId ${bookingRefundId}`);
+                this.logger.warn(`onBookingRefunded [${bookingRefundId}]: no Finance invoice for ` +
+                    `booking ${bookingId} — cannot create Finance refund`);
                 return;
             }
-            const allocations = await this.paymentRepository.findAllocationsByInvoice(ref.invoiceId, tenantId);
-            if (!allocations.length) {
-                this.logger.warn(`onBookingRefunded: no Finance payment allocations for invoice ${ref.invoiceId} — skip`);
+            const allocRows = await this.dataSource.query(`SELECT booking_payment_id, amount_minor
+         FROM booking_refund_payment_allocations
+         WHERE tenant_id = $1 AND booking_refund_id = $2
+         ORDER BY booking_payment_id ASC`, [tenantId, bookingRefundId]);
+            if (!allocRows.length) {
+                this.logger.error(`onBookingRefunded [${bookingRefundId}]: no booking_refund_payment_allocations ` +
+                    `found — cannot create Finance refunds`);
                 return;
             }
-            if (allocations.length > 1) {
-                this.logger.warn(`onBookingRefunded: invoice ${ref.invoiceId} has ${allocations.length} Finance payment ` +
-                    `allocations. Using first allocation (paymentId=${allocations[0].paymentId}). ` +
-                    `Full multi-Finance-payment refund support requires correlation field — see Batch 7.5D gap doc.`);
+            const allocSum = allocRows.reduce((s, r) => s + r.amount_minor, 0);
+            if (allocSum !== amountMinor) {
+                this.logger.error(`onBookingRefunded [${bookingRefundId}]: allocation sum ${allocSum} ≠ ` +
+                    `event amountMinor ${amountMinor} — invariant violation, aborting`);
+                return;
             }
-            const allocation = allocations[0];
-            await this.refundService.requestRefund({
-                paymentId: allocation.paymentId,
-                invoiceId: ref.invoiceId,
-                amountMinor,
-                currency,
-                idempotencyKey: `bkref_${bookingRefundId}`,
-                sourceType: 'booking',
-                sourceId: bookingId,
-            }, tenantId, actorId);
-            this.logger.log(`onBookingRefunded: Finance refund created for booking ${bookingId} ` +
-                `(${amountMinor} ${currency}) bookingRefundId=${bookingRefundId} — tenant ${tenantId}`);
+            const correlationPlan = [];
+            for (const alloc of allocRows) {
+                const bkPaymentId = alloc.booking_payment_id;
+                const allocationMinor = alloc.amount_minor;
+                const bkPayRows = await this.dataSource.query(`SELECT provider_payment_id
+           FROM booking_payments
+           WHERE id = $1 AND tenant_id = $2 AND is_deleted = FALSE
+           LIMIT 1`, [bkPaymentId, tenantId]);
+                const bkPay = bkPayRows[0];
+                if (!bkPay) {
+                    this.logger.error(`onBookingRefunded [${bookingRefundId}]: booking_payment ${bkPaymentId} ` +
+                        `not found — aborting all Finance refunds for this event`);
+                    return;
+                }
+                const providerPaymentId = bkPay.provider_payment_id;
+                if (!providerPaymentId) {
+                    this.logger.error(`onBookingRefunded [${bookingRefundId}]: booking_payment ${bkPaymentId} ` +
+                        `has no providerPaymentId (cash/manual). Finance refund for this ` +
+                        `allocation (${allocationMinor} ${currency}) cannot be automated. ` +
+                        `Manual Finance refund required. Aborting all Finance refunds for this event.`);
+                    return;
+                }
+                const financePayment = await this.paymentRepository.findByGatewayPaymentId(providerPaymentId, tenantId);
+                if (!financePayment) {
+                    this.logger.error(`onBookingRefunded [${bookingRefundId}]: no Finance payment with ` +
+                        `gatewayPaymentId="${providerPaymentId}" for tenant ${tenantId}. ` +
+                        `Aborting all Finance refunds for this event. ` +
+                        `Ensure Finance payment was captured with the same gateway ID.`);
+                    return;
+                }
+                correlationPlan.push({
+                    bookingPaymentId: bkPaymentId,
+                    financePaymentId: financePayment.id,
+                    allocationMinor,
+                    idempotencyKey: `bkref_${bookingRefundId}_${bkPaymentId}`,
+                });
+            }
+            for (const plan of correlationPlan) {
+                await this.refundService.requestRefund({
+                    paymentId: plan.financePaymentId,
+                    invoiceId: ref.invoiceId,
+                    amountMinor: plan.allocationMinor,
+                    currency,
+                    idempotencyKey: plan.idempotencyKey,
+                    sourceType: 'booking',
+                    sourceId: bookingId,
+                }, tenantId, actorId);
+                this.logger.log(`onBookingRefunded [${bookingRefundId}]: Finance refund created — ` +
+                    `financePaymentId=${plan.financePaymentId} ` +
+                    `bookingPaymentId=${plan.bookingPaymentId} ` +
+                    `amount=${plan.allocationMinor} ${currency} — tenant ${tenantId}`);
+            }
+            this.logger.log(`onBookingRefunded [${bookingRefundId}]: ${correlationPlan.length} Finance ` +
+                `refund(s) created totalling ${amountMinor} ${currency} — tenant ${tenantId}`);
         }
         catch (err) {
-            this.logger.error(`onBookingRefunded: failed for booking ${bookingId} bookingRefundId=${bookingRefundId} — ` +
-                `${err.message}`, err.stack);
+            this.logger.error(`onBookingRefunded [${bookingRefundId}]: unexpected error — ${err.message}`, err.stack);
         }
     }
 };
