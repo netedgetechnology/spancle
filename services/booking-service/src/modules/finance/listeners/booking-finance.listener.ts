@@ -13,7 +13,7 @@ import { PaymentRepository }  from '../repositories/payment.repository';
 
 const BOOKING_CONFIRMED = 'spancle.booking.confirmed';
 const BOOKING_CANCELLED = 'spancle.booking.cancelled';
-const BOOKING_REFUNDED  = 'spancle.booking.refunded';
+// BOOKING_REFUNDED: event not yet emitted — handler deferred to Booking Refund Batch
 
 // ── Raw booking row shape returned by direct DB query ─────────────────────────
 
@@ -49,7 +49,6 @@ interface BookingRow {
  * Idempotency:
  *   - CONFIRMED: InvoiceReference UNIQUE (tenant_id, source_type, source_id) guard.
  *   - CANCELLED: InvoiceService.void() idempotent (returns if already voided).
- *   - REFUNDED: RefundService idempotency key prevents duplicate Finance refunds.
  */
 @Injectable()
 export class BookingFinanceListener {
@@ -241,80 +240,4 @@ export class BookingFinanceListener {
     }
   }
 
-  // ── BOOKING_REFUNDED ──────────────────────────────────────────────────────
-
-  /**
-   * Creates a Finance refund when a booking refund is recorded.
-   *
-   * This event is emitted by BookingService when a booking_refund record is
-   * processed. The payload carries the Finance-necessary fields.
-   *
-   * Idempotency:
-   *   RefundService.requestRefund() uses idempotencyKey = `bkref_${bookingRefundId}`.
-   *   The UNIQUE (tenant_id, idempotency_key) constraint on finance_refunds prevents
-   *   duplicate Finance refunds for the same BookingRefund record.
-   */
-  @OnEvent(BOOKING_REFUNDED, { async: true })
-  async onBookingRefunded(payload: {
-    tenantId:       string;
-    bookingId:      string;
-    bookingRefundId: string;
-    amountMinor:    number;
-    currency:       string;
-    actorId:        string;
-    timestamp:      string;
-  }): Promise<void> {
-    const { tenantId, bookingId, bookingRefundId, amountMinor, currency, actorId } = payload;
-    try {
-      // Look up the Finance invoice for this booking
-      const ref = await this.invoiceRepository.findReference(
-        'booking', bookingId, tenantId,
-      );
-      if (!ref) {
-        this.logger.warn(
-          `onBookingRefunded: no invoice for booking ${bookingId} — cannot create Finance refund`,
-        );
-        return;
-      }
-
-      // Find a payment allocation against this invoice to get the paymentId
-      const allocations = await this.paymentRepository.findAllocationsByInvoice(
-        ref.invoiceId, tenantId,
-      );
-      if (!allocations.length) {
-        this.logger.warn(
-          `onBookingRefunded: no payment allocations for invoice ${ref.invoiceId} — cannot create Finance refund`,
-        );
-        return;
-      }
-
-      // Use the first allocation's payment (most recent = last in list for multiple)
-      const allocation = allocations[allocations.length - 1]!;
-
-      // requestRefund is idempotent via idempotencyKey
-      await this.refundService.requestRefund(
-        {
-          paymentId:      allocation.paymentId,
-          invoiceId:      ref.invoiceId,
-          amountMinor,
-          currency,
-          idempotencyKey: `bkref_${bookingRefundId}`,
-          sourceType:     'booking',
-          sourceId:       bookingId,
-        },
-        tenantId,
-        actorId,
-      );
-
-      this.logger.log(
-        `onBookingRefunded: Finance refund created for booking ${bookingId} ` +
-        `(${amountMinor} ${currency}) — tenant ${tenantId}`,
-      );
-    } catch (err) {
-      this.logger.error(
-        `onBookingRefunded: failed for booking ${bookingId} — ${(err as Error).message}`,
-        (err as Error).stack,
-      );
-    }
-  }
 }
