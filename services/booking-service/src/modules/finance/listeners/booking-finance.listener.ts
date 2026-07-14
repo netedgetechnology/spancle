@@ -13,7 +13,7 @@ import { PaymentRepository }  from '../repositories/payment.repository';
 
 const BOOKING_CONFIRMED = 'spancle.booking.confirmed';
 const BOOKING_CANCELLED = 'spancle.booking.cancelled';
-// BOOKING_REFUNDED: event not yet emitted — handler deferred to Booking Refund Batch
+const BOOKING_REFUNDED  = 'spancle.booking.refunded';
 
 // ── Raw booking row shape returned by direct DB query ─────────────────────────
 
@@ -49,6 +49,8 @@ interface BookingRow {
  * Idempotency:
  *   - CONFIRMED: InvoiceReference UNIQUE (tenant_id, source_type, source_id) guard.
  *   - CANCELLED: InvoiceService.void() idempotent (returns if already voided).
+ *   - REFUNDED: RefundService idempotency key bkref_<bookingRefundId> prevents
+ *               duplicate Finance refunds for the same BookingRefundEntity.
  */
 @Injectable()
 export class BookingFinanceListener {
@@ -237,6 +239,89 @@ export class BookingFinanceListener {
         `onBookingCancelled: failed for booking ${bookingId} — ${(err as Error).message}`,
         (err as Error).stack,
       );
+    }
+  }
+
+  // ── BOOKING_REFUNDED ──────────────────────────────────────────────────────
+
+  /**
+   * Creates a Finance refund when a booking refund is recorded.
+   *
+   * Producer: BookingService.processRefund() — emits after transaction commits.
+   *
+   * Idempotency:
+   *   RefundService uses idempotencyKey = bkref_<bookingRefundId>.
+   *   UNIQUE (tenant_id, idempotency_key) on finance_refunds prevents duplicate
+   *   Finance refunds for the same BookingRefundEntity.id.
+   *
+   * Lookup path:
+   *   bookingId → InvoiceReference → invoiceId → PaymentAllocation → paymentId
+   *   Finance never reads from the `booking_refunds` table directly.
+   */
+  @OnEvent(BOOKING_REFUNDED, { async: true })
+  async onBookingRefunded(payload: {
+    tenantId:        string;
+    bookingId:       string;
+    bookingRefundId: string;
+    amountMinor:     number;
+    currency:        string;
+    actorId:         string;
+    timestamp:       string;
+  }): Promise<void> {
+    const { tenantId, bookingId, bookingRefundId, amountMinor, currency, actorId } = payload;
+    try {
+      // Resolve Finance invoice for this booking
+      const ref = await this.invoiceRepository.findReference(
+        'booking', bookingId, tenantId,
+      );
+      if (!ref) {
+        this.logger.warn(
+          `onBookingRefunded: no Finance invoice for booking ${bookingId} — ` +
+          `cannot create Finance refund for bookingRefundId ${bookingRefundId}`,
+        );
+        return;
+      }
+
+      // Find payment allocation(s) for this invoice — last allocation = most recent payment
+      const allocations = await this.paymentRepository.findAllocationsByInvoice(
+        ref.invoiceId, tenantId,
+      );
+      if (!allocations.length) {
+        this.logger.warn(
+          `onBookingRefunded: no payment allocations for invoice ${ref.invoiceId} — skip`,
+        );
+        return;
+      }
+
+      // Use the most recent allocation's payment as the refund source
+      const allocation = allocations[allocations.length - 1]!;
+
+      // requestRefund is idempotent via idempotencyKey = bkref_<bookingRefundId>
+      await this.refundService.requestRefund(
+        {
+          paymentId:      allocation.paymentId,
+          invoiceId:      ref.invoiceId,
+          amountMinor,
+          currency,
+          idempotencyKey: `bkref_${bookingRefundId}`,
+          sourceType:     'booking',
+          sourceId:       bookingId,
+        },
+        tenantId,
+        actorId,
+      );
+
+      this.logger.log(
+        `onBookingRefunded: Finance refund created for booking ${bookingId} ` +
+        `(${amountMinor} ${currency}) bookingRefundId=${bookingRefundId} — tenant ${tenantId}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `onBookingRefunded: failed for booking ${bookingId} bookingRefundId=${bookingRefundId} — ` +
+        `${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      // Do not rethrow — Booking must not fail because Finance fails
     }
   }
 

@@ -24,6 +24,7 @@ const invoice_repository_1 = require("../repositories/invoice.repository");
 const payment_repository_1 = require("../repositories/payment.repository");
 const BOOKING_CONFIRMED = 'spancle.booking.confirmed';
 const BOOKING_CANCELLED = 'spancle.booking.cancelled';
+const BOOKING_REFUNDED = 'spancle.booking.refunded';
 let BookingFinanceListener = BookingFinanceListener_1 = class BookingFinanceListener {
     constructor(invoiceService, refundService, invoiceRepository, paymentRepository, dataSource) {
         this.invoiceService = invoiceService;
@@ -108,6 +109,38 @@ let BookingFinanceListener = BookingFinanceListener_1 = class BookingFinanceList
             this.logger.error(`onBookingCancelled: failed for booking ${bookingId} — ${err.message}`, err.stack);
         }
     }
+    async onBookingRefunded(payload) {
+        const { tenantId, bookingId, bookingRefundId, amountMinor, currency, actorId } = payload;
+        try {
+            const ref = await this.invoiceRepository.findReference('booking', bookingId, tenantId);
+            if (!ref) {
+                this.logger.warn(`onBookingRefunded: no Finance invoice for booking ${bookingId} — ` +
+                    `cannot create Finance refund for bookingRefundId ${bookingRefundId}`);
+                return;
+            }
+            const allocations = await this.paymentRepository.findAllocationsByInvoice(ref.invoiceId, tenantId);
+            if (!allocations.length) {
+                this.logger.warn(`onBookingRefunded: no payment allocations for invoice ${ref.invoiceId} — skip`);
+                return;
+            }
+            const allocation = allocations[allocations.length - 1];
+            await this.refundService.requestRefund({
+                paymentId: allocation.paymentId,
+                invoiceId: ref.invoiceId,
+                amountMinor,
+                currency,
+                idempotencyKey: `bkref_${bookingRefundId}`,
+                sourceType: 'booking',
+                sourceId: bookingId,
+            }, tenantId, actorId);
+            this.logger.log(`onBookingRefunded: Finance refund created for booking ${bookingId} ` +
+                `(${amountMinor} ${currency}) bookingRefundId=${bookingRefundId} — tenant ${tenantId}`);
+        }
+        catch (err) {
+            this.logger.error(`onBookingRefunded: failed for booking ${bookingId} bookingRefundId=${bookingRefundId} — ` +
+                `${err.message}`, err.stack);
+        }
+    }
 };
 exports.BookingFinanceListener = BookingFinanceListener;
 __decorate([
@@ -122,6 +155,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], BookingFinanceListener.prototype, "onBookingCancelled", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)(BOOKING_REFUNDED, { async: true }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], BookingFinanceListener.prototype, "onBookingRefunded", null);
 exports.BookingFinanceListener = BookingFinanceListener = BookingFinanceListener_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(4, (0, typeorm_1.InjectDataSource)()),
