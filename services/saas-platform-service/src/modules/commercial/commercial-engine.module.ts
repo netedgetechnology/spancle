@@ -41,6 +41,15 @@ import {
   RevenueDistributionPolicyRepository,
 }                                            from './commercial.repositories';
 
+// Services
+import { CommercialDecisionService }         from './services/commercial-decision.service';
+
+// Controllers
+import { CommercialDecisionController }      from './controllers/commercial-decision.controller';
+
+// Guards
+import { SuperAdminGuard }                   from '../admin/guards/super-admin.guard';
+
 const ENTITIES = [
   CommercialRuleEntity,
   CommercialRuleVersionEntity,
@@ -85,7 +94,8 @@ const REPOSITORIES = [
  */
 @Module({
   imports: [TypeOrmModule.forFeature(ENTITIES)],
-  providers: [...REPOSITORIES],
-  exports: [...REPOSITORIES],
+  controllers: [CommercialDecisionController],
+  providers: [...REPOSITORIES, CommercialDecisionService, SuperAdminGuard],
+  exports: [...REPOSITORIES, CommercialDecisionService],
 })
 export class CommercialEngineModule {}

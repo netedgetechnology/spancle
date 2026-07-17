@@ -13,6 +13,9 @@ var CommercialEvents;
     CommercialEvents["PRICING_MODEL_CREATED"] = "spancle.commercial.pricing_model.created";
     CommercialEvents["FEATURE_FLAG_UPDATED"] = "spancle.commercial.feature_flag.updated";
     CommercialEvents["GATEWAY_CREDENTIAL_SET"] = "spancle.commercial.gateway_credential.set";
+    CommercialEvents["DECISION_REQUESTED"] = "spancle.commercial.decision.requested";
+    CommercialEvents["DECISION_GENERATED"] = "spancle.commercial.decision.generated";
+    CommercialEvents["DECISION_FAILED"] = "spancle.commercial.decision.failed";
     CommercialEvents["DECISION_MADE"] = "spancle.commercial.decision.made";
 })(CommercialEvents || (exports.CommercialEvents = CommercialEvents = {}));
 //# sourceMappingURL=commercial.events.js.map

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CommercialAuditAction = exports.FeatureFlagStatus = exports.CommercialDecisionOutcome = exports.CommercialProductType = exports.GatewayScope = exports.GatewayType = exports.RevenueDistributionType = exports.PaymentOwnershipType = exports.PricingModelType = exports.CommercialRuleStatus = exports.CommercialRuleType = void 0;
+exports.CommercialPipelineStep = exports.TransactionType = exports.CommercialAuditAction = exports.FeatureFlagStatus = exports.CommercialDecisionOutcome = exports.CommercialProductType = exports.GatewayScope = exports.GatewayType = exports.RevenueDistributionType = exports.PaymentOwnershipType = exports.PricingModelType = exports.CommercialRuleStatus = exports.CommercialRuleType = void 0;
 var CommercialRuleType;
 (function (CommercialRuleType) {
     CommercialRuleType["PRICING"] = "PRICING";
@@ -83,4 +83,21 @@ var CommercialAuditAction;
     CommercialAuditAction["FLAG_TOGGLED"] = "FLAG_TOGGLED";
     CommercialAuditAction["CREDENTIAL_SET"] = "CREDENTIAL_SET";
 })(CommercialAuditAction || (exports.CommercialAuditAction = CommercialAuditAction = {}));
+var TransactionType;
+(function (TransactionType) {
+    TransactionType["BOOKING"] = "BOOKING";
+    TransactionType["SUBSCRIPTION"] = "SUBSCRIPTION";
+    TransactionType["ADDON_PURCHASE"] = "ADDON_PURCHASE";
+    TransactionType["REFUND"] = "REFUND";
+    TransactionType["CHARGEBACK"] = "CHARGEBACK";
+    TransactionType["ADJUSTMENT"] = "ADJUSTMENT";
+})(TransactionType || (exports.TransactionType = TransactionType = {}));
+var CommercialPipelineStep;
+(function (CommercialPipelineStep) {
+    CommercialPipelineStep["VALIDATE_REQUEST"] = "VALIDATE_REQUEST";
+    CommercialPipelineStep["RESOLVE_PACKAGE"] = "RESOLVE_PACKAGE";
+    CommercialPipelineStep["RESOLVE_PRODUCT"] = "RESOLVE_PRODUCT";
+    CommercialPipelineStep["RESOLVE_POLICIES"] = "RESOLVE_POLICIES";
+    CommercialPipelineStep["GENERATE_SNAPSHOT"] = "GENERATE_SNAPSHOT";
+})(CommercialPipelineStep || (exports.CommercialPipelineStep = CommercialPipelineStep = {}));
 //# sourceMappingURL=commercial.enums.js.map

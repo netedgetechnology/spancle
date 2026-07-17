@@ -101,3 +101,24 @@ export enum CommercialAuditAction {
   FLAG_TOGGLED    = 'FLAG_TOGGLED',
   CREDENTIAL_SET  = 'CREDENTIAL_SET',
 }
+
+// ── TransactionType ───────────────────────────────────────────────────────────
+
+export enum TransactionType {
+  BOOKING         = 'BOOKING',
+  SUBSCRIPTION    = 'SUBSCRIPTION',
+  ADDON_PURCHASE  = 'ADDON_PURCHASE',
+  REFUND          = 'REFUND',
+  CHARGEBACK      = 'CHARGEBACK',
+  ADJUSTMENT      = 'ADJUSTMENT',
+}
+
+// ── CommercialPipelineStep ────────────────────────────────────────────────────
+
+export enum CommercialPipelineStep {
+  VALIDATE_REQUEST   = 'VALIDATE_REQUEST',
+  RESOLVE_PACKAGE    = 'RESOLVE_PACKAGE',
+  RESOLVE_PRODUCT    = 'RESOLVE_PRODUCT',
+  RESOLVE_POLICIES   = 'RESOLVE_POLICIES',
+  GENERATE_SNAPSHOT  = 'GENERATE_SNAPSHOT',
+}

@@ -9,5 +9,10 @@ export enum CommercialEvents {
   PRICING_MODEL_CREATED     = 'spancle.commercial.pricing_model.created',
   FEATURE_FLAG_UPDATED      = 'spancle.commercial.feature_flag.updated',
   GATEWAY_CREDENTIAL_SET    = 'spancle.commercial.gateway_credential.set',
+  // ── Decision lifecycle ───────────────────────────────────────────────────
+  DECISION_REQUESTED        = 'spancle.commercial.decision.requested',
+  DECISION_GENERATED        = 'spancle.commercial.decision.generated',
+  DECISION_FAILED           = 'spancle.commercial.decision.failed',
+  /** @deprecated Use DECISION_GENERATED — kept for event subscriber compatibility */
   DECISION_MADE             = 'spancle.commercial.decision.made',
 }

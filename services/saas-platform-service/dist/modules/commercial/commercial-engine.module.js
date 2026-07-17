@@ -15,6 +15,9 @@ const commercial_snapshot_and_package_entity_1 = require("./entities/commercial-
 const commercial_product_module_pricing_entity_1 = require("./entities/commercial-product-module-pricing.entity");
 const commercial_policy_gateway_flag_audit_entity_1 = require("./entities/commercial-policy-gateway-flag-audit.entity");
 const commercial_repositories_1 = require("./commercial.repositories");
+const commercial_decision_service_1 = require("./services/commercial-decision.service");
+const commercial_decision_controller_1 = require("./controllers/commercial-decision.controller");
+const super_admin_guard_1 = require("../admin/guards/super-admin.guard");
 const ENTITIES = [
     commercial_rule_entity_1.CommercialRuleEntity,
     commercial_rule_version_entity_1.CommercialRuleVersionEntity,
@@ -53,8 +56,9 @@ exports.CommercialEngineModule = CommercialEngineModule;
 exports.CommercialEngineModule = CommercialEngineModule = __decorate([
     (0, common_1.Module)({
         imports: [typeorm_1.TypeOrmModule.forFeature(ENTITIES)],
-        providers: [...REPOSITORIES],
-        exports: [...REPOSITORIES],
+        controllers: [commercial_decision_controller_1.CommercialDecisionController],
+        providers: [...REPOSITORIES, commercial_decision_service_1.CommercialDecisionService, super_admin_guard_1.SuperAdminGuard],
+        exports: [...REPOSITORIES, commercial_decision_service_1.CommercialDecisionService],
     })
 ], CommercialEngineModule);
 //# sourceMappingURL=commercial-engine.module.js.map
