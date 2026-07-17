@@ -5,7 +5,27 @@
 
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
+import { CommercialRuleEntity }              from './modules/commercial/entities/commercial-rule.entity';
 import { BannerEntity } from './modules/banner/entities/banner.entity';
+import { CommercialRuleVersionEntity }       from './modules/commercial/entities/commercial-rule-version.entity';
+import {
+  CommercialDecisionSnapshotEntity,
+  PackageDefinitionEntity,
+  PackageVersionEntity,
+}                                            from './modules/commercial/entities/commercial-snapshot-and-package.entity';
+import {
+  CommercialProductEntity,
+  ModuleRegistryEntity,
+  PricingModelEntity,
+}                                            from './modules/commercial/entities/commercial-product-module-pricing.entity';
+import {
+  CommercialAuditEntity,
+  FeatureFlagEntity,
+  GatewayCredentialEntity,
+  GatewayDefinitionEntity,
+  PaymentOwnershipPolicyEntity,
+  RevenueDistributionPolicyEntity,
+}                                            from './modules/commercial/entities/commercial-policy-gateway-flag-audit.entity';
 import { BlogCategoryEntity } from './modules/blog/entities/blog-category.entity';
 import { BlogPostEntity } from './modules/blog/entities/blog-post.entity';
 import { HomepageSectionEntity } from './modules/homepage/entities/homepage-section.entity';
@@ -34,6 +54,20 @@ const dataSource = new DataSource({
     PlanEntity,
     SubscriptionEntity,
     TenantEntity,
+    CommercialRuleEntity,
+    CommercialRuleVersionEntity,
+    CommercialDecisionSnapshotEntity,
+    PackageDefinitionEntity,
+    PackageVersionEntity,
+    CommercialProductEntity,
+    ModuleRegistryEntity,
+    PricingModelEntity,
+    PaymentOwnershipPolicyEntity,
+    RevenueDistributionPolicyEntity,
+    GatewayDefinitionEntity,
+    GatewayCredentialEntity,
+    FeatureFlagEntity,
+    CommercialAuditEntity,
   ],
   migrations:         ['dist/migrations/*.js'],
   migrationsTableName: 'typeorm_migrations',

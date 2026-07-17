@@ -2,7 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const typeorm_1 = require("typeorm");
+const commercial_rule_entity_1 = require("./modules/commercial/entities/commercial-rule.entity");
 const banner_entity_1 = require("./modules/banner/entities/banner.entity");
+const commercial_rule_version_entity_1 = require("./modules/commercial/entities/commercial-rule-version.entity");
+const commercial_snapshot_and_package_entity_1 = require("./modules/commercial/entities/commercial-snapshot-and-package.entity");
+const commercial_product_module_pricing_entity_1 = require("./modules/commercial/entities/commercial-product-module-pricing.entity");
+const commercial_policy_gateway_flag_audit_entity_1 = require("./modules/commercial/entities/commercial-policy-gateway-flag-audit.entity");
 const blog_category_entity_1 = require("./modules/blog/entities/blog-category.entity");
 const blog_post_entity_1 = require("./modules/blog/entities/blog-post.entity");
 const homepage_section_entity_1 = require("./modules/homepage/entities/homepage-section.entity");
@@ -30,6 +35,20 @@ const dataSource = new typeorm_1.DataSource({
         plan_entity_1.PlanEntity,
         subscription_entity_1.SubscriptionEntity,
         tenant_entity_1.TenantEntity,
+        commercial_rule_entity_1.CommercialRuleEntity,
+        commercial_rule_version_entity_1.CommercialRuleVersionEntity,
+        commercial_snapshot_and_package_entity_1.CommercialDecisionSnapshotEntity,
+        commercial_snapshot_and_package_entity_1.PackageDefinitionEntity,
+        commercial_snapshot_and_package_entity_1.PackageVersionEntity,
+        commercial_product_module_pricing_entity_1.CommercialProductEntity,
+        commercial_product_module_pricing_entity_1.ModuleRegistryEntity,
+        commercial_product_module_pricing_entity_1.PricingModelEntity,
+        commercial_policy_gateway_flag_audit_entity_1.PaymentOwnershipPolicyEntity,
+        commercial_policy_gateway_flag_audit_entity_1.RevenueDistributionPolicyEntity,
+        commercial_policy_gateway_flag_audit_entity_1.GatewayDefinitionEntity,
+        commercial_policy_gateway_flag_audit_entity_1.GatewayCredentialEntity,
+        commercial_policy_gateway_flag_audit_entity_1.FeatureFlagEntity,
+        commercial_policy_gateway_flag_audit_entity_1.CommercialAuditEntity,
     ],
     migrations: ['dist/migrations/*.js'],
     migrationsTableName: 'typeorm_migrations',

@@ -13,6 +13,7 @@ import { SubscriptionModule }  from './modules/subscription/subscription.module'
 import { PlanModule }          from './modules/plan/plan.module';
 import { CmsModule }           from './modules/cms/cms.module';
 import { AdminModule }          from './modules/admin/admin.module';
+import { CommercialEngineModule } from './modules/commercial/commercial-engine.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AdminModule }          from './modules/admin/admin.module';
     }),
 
     TenantModule, PackageModule, SubscriptionModule, PlanModule, CmsModule, AdminModule,
+    CommercialEngineModule,
   ],
   providers: [
     // Global JWT auth guard — enforces authentication on all CMS admin endpoints.

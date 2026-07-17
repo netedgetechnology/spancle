@@ -21,6 +21,7 @@ const subscription_module_1 = require("./modules/subscription/subscription.modul
 const plan_module_1 = require("./modules/plan/plan.module");
 const cms_module_1 = require("./modules/cms/cms.module");
 const admin_module_1 = require("./modules/admin/admin.module");
+const commercial_engine_module_1 = require("./modules/commercial/commercial-engine.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -66,6 +67,7 @@ exports.AppModule = AppModule = __decorate([
                 }),
             }),
             tenant_module_1.TenantModule, package_module_1.PackageModule, subscription_module_1.SubscriptionModule, plan_module_1.PlanModule, cms_module_1.CmsModule, admin_module_1.AdminModule,
+            commercial_engine_module_1.CommercialEngineModule,
         ],
         providers: [
             { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },

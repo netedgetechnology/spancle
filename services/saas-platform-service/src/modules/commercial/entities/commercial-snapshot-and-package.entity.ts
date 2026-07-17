@@ -1,0 +1,151 @@
+import {
+  Column, CreateDateColumn, DeleteDateColumn,
+  Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn,
+} from 'typeorm';
+import { CommercialDecisionOutcome } from '../enums/commercial.enums';
+
+// ── CommercialDecisionSnapshot ────────────────────────────────────────────────
+
+/**
+ * CommercialDecisionSnapshot — immutable record of a rule evaluation.
+ *
+ * Written when any commercial rule is evaluated for a subject.
+ * INSERT-only for audit/replay purposes.
+ */
+@Entity('commercial_decision_snapshots')
+@Index(['tenantId', 'ruleId'])
+@Index(['tenantId', 'subjectType', 'subjectId'])
+@Index(['tenantId', 'createdAt'])
+export class CommercialDecisionSnapshotEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+  @Index()
+  tenantId!: string | null;
+
+  /** FK-equivalent → commercial_rules.id */
+  @Column({ name: 'rule_id', type: 'uuid', nullable: false })
+  ruleId!: string;
+
+  /** Semver of the rule version that produced this decision */
+  @Column({ name: 'rule_version', type: 'varchar', length: 32, nullable: false })
+  ruleVersion!: string;
+
+  /** Entity type the rule was evaluated against, e.g. 'booking', 'subscription' */
+  @Column({ name: 'subject_type', type: 'varchar', length: 64, nullable: false })
+  subjectType!: string;
+
+  @Column({ name: 'subject_id', type: 'uuid', nullable: false })
+  subjectId!: string;
+
+  @Column({ name: 'outcome', type: 'varchar', length: 32, nullable: false })
+  outcome!: CommercialDecisionOutcome;
+
+  /** Input context snapshot used for the evaluation */
+  @Column({ name: 'input_context', type: 'jsonb', nullable: false, default: '{}' })
+  inputContext!: Record<string, unknown>;
+
+  /** Result payload produced by the rule */
+  @Column({ name: 'result_payload', type: 'jsonb', nullable: false, default: '{}' })
+  resultPayload!: Record<string, unknown>;
+
+  @Column({ name: 'evaluated_by_id', type: 'uuid', nullable: true })
+  evaluatedById!: string | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}
+
+// ── PackageDefinition ─────────────────────────────────────────────────────────
+
+/**
+ * PackageDefinition — the commercial offer definition.
+ *
+ * Platform-scoped (tenantId = null). Defines which products, limits,
+ * and features belong to a named commercial package (e.g. "Starter", "Pro").
+ */
+@Entity('package_definitions')
+@Index(['slug'], { unique: true })
+@Index(['isActive'])
+export class PackageDefinitionEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'name', type: 'varchar', length: 255, nullable: false })
+  name!: string;
+
+  /** Machine-readable key, e.g. "starter", "pro", "enterprise" */
+  @Column({ name: 'slug', type: 'varchar', length: 64, nullable: false })
+  slug!: string;
+
+  @Column({ name: 'description', type: 'text', nullable: true })
+  description!: string | null;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive!: boolean;
+
+  @Column({ name: 'sort_order', type: 'int', nullable: false, default: 0 })
+  sortOrder!: number;
+
+  @Column({ name: 'metadata', type: 'jsonb', nullable: false, default: '{}' })
+  metadata!: Record<string, unknown>;
+
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted!: boolean;
+
+  @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
+  createdById!: string | null;
+
+  @Column({ name: 'updated_by_id', type: 'uuid', nullable: true })
+  updatedById!: string | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
+}
+
+// ── PackageVersion ────────────────────────────────────────────────────────────
+
+/**
+ * PackageVersion — immutable versioned snapshot of a PackageDefinition.
+ *
+ * INSERT-only. Allows retroactive inspection of what tenants signed up for.
+ */
+@Entity('package_versions')
+@Index(['packageDefinitionId', 'version'], { unique: true })
+export class PackageVersionEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  /** FK-equivalent → package_definitions.id */
+  @Column({ name: 'package_definition_id', type: 'uuid', nullable: false })
+  packageDefinitionId!: string;
+
+  @Column({ name: 'version', type: 'varchar', length: 32, nullable: false })
+  version!: string;
+
+  @Column({ name: 'features', type: 'jsonb', nullable: false, default: '{}' })
+  features!: Record<string, boolean>;
+
+  @Column({ name: 'limits', type: 'jsonb', nullable: false, default: '{}' })
+  limits!: Record<string, number>;
+
+  /** Prices per billing period in minor currency units (INT only) */
+  @Column({ name: 'prices', type: 'jsonb', nullable: false, default: '{}' })
+  prices!: Record<string, number>;
+
+  @Column({ name: 'changelog', type: 'text', nullable: true })
+  changelog!: string | null;
+
+  @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
+  createdById!: string | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}
