@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   UnprocessableEntityException,
@@ -17,52 +18,41 @@ import type {
   ICommercialDecisionService,
   ResolvedPipelineContext,
 } from '../interfaces/commercial-decision.interfaces';
-import {
-  CommercialDecisionSnapshotRepository,
-  CommercialProductRepository,
-  CommercialRuleRepository,
-  PackageDefinitionRepository,
-  PackageVersionRepository,
-  PaymentOwnershipPolicyRepository,
-  RevenueDistributionPolicyRepository,
-} from '../commercial.repositories';
+import { POLICY_RESOLVER } from '../interfaces/policy-resolver.interfaces';
+import { toPackageAssignmentSnapshot } from '../policy/package-assignment.model';
+import type { IPolicyResolver, ResolvedPolicyBundle } from '../interfaces/policy-resolver.interfaces';
+import { CommercialDecisionSnapshotRepository } from '../commercial.repositories';
 import type { CommercialDecisionSnapshotEntity } from '../entities/commercial-snapshot-and-package.entity';
 
 /**
  * CommercialDecisionService
  *
- * Implements the five-step evaluation pipeline:
+ * Five-step evaluation pipeline:
+ *   VALIDATE_REQUEST → RESOLVE_PACKAGE → RESOLVE_PRODUCT
+ *   → RESOLVE_POLICIES → GENERATE_SNAPSHOT
  *
- *   VALIDATE_REQUEST
- *     → RESOLVE_PACKAGE
- *     → RESOLVE_PRODUCT
- *     → RESOLVE_POLICIES
- *     → GENERATE_SNAPSHOT
+ * Dependencies:
+ *   - IPolicyResolver (injected via POLICY_RESOLVER symbol)
+ *     Produces ResolvedPolicyBundle; owns all repository access.
+ *   - CommercialDecisionSnapshotRepository
+ *     INSERT-only audit record. The only direct data dependency.
+ *   - EventEmitter2 for domain events.
  *
- * This batch: pipeline skeleton only.
- * No pricing logic, no commission logic, no gateway calls.
- * No dependency on the Booking or Finance bounded contexts.
- *
- * Immutability guarantee:
- *   The CommercialDecisionSnapshotEntity is written as an INSERT-only
- *   record before this method returns. The snapshot is never updated.
+ * No repository for products, packages, rules, policies, or gateways
+ * is injected here — all resolved via IPolicyResolver.
  */
 @Injectable()
 export class CommercialDecisionService implements ICommercialDecisionService {
   private readonly logger = new Logger(CommercialDecisionService.name);
 
   constructor(
-    private readonly snapshotRepo:      CommercialDecisionSnapshotRepository,
-    private readonly packageDefRepo:    PackageDefinitionRepository,
-    private readonly packageVersionRepo: PackageVersionRepository,
-    private readonly productRepo:       CommercialProductRepository,
-    private readonly ruleRepo:          CommercialRuleRepository,
-    private readonly ownershipRepo:     PaymentOwnershipPolicyRepository,
-    private readonly distributionRepo:  RevenueDistributionPolicyRepository,
-    private readonly eventEmitter:      EventEmitter2,
+    @Inject(POLICY_RESOLVER)
+    private readonly policyResolver: IPolicyResolver,
+    private readonly snapshotRepo:   CommercialDecisionSnapshotRepository,
+    private readonly eventEmitter:   EventEmitter2,
   ) {}
 
-  // ── Public API ───────────────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────────────
 
   async evaluate(context: CommercialDecisionContext): Promise<CommercialDecisionResult> {
     this.logger.log(
@@ -78,7 +68,7 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       timestamp:       context.requestedAt.toISOString(),
     });
 
-    const resolved: ResolvedPipelineContext = {
+    const pipelineCtx: ResolvedPipelineContext = {
       input:                context,
       packageVersion:       null,
       product:              null,
@@ -88,32 +78,33 @@ export class CommercialDecisionService implements ICommercialDecisionService {
     };
 
     try {
-      await this.stepValidateRequest(resolved);
-      await this.stepResolvePackage(resolved);
-      await this.stepResolveProduct(resolved);
-      await this.stepResolvePolicies(resolved);
-      const result = await this.stepGenerateSnapshot(resolved);
+      // Step 1: validate input
+      this.stepValidateRequest(pipelineCtx);
+
+      // Step 2-4: delegate resolution entirely to PolicyResolver
+      const bundle = await this.stepResolveViaPolicy(pipelineCtx);
+
+      // Step 5: generate immutable snapshot and build result
+      const result = await this.stepGenerateSnapshot(pipelineCtx, bundle);
 
       await this.eventEmitter.emitAsync(CommercialEvents.DECISION_GENERATED, {
-        decisionId:      result.decisionId,
-        tenantId:        context.tenantId,
-        outcome:         result.outcome,
-        timestamp:       result.generatedAt.toISOString(),
+        decisionId: result.decisionId,
+        tenantId:   context.tenantId,
+        outcome:    result.outcome,
+        timestamp:  result.generatedAt.toISOString(),
       });
 
       return result;
     } catch (err) {
       const msg = (err as Error).message ?? 'unknown error';
-      this.logger.error(
-        `evaluate: pipeline failed — tenant=${context.tenantId} err=${msg}`,
-      );
+      this.logger.error(`evaluate: pipeline failed — tenant=${context.tenantId} err=${msg}`);
       await this.eventEmitter.emitAsync(CommercialEvents.DECISION_FAILED, {
-        tenantId:        context.tenantId,
-        moduleId:        context.moduleId,
-        productId:       context.productId,
-        error:           msg,
-        stepTrace:       resolved.stepTrace,
-        timestamp:       new Date().toISOString(),
+        tenantId:  context.tenantId,
+        moduleId:  context.moduleId,
+        productId: context.productId,
+        error:     msg,
+        stepTrace: pipelineCtx.stepTrace,
+        timestamp: new Date().toISOString(),
       });
       throw err;
     }
@@ -123,38 +114,26 @@ export class CommercialDecisionService implements ICommercialDecisionService {
     decisionId: string,
     tenantId:   string,
   ): Promise<CommercialDecisionResult | null> {
-    const snapshots = await this.snapshotRepo.findBySubject(
-      tenantId, 'decision', decisionId,
-    );
-    const snapshot = snapshots.find((s) => s.id === decisionId);
+    const snapshots = await this.snapshotRepo.findBySubject(tenantId, 'decision', decisionId);
+    const snapshot  = snapshots.find((s) => s.id === decisionId);
     if (!snapshot) return null;
-
-    return this.snapshotToResult(snapshot, snapshot.inputContext as Record<string, unknown>);
+    return this.snapshotToResult(snapshot);
   }
 
-  // ── Pipeline Steps ───────────────────────────────────────────────────────
+  // ── Pipeline steps ────────────────────────────────────────────────────────
 
   /**
    * Step 1 — VALIDATE_REQUEST
-   *
-   * Guards:
-   *   - tenantId non-empty
-   *   - moduleId non-empty
-   *   - productId non-empty
-   *   - amountMinor >= 0 and is an integer
-   *   - currency is 3 chars
-   *   - country is 2 chars
-   *   - transactionType is a known value
-   *
-   * No pricing validation here — amounts are validated only for type-safety.
+   * Guards type-safety of the input context.
+   * No business logic; no pricing.
    */
   private stepValidateRequest(ctx: ResolvedPipelineContext): void {
     const { input } = ctx;
     const errors: string[] = [];
 
-    if (!input.tenantId)   errors.push('tenantId is required');
-    if (!input.moduleId)   errors.push('moduleId is required');
-    if (!input.productId)  errors.push('productId is required');
+    if (!input.tenantId)  errors.push('tenantId is required');
+    if (!input.moduleId)  errors.push('moduleId is required');
+    if (!input.productId) errors.push('productId is required');
     if (!Number.isInteger(input.amountMinor) || input.amountMinor < 0)
       errors.push('amountMinor must be a non-negative integer');
     if (!input.currency || input.currency.length !== 3)
@@ -179,40 +158,22 @@ export class CommercialDecisionService implements ICommercialDecisionService {
   }
 
   /**
-   * Step 2 — RESOLVE_PACKAGE
+   * Steps 2–4 — RESOLVE_PACKAGE, RESOLVE_PRODUCT, RESOLVE_POLICIES
    *
-   * Loads the active PackageDefinition for the tenant, then finds the
-   * latest PackageVersion. The tenant's current package slug is stored
-   * in the plan module (PlanEntity.tierKey).
-   *
-   * This step is non-blocking: a missing package version sets
-   * packageVersion = null and continues. Downstream steps may still
-   * produce a DENIED outcome.
-   *
-   * Pricing batch will resolve exact amounts from the package version.
+   * All resolved through IPolicyResolver. The service records
+   * individual step traces for observability.
    */
-  private async stepResolvePackage(ctx: ResolvedPipelineContext): Promise<void> {
-    const { tenantId } = ctx.input;
+  private async stepResolveViaPolicy(
+    ctx: ResolvedPipelineContext,
+  ): Promise<ResolvedPolicyBundle> {
+    let bundle: ResolvedPolicyBundle;
 
+    // RESOLVE_PACKAGE
     try {
-      // Resolve package slug via rule or plan — placeholder lookup by tenant rule.
-      // In future: PlanService.findForTenant(tenantId) → tierKey → packageDef slug.
-      // For now: find all active packages and use the first (scaffold-only).
-      const defs = await this.packageDefRepo.findAll();
-      const activeDef = defs.find((d) => d.isActive) ?? null;
-
-      if (activeDef) {
-        const versions = await this.packageVersionRepo.findByPackage(activeDef.id);
-        ctx.packageVersion = versions[0] ?? null;  // latest version (sorted DESC by createdAt)
-      }
-
-      ctx.stepTrace.push({
-        step:   CommercialPipelineStep.RESOLVE_PACKAGE,
-        ok:     true,
-        detail: ctx.packageVersion
-          ? `resolved package version ${ctx.packageVersion.id}`
-          : 'no package version found — continuing',
-      });
+      bundle = await this.policyResolver.resolve(ctx.input);
+      ctx.packageVersion    = bundle.packageVersion;
+      ctx.ownershipPolicies = bundle.ownershipPolicies as typeof ctx.ownershipPolicies;
+      ctx.distributionPolicies = bundle.distributionPolicies as typeof ctx.distributionPolicies;
     } catch (err) {
       ctx.stepTrace.push({
         step:   CommercialPipelineStep.RESOLVE_PACKAGE,
@@ -221,107 +182,75 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       });
       throw err;
     }
-  }
 
-  /**
-   * Step 3 — RESOLVE_PRODUCT
-   *
-   * Finds the CommercialProduct for productId (UUID or SKU).
-   * Sets product = null when not found; outcome will be DENIED.
-   */
-  private async stepResolveProduct(ctx: ResolvedPipelineContext): Promise<void> {
-    const { productId } = ctx.input;
+    ctx.stepTrace.push({
+      step:   CommercialPipelineStep.RESOLVE_PACKAGE,
+      ok:     true,
+      detail: bundle.packageVersion
+        ? `${bundle.packageSlug}@${bundle.packageVersion.version}`
+        : 'no package version — tenant has no active plan',
+    });
 
-    try {
-      // Try UUID first; fall back to SKU lookup
-      const byId  = await this.productRepo.findById(productId);
-      const bySku = byId ? null : await this.productRepo.findBySku(productId);
-      ctx.product = byId ?? bySku;
+    // RESOLVE_PRODUCT — productId from context, eligibility from bundle
+    ctx.stepTrace.push({
+      step:   CommercialPipelineStep.RESOLVE_PRODUCT,
+      ok:     true,
+      detail: `productId=${ctx.input.productId} (eligibility evaluated at snapshot step)`,
+    });
 
-      ctx.stepTrace.push({
-        step:   CommercialPipelineStep.RESOLVE_PRODUCT,
-        ok:     true,
-        detail: ctx.product
-          ? `resolved product ${ctx.product.id} (sku=${ctx.product.sku})`
-          : `product "${productId}" not found`,
-      });
-    } catch (err) {
-      ctx.stepTrace.push({
-        step:   CommercialPipelineStep.RESOLVE_PRODUCT,
-        ok:     false,
-        detail: (err as Error).message,
-      });
-      throw err;
-    }
-  }
+    // RESOLVE_POLICIES
+    ctx.stepTrace.push({
+      step:   CommercialPipelineStep.RESOLVE_POLICIES,
+      ok:     true,
+      detail:
+        `ownership=${bundle.ownershipPolicies.length} ` +
+        `distribution=${bundle.distributionPolicies.length} ` +
+        `pricing=${bundle.pricingModels.length} ` +
+        `gateways=${bundle.gatewayDefinitions.length} ` +
+        `rules=${bundle.ruleVersions.length} ` +
+        `flags=${bundle.featureFlags.length}`,
+    });
 
-  /**
-   * Step 4 — RESOLVE_POLICIES
-   *
-   * Loads PaymentOwnershipPolicy and RevenueDistributionPolicy rows
-   * applicable to this tenant (tenant-scoped first, platform fallback).
-   * Policy contents are not evaluated here — that is deferred to the
-   * commission and distribution services.
-   */
-  private async stepResolvePolicies(ctx: ResolvedPipelineContext): Promise<void> {
-    const { tenantId } = ctx.input;
-
-    try {
-      // Load tenant-scoped policies; fall back to platform policies (tenantId=null)
-      const [tenantOwnership, platformOwnership] = await Promise.all([
-        this.ownershipRepo.findByTenant(tenantId),
-        this.ownershipRepo.findByTenant(null),
-      ]);
-      ctx.ownershipPolicies = tenantOwnership.length ? tenantOwnership : platformOwnership;
-
-      const [tenantDist, platformDist] = await Promise.all([
-        this.distributionRepo.findByTenant(tenantId),
-        this.distributionRepo.findByTenant(null),
-      ]);
-      ctx.distributionPolicies = tenantDist.length ? tenantDist : platformDist;
-
-      ctx.stepTrace.push({
-        step:   CommercialPipelineStep.RESOLVE_POLICIES,
-        ok:     true,
-        detail: `ownership=${ctx.ownershipPolicies.length} distribution=${ctx.distributionPolicies.length}`,
-      });
-    } catch (err) {
-      ctx.stepTrace.push({
-        step:   CommercialPipelineStep.RESOLVE_POLICIES,
-        ok:     false,
-        detail: (err as Error).message,
-      });
-      throw err;
-    }
+    return bundle;
   }
 
   /**
    * Step 5 — GENERATE_SNAPSHOT
    *
-   * Determines the outcome, writes the immutable snapshot, and builds
-   * CommercialDecisionResult.
+   * Writes the immutable CommercialDecisionSnapshotEntity.
+   * Records the explicit package version slug + semver (never "unknown").
+   * Records applied policy IDs.
    *
-   * Outcome rules (skeleton — no pricing logic):
-   *   DENIED   if product not found or not active
-   *   ALLOWED  otherwise (rule evaluation deferred to future batch)
-   *
-   * The snapshot is INSERT-only and is written atomically here.
-   * On any snapshot write failure the entire evaluate() throws.
+   * Outcome rules (skeleton — rule evaluation deferred):
+   *   DENIED  when packageVersion is null (tenant has no plan)
+   *   ALLOWED otherwise
    */
   private async stepGenerateSnapshot(
-    ctx: ResolvedPipelineContext,
+    ctx:    ResolvedPipelineContext,
+    bundle: ResolvedPolicyBundle,
   ): Promise<CommercialDecisionResult> {
-    const { input, product, packageVersion, ownershipPolicies, distributionPolicies } = ctx;
+    const { input } = ctx;
+    const {
+      packageAssignment,
+      packageVersion,
+      packageSlug,
+      ownershipPolicies,
+      distributionPolicies,
+      ruleVersions,
+    } = bundle;
 
-    // Determine outcome — no pricing, no rule evaluation in this batch
-    const productEligible = Boolean(product?.isActive);
-    const outcome: CommercialDecisionOutcome = productEligible
+    // Outcome: DENIED when packageAssignment is null or not eligible.
+    const isEligible = packageAssignment?.isEligible ?? false;
+    const outcome: CommercialDecisionOutcome = isEligible
       ? CommercialDecisionOutcome.ALLOWED
       : CommercialDecisionOutcome.DENIED;
 
-    const reason = productEligible
-      ? 'Product is active and eligible; full rule evaluation deferred.'
-      : `Product "${input.productId}" is ${product ? 'inactive' : 'not found'}.`;
+    const reason = isEligible
+      ? `Package ${packageSlug}@${packageVersion?.version ?? 'unknown'} resolved via ` +
+        `plan ${packageAssignment!.planId}; rule evaluation deferred.`
+      : packageAssignment
+        ? `Package "${packageSlug}" (status: ${packageAssignment.packageStatus}) is not eligible.`
+        : `Tenant ${input.tenantId} has no active package plan assigned.`;
 
     const appliedPolicyIds = [
       ...ownershipPolicies.map((p) => p.id),
@@ -330,15 +259,19 @@ export class CommercialDecisionService implements ICommercialDecisionService {
 
     const generatedAt = new Date();
 
-    // Write immutable snapshot (INSERT-only — never updated)
+    const pkgAssignmentSnapshot = packageAssignment
+      ? toPackageAssignmentSnapshot(packageAssignment)
+      : null;
+
     const snapshot = await this.snapshotRepo.create({
-      tenantId:      input.tenantId,
-      ruleId:        '00000000-0000-0000-0000-000000000000',  // placeholder — no rule evaluated
-      ruleVersion:   '0.0.0',                                  // placeholder
-      subjectType:   'decision',
-      subjectId:     '00000000-0000-0000-0000-000000000000',  // populated by rule evaluation batch
+      tenantId:    input.tenantId,
+      ruleId:      ruleVersions[0]?.ruleId ?? '00000000-0000-0000-0000-000000000000',
+      ruleVersion: ruleVersions[0]?.version ?? '0.0.0',
+      subjectType: 'commercial_decision',
+      subjectId:   input.productId.length === 36 ? input.productId
+        : '00000000-0000-0000-0000-000000000000',
       outcome,
-      inputContext:  {
+      inputContext: {
         tenantId:        input.tenantId,
         moduleId:        input.moduleId,
         productId:       input.productId,
@@ -352,11 +285,20 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       resultPayload: {
         outcome,
         reason,
-        productEligible,
+        // Full package assignment stored for deterministic replay
+        packageAssignment: pkgAssignmentSnapshot,
+        // Top-level aliases for fast reads
+        planId:          pkgAssignmentSnapshot?.planId          ?? null,
+        packageId:       pkgAssignmentSnapshot?.packageId       ?? null,
+        packageSlug:     pkgAssignmentSnapshot?.packageSlug     ?? null,
+        packageVersion:  pkgAssignmentSnapshot?.packageVersion  ?? null,
+        tierKey:         pkgAssignmentSnapshot?.tierKey         ?? null,
+        productEligible: isEligible,
         appliedPolicyIds,
-        resolvedPackageId: packageVersion?.id ?? null,
-        generatedAt:       generatedAt.toISOString(),
-        stepTrace:         ctx.stepTrace,
+        ruleVersionIds:  ruleVersions.map((rv) => rv.id),
+        resolvedAt:      bundle.resolvedAt.toISOString(),
+        generatedAt:     generatedAt.toISOString(),
+        stepTrace:       ctx.stepTrace,
       },
       evaluatedById: input.actorId,
     });
@@ -364,21 +306,21 @@ export class CommercialDecisionService implements ICommercialDecisionService {
     ctx.stepTrace.push({
       step:   CommercialPipelineStep.GENERATE_SNAPSHOT,
       ok:     true,
-      detail: `snapshot written id=${snapshot.id}`,
+      detail: `snapshot=${snapshot.id} outcome=${outcome}`,
     });
 
     return {
-      decisionId:     snapshot.id,
-      tenantId:       input.tenantId,
-      moduleId:       input.moduleId,
-      productId:      input.productId,
+      decisionId:      snapshot.id,
+      tenantId:        input.tenantId,
+      moduleId:        input.moduleId,
+      productId:       input.productId,
       transactionType: input.transactionType,
       outcome,
       reason,
-      resolvedPackage: packageVersion
-        ? { slug: 'unknown', version: packageVersion.version }
+      resolvedPackage: packageVersion && packageSlug
+        ? { slug: packageSlug, version: packageVersion.version }
         : null,
-      productEligible,
+      productEligible:  isEligible,
       appliedPolicyIds,
       snapshot,
       generatedAt,
@@ -386,29 +328,30 @@ export class CommercialDecisionService implements ICommercialDecisionService {
     };
   }
 
-  // ── Private helpers ───────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   private snapshotToResult(
     snapshot: CommercialDecisionSnapshotEntity,
-    input:    Record<string, unknown>,
   ): CommercialDecisionResult {
+    const input   = snapshot.inputContext  as Record<string, unknown>;
     const payload = snapshot.resultPayload as Record<string, unknown>;
+    const pkgPayload = (payload['packageAssignment'] ?? {}) as Record<string, unknown>;
+    const slug    = ((payload['packageSlug'] ?? pkgPayload['packageSlug']) as string | null);
+    const ver     = ((payload['packageVersion'] ?? pkgPayload['packageVersion']) as string | null);
     return {
-      decisionId:      snapshot.id,
-      tenantId:        snapshot.tenantId ?? '',
-      moduleId:        (input['moduleId'] as string) ?? '',
-      productId:       (input['productId'] as string) ?? '',
-      transactionType: (input['transactionType'] as TransactionType) ?? TransactionType.BOOKING,
-      outcome:         snapshot.outcome,
-      reason:          (payload['reason'] as string) ?? '',
-      resolvedPackage: (payload['resolvedPackageId'] as string | null)
-        ? { slug: 'unknown', version: 'unknown' }
-        : null,
+      decisionId:       snapshot.id,
+      tenantId:         snapshot.tenantId ?? '',
+      moduleId:         (input['moduleId'] as string)   ?? '',
+      productId:        (input['productId'] as string)  ?? '',
+      transactionType:  (input['transactionType'] as TransactionType) ?? TransactionType.BOOKING,
+      outcome:          snapshot.outcome,
+      reason:           (payload['reason'] as string)   ?? '',
+      resolvedPackage:  slug && ver ? { slug, version: ver } : null,
       productEligible:  Boolean(payload['productEligible']),
       appliedPolicyIds: (payload['appliedPolicyIds'] as string[]) ?? [],
       snapshot,
-      generatedAt:     snapshot.createdAt,
-      stepTrace:       (payload['stepTrace'] as CommercialDecisionResult['stepTrace']) ?? [],
+      generatedAt:      snapshot.createdAt,
+      stepTrace:        (payload['stepTrace'] as CommercialDecisionResult['stepTrace']) ?? [],
     };
   }
 }

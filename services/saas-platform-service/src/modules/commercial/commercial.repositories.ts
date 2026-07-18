@@ -5,7 +5,6 @@ import { CommercialRuleEntity } from './entities/commercial-rule.entity';
 import { CommercialRuleVersionEntity } from './entities/commercial-rule-version.entity';
 import {
   CommercialDecisionSnapshotEntity,
-  PackageDefinitionEntity,
   PackageVersionEntity,
 } from './entities/commercial-snapshot-and-package.entity';
 import {
@@ -118,39 +117,6 @@ export class CommercialDecisionSnapshotRepository {
   }
 }
 
-// ── PackageDefinitionRepository ───────────────────────────────────────────────
-
-@Injectable()
-export class PackageDefinitionRepository {
-  constructor(
-    @InjectRepository(PackageDefinitionEntity)
-    private readonly repo: Repository<PackageDefinitionEntity>,
-  ) {}
-
-  async create(data: Partial<PackageDefinitionEntity>): Promise<PackageDefinitionEntity> {
-    return this.repo.save(this.repo.create(data));
-  }
-
-  async findAll(): Promise<PackageDefinitionEntity[]> {
-    return this.repo.find({ where: { isDeleted: false }, order: { sortOrder: 'ASC' } });
-  }
-
-  async findById(id: string): Promise<PackageDefinitionEntity | null> {
-    return this.repo.findOne({ where: { id, isDeleted: false } });
-  }
-
-  async findBySlug(slug: string): Promise<PackageDefinitionEntity | null> {
-    return this.repo.findOne({ where: { slug, isDeleted: false } });
-  }
-
-  async update(id: string, data: Partial<PackageDefinitionEntity>): Promise<PackageDefinitionEntity> {
-    await this.repo.update({ id }, data as any);
-    const updated = await this.findById(id);
-    if (!updated) throw new NotFoundException(`PackageDefinition ${id} not found`);
-    return updated;
-  }
-}
-
 // ── PackageVersionRepository ──────────────────────────────────────────────────
 
 @Injectable()
@@ -164,12 +130,12 @@ export class PackageVersionRepository {
     return this.repo.save(this.repo.create(data));
   }
 
-  async findByPackage(packageDefinitionId: string): Promise<PackageVersionEntity[]> {
-    return this.repo.find({ where: { packageDefinitionId }, order: { createdAt: 'DESC' } });
+  async findByPackage(packageId: string): Promise<PackageVersionEntity[]> {
+    return this.repo.find({ where: { packageId }, order: { createdAt: 'DESC' } });
   }
 
-  async findByPackageAndVersion(packageDefinitionId: string, version: string): Promise<PackageVersionEntity | null> {
-    return this.repo.findOne({ where: { packageDefinitionId, version } });
+  async findByPackageAndVersion(packageId: string, version: string): Promise<PackageVersionEntity | null> {
+    return this.repo.findOne({ where: { packageId, version } });
   }
 }
 

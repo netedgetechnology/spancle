@@ -15,4 +15,13 @@ export enum CommercialEvents {
   DECISION_FAILED           = 'spancle.commercial.decision.failed',
   /** @deprecated Use DECISION_GENERATED — kept for event subscriber compatibility */
   DECISION_MADE             = 'spancle.commercial.decision.made',
+  // ── Policy resolution ─────────────────────────────────────────────────
+  POLICY_RESOLVED           = 'spancle.commercial.policy.resolved',
+  POLICY_RESOLUTION_FAILED  = 'spancle.commercial.policy.resolution_failed',
+  // ── Package resolution ───────────────────────────────────────────────────
+  PACKAGE_RESOLVED          = 'spancle.commercial.package.resolved',
+  PACKAGE_RESOLUTION_FAILED = 'spancle.commercial.package.resolution_failed',
+  // ── Entitlement resolution ───────────────────────────────────────────────
+  ENTITLEMENTS_RESOLVED      = 'spancle.commercial.entitlements.resolved',
+  ENTITLEMENT_RESOLUTION_FAILED = 'spancle.commercial.entitlements.resolution_failed',
 }

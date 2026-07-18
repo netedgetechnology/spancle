@@ -10,7 +10,6 @@ import { BannerEntity } from './modules/banner/entities/banner.entity';
 import { CommercialRuleVersionEntity }       from './modules/commercial/entities/commercial-rule-version.entity';
 import {
   CommercialDecisionSnapshotEntity,
-  PackageDefinitionEntity,
   PackageVersionEntity,
 }                                            from './modules/commercial/entities/commercial-snapshot-and-package.entity';
 import {
@@ -57,8 +56,7 @@ const dataSource = new DataSource({
     CommercialRuleEntity,
     CommercialRuleVersionEntity,
     CommercialDecisionSnapshotEntity,
-    PackageDefinitionEntity,
-    PackageVersionEntity,
+      PackageVersionEntity,
     CommercialProductEntity,
     ModuleRegistryEntity,
     PricingModelEntity,

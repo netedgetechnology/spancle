@@ -13,7 +13,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 var CommercialRuleRepository_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CommercialAuditRepository = exports.FeatureFlagRepository = exports.GatewayCredentialRepository = exports.GatewayDefinitionRepository = exports.RevenueDistributionPolicyRepository = exports.PaymentOwnershipPolicyRepository = exports.PricingModelRepository = exports.ModuleRegistryRepository = exports.CommercialProductRepository = exports.PackageVersionRepository = exports.PackageDefinitionRepository = exports.CommercialDecisionSnapshotRepository = exports.CommercialRuleVersionRepository = exports.CommercialRuleRepository = void 0;
+exports.CommercialAuditRepository = exports.FeatureFlagRepository = exports.GatewayCredentialRepository = exports.GatewayDefinitionRepository = exports.RevenueDistributionPolicyRepository = exports.PaymentOwnershipPolicyRepository = exports.PricingModelRepository = exports.ModuleRegistryRepository = exports.CommercialProductRepository = exports.PackageVersionRepository = exports.CommercialDecisionSnapshotRepository = exports.CommercialRuleVersionRepository = exports.CommercialRuleRepository = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
@@ -108,36 +108,6 @@ exports.CommercialDecisionSnapshotRepository = CommercialDecisionSnapshotReposit
     __param(0, (0, typeorm_1.InjectRepository)(commercial_snapshot_and_package_entity_1.CommercialDecisionSnapshotEntity)),
     __metadata("design:paramtypes", [Function])
 ], CommercialDecisionSnapshotRepository);
-let PackageDefinitionRepository = class PackageDefinitionRepository {
-    constructor(repo) {
-        this.repo = repo;
-    }
-    async create(data) {
-        return this.repo.save(this.repo.create(data));
-    }
-    async findAll() {
-        return this.repo.find({ where: { isDeleted: false }, order: { sortOrder: 'ASC' } });
-    }
-    async findById(id) {
-        return this.repo.findOne({ where: { id, isDeleted: false } });
-    }
-    async findBySlug(slug) {
-        return this.repo.findOne({ where: { slug, isDeleted: false } });
-    }
-    async update(id, data) {
-        await this.repo.update({ id }, data);
-        const updated = await this.findById(id);
-        if (!updated)
-            throw new common_1.NotFoundException(`PackageDefinition ${id} not found`);
-        return updated;
-    }
-};
-exports.PackageDefinitionRepository = PackageDefinitionRepository;
-exports.PackageDefinitionRepository = PackageDefinitionRepository = __decorate([
-    (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(commercial_snapshot_and_package_entity_1.PackageDefinitionEntity)),
-    __metadata("design:paramtypes", [Function])
-], PackageDefinitionRepository);
 let PackageVersionRepository = class PackageVersionRepository {
     constructor(repo) {
         this.repo = repo;
@@ -145,11 +115,11 @@ let PackageVersionRepository = class PackageVersionRepository {
     async create(data) {
         return this.repo.save(this.repo.create(data));
     }
-    async findByPackage(packageDefinitionId) {
-        return this.repo.find({ where: { packageDefinitionId }, order: { createdAt: 'DESC' } });
+    async findByPackage(packageId) {
+        return this.repo.find({ where: { packageId }, order: { createdAt: 'DESC' } });
     }
-    async findByPackageAndVersion(packageDefinitionId, version) {
-        return this.repo.findOne({ where: { packageDefinitionId, version } });
+    async findByPackageAndVersion(packageId, version) {
+        return this.repo.findOne({ where: { packageId, version } });
     }
 };
 exports.PackageVersionRepository = PackageVersionRepository;

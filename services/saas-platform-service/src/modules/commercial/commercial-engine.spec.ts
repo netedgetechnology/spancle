@@ -222,7 +222,6 @@ describe('CommercialEngineModule entity count', () => {
     } = require('./entities/commercial-rule-version.entity');
     const {
       CommercialDecisionSnapshotEntity,
-      PackageDefinitionEntity,
       PackageVersionEntity,
     } = require('./entities/commercial-snapshot-and-package.entity');
     const {
@@ -243,7 +242,6 @@ describe('CommercialEngineModule entity count', () => {
       CommercialRuleEntity,
       CommercialRuleVersionEntity,
       CommercialDecisionSnapshotEntity,
-      PackageDefinitionEntity,
       PackageVersionEntity,
       CommercialProductEntity,
       ModuleRegistryEntity,
@@ -256,7 +254,7 @@ describe('CommercialEngineModule entity count', () => {
       CommercialAuditEntity,
     ];
 
-    expect(allEntities).toHaveLength(14);
+    expect(allEntities).toHaveLength(13);  // PackageDefinitionEntity removed (table collision)
     allEntities.forEach((entity) => {
       expect(entity).toBeDefined();
       expect(typeof entity).toBe('function');

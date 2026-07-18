@@ -85,32 +85,14 @@ CREATE INDEX IF NOT EXISTS idx_commercial_decisions_subject
 CREATE INDEX IF NOT EXISTS idx_commercial_decisions_created
   ON commercial_decision_snapshots (tenant_id, created_at);
 
--- ── 4. package_definitions ────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS package_definitions (
-  id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          VARCHAR(255) NOT NULL,
-  slug          VARCHAR(64)  NOT NULL,
-  description   TEXT,
-  is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
-  sort_order    INT          NOT NULL DEFAULT 0,
-  metadata      JSONB        NOT NULL DEFAULT '{}',
-  is_deleted    BOOLEAN      NOT NULL DEFAULT FALSE,
-  created_by_id UUID,
-  updated_by_id UUID,
-  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  deleted_at    TIMESTAMPTZ
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_package_definitions_slug
-  ON package_definitions (slug) WHERE is_deleted = FALSE;
+-- NOTE: package_definitions table is owned by the Package module (migration 003+).
+-- CommercialEngine uses PackageVersionEntity to add versioning on top.
 
 -- ── 5. package_versions ───────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS package_versions (
   id                     UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-  package_definition_id  UUID         NOT NULL,
+  package_id  UUID         NOT NULL,
   version                VARCHAR(32)  NOT NULL,
   features               JSONB        NOT NULL DEFAULT '{}',
   limits                 JSONB        NOT NULL DEFAULT '{}',
@@ -121,7 +103,7 @@ CREATE TABLE IF NOT EXISTS package_versions (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_package_versions_pkg_version
-  ON package_versions (package_definition_id, version);
+  ON package_versions (package_id, version);
 
 -- ── 6. commercial_products ────────────────────────────────────────────────────
 

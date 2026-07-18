@@ -57,59 +57,6 @@ export class CommercialDecisionSnapshotEntity {
   createdAt!: Date;
 }
 
-// ── PackageDefinition ─────────────────────────────────────────────────────────
-
-/**
- * PackageDefinition — the commercial offer definition.
- *
- * Platform-scoped (tenantId = null). Defines which products, limits,
- * and features belong to a named commercial package (e.g. "Starter", "Pro").
- */
-@Entity('package_definitions')
-@Index(['slug'], { unique: true })
-@Index(['isActive'])
-export class PackageDefinitionEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id!: string;
-
-  @Column({ name: 'name', type: 'varchar', length: 255, nullable: false })
-  name!: string;
-
-  /** Machine-readable key, e.g. "starter", "pro", "enterprise" */
-  @Column({ name: 'slug', type: 'varchar', length: 64, nullable: false })
-  slug!: string;
-
-  @Column({ name: 'description', type: 'text', nullable: true })
-  description!: string | null;
-
-  @Column({ name: 'is_active', type: 'boolean', default: true })
-  isActive!: boolean;
-
-  @Column({ name: 'sort_order', type: 'int', nullable: false, default: 0 })
-  sortOrder!: number;
-
-  @Column({ name: 'metadata', type: 'jsonb', nullable: false, default: '{}' })
-  metadata!: Record<string, unknown>;
-
-  @Column({ name: 'is_deleted', type: 'boolean', default: false })
-  isDeleted!: boolean;
-
-  @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
-  createdById!: string | null;
-
-  @Column({ name: 'updated_by_id', type: 'uuid', nullable: true })
-  updatedById!: string | null;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt!: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt!: Date;
-
-  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
-  deletedAt!: Date | null;
-}
-
 // ── PackageVersion ────────────────────────────────────────────────────────────
 
 /**
@@ -118,14 +65,14 @@ export class PackageDefinitionEntity {
  * INSERT-only. Allows retroactive inspection of what tenants signed up for.
  */
 @Entity('package_versions')
-@Index(['packageDefinitionId', 'version'], { unique: true })
+@Index(['packageId', 'version'], { unique: true })
 export class PackageVersionEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  /** FK-equivalent → package_definitions.id */
-  @Column({ name: 'package_definition_id', type: 'uuid', nullable: false })
-  packageDefinitionId!: string;
+  /** FK-equivalent → PackageEntity.id (package_definitions table — existing package module) */
+  @Column({ name: 'package_id', type: 'uuid', nullable: false })
+  packageId!: string;
 
   @Column({ name: 'version', type: 'varchar', length: 32, nullable: false })
   version!: string;

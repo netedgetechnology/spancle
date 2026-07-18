@@ -17,5 +17,11 @@ var CommercialEvents;
     CommercialEvents["DECISION_GENERATED"] = "spancle.commercial.decision.generated";
     CommercialEvents["DECISION_FAILED"] = "spancle.commercial.decision.failed";
     CommercialEvents["DECISION_MADE"] = "spancle.commercial.decision.made";
+    CommercialEvents["POLICY_RESOLVED"] = "spancle.commercial.policy.resolved";
+    CommercialEvents["POLICY_RESOLUTION_FAILED"] = "spancle.commercial.policy.resolution_failed";
+    CommercialEvents["PACKAGE_RESOLVED"] = "spancle.commercial.package.resolved";
+    CommercialEvents["PACKAGE_RESOLUTION_FAILED"] = "spancle.commercial.package.resolution_failed";
+    CommercialEvents["ENTITLEMENTS_RESOLVED"] = "spancle.commercial.entitlements.resolved";
+    CommercialEvents["ENTITLEMENT_RESOLUTION_FAILED"] = "spancle.commercial.entitlements.resolution_failed";
 })(CommercialEvents || (exports.CommercialEvents = CommercialEvents = {}));
 //# sourceMappingURL=commercial.events.js.map

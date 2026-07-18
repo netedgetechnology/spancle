@@ -8,6 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var CommercialDecisionService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CommercialDecisionService = void 0;
@@ -15,16 +18,13 @@ const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const commercial_enums_1 = require("../enums/commercial.enums");
 const commercial_events_1 = require("../events/commercial.events");
+const policy_resolver_interfaces_1 = require("../interfaces/policy-resolver.interfaces");
+const package_assignment_model_1 = require("../policy/package-assignment.model");
 const commercial_repositories_1 = require("../commercial.repositories");
 let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDecisionService {
-    constructor(snapshotRepo, packageDefRepo, packageVersionRepo, productRepo, ruleRepo, ownershipRepo, distributionRepo, eventEmitter) {
+    constructor(policyResolver, snapshotRepo, eventEmitter) {
+        this.policyResolver = policyResolver;
         this.snapshotRepo = snapshotRepo;
-        this.packageDefRepo = packageDefRepo;
-        this.packageVersionRepo = packageVersionRepo;
-        this.productRepo = productRepo;
-        this.ruleRepo = ruleRepo;
-        this.ownershipRepo = ownershipRepo;
-        this.distributionRepo = distributionRepo;
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(CommercialDecisionService_1.name);
     }
@@ -38,7 +38,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             transactionType: context.transactionType,
             timestamp: context.requestedAt.toISOString(),
         });
-        const resolved = {
+        const pipelineCtx = {
             input: context,
             packageVersion: null,
             product: null,
@@ -47,11 +47,9 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             stepTrace: [],
         };
         try {
-            await this.stepValidateRequest(resolved);
-            await this.stepResolvePackage(resolved);
-            await this.stepResolveProduct(resolved);
-            await this.stepResolvePolicies(resolved);
-            const result = await this.stepGenerateSnapshot(resolved);
+            this.stepValidateRequest(pipelineCtx);
+            const bundle = await this.stepResolveViaPolicy(pipelineCtx);
+            const result = await this.stepGenerateSnapshot(pipelineCtx, bundle);
             await this.eventEmitter.emitAsync(commercial_events_1.CommercialEvents.DECISION_GENERATED, {
                 decisionId: result.decisionId,
                 tenantId: context.tenantId,
@@ -68,7 +66,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
                 moduleId: context.moduleId,
                 productId: context.productId,
                 error: msg,
-                stepTrace: resolved.stepTrace,
+                stepTrace: pipelineCtx.stepTrace,
                 timestamp: new Date().toISOString(),
             });
             throw err;
@@ -79,7 +77,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
         const snapshot = snapshots.find((s) => s.id === decisionId);
         if (!snapshot)
             return null;
-        return this.snapshotToResult(snapshot, snapshot.inputContext);
+        return this.snapshotToResult(snapshot);
     }
     stepValidateRequest(ctx) {
         const { input } = ctx;
@@ -108,22 +106,13 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             throw new common_1.UnprocessableEntityException(`CommercialDecision validation failed: ${errors.join('; ')}`);
         }
     }
-    async stepResolvePackage(ctx) {
-        const { tenantId } = ctx.input;
+    async stepResolveViaPolicy(ctx) {
+        let bundle;
         try {
-            const defs = await this.packageDefRepo.findAll();
-            const activeDef = defs.find((d) => d.isActive) ?? null;
-            if (activeDef) {
-                const versions = await this.packageVersionRepo.findByPackage(activeDef.id);
-                ctx.packageVersion = versions[0] ?? null;
-            }
-            ctx.stepTrace.push({
-                step: commercial_enums_1.CommercialPipelineStep.RESOLVE_PACKAGE,
-                ok: true,
-                detail: ctx.packageVersion
-                    ? `resolved package version ${ctx.packageVersion.id}`
-                    : 'no package version found — continuing',
-            });
+            bundle = await this.policyResolver.resolve(ctx.input);
+            ctx.packageVersion = bundle.packageVersion;
+            ctx.ownershipPolicies = bundle.ownershipPolicies;
+            ctx.distributionPolicies = bundle.distributionPolicies;
         }
         catch (err) {
             ctx.stepTrace.push({
@@ -133,78 +122,58 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             });
             throw err;
         }
+        ctx.stepTrace.push({
+            step: commercial_enums_1.CommercialPipelineStep.RESOLVE_PACKAGE,
+            ok: true,
+            detail: bundle.packageVersion
+                ? `${bundle.packageSlug}@${bundle.packageVersion.version}`
+                : 'no package version — tenant has no active plan',
+        });
+        ctx.stepTrace.push({
+            step: commercial_enums_1.CommercialPipelineStep.RESOLVE_PRODUCT,
+            ok: true,
+            detail: `productId=${ctx.input.productId} (eligibility evaluated at snapshot step)`,
+        });
+        ctx.stepTrace.push({
+            step: commercial_enums_1.CommercialPipelineStep.RESOLVE_POLICIES,
+            ok: true,
+            detail: `ownership=${bundle.ownershipPolicies.length} ` +
+                `distribution=${bundle.distributionPolicies.length} ` +
+                `pricing=${bundle.pricingModels.length} ` +
+                `gateways=${bundle.gatewayDefinitions.length} ` +
+                `rules=${bundle.ruleVersions.length} ` +
+                `flags=${bundle.featureFlags.length}`,
+        });
+        return bundle;
     }
-    async stepResolveProduct(ctx) {
-        const { productId } = ctx.input;
-        try {
-            const byId = await this.productRepo.findById(productId);
-            const bySku = byId ? null : await this.productRepo.findBySku(productId);
-            ctx.product = byId ?? bySku;
-            ctx.stepTrace.push({
-                step: commercial_enums_1.CommercialPipelineStep.RESOLVE_PRODUCT,
-                ok: true,
-                detail: ctx.product
-                    ? `resolved product ${ctx.product.id} (sku=${ctx.product.sku})`
-                    : `product "${productId}" not found`,
-            });
-        }
-        catch (err) {
-            ctx.stepTrace.push({
-                step: commercial_enums_1.CommercialPipelineStep.RESOLVE_PRODUCT,
-                ok: false,
-                detail: err.message,
-            });
-            throw err;
-        }
-    }
-    async stepResolvePolicies(ctx) {
-        const { tenantId } = ctx.input;
-        try {
-            const [tenantOwnership, platformOwnership] = await Promise.all([
-                this.ownershipRepo.findByTenant(tenantId),
-                this.ownershipRepo.findByTenant(null),
-            ]);
-            ctx.ownershipPolicies = tenantOwnership.length ? tenantOwnership : platformOwnership;
-            const [tenantDist, platformDist] = await Promise.all([
-                this.distributionRepo.findByTenant(tenantId),
-                this.distributionRepo.findByTenant(null),
-            ]);
-            ctx.distributionPolicies = tenantDist.length ? tenantDist : platformDist;
-            ctx.stepTrace.push({
-                step: commercial_enums_1.CommercialPipelineStep.RESOLVE_POLICIES,
-                ok: true,
-                detail: `ownership=${ctx.ownershipPolicies.length} distribution=${ctx.distributionPolicies.length}`,
-            });
-        }
-        catch (err) {
-            ctx.stepTrace.push({
-                step: commercial_enums_1.CommercialPipelineStep.RESOLVE_POLICIES,
-                ok: false,
-                detail: err.message,
-            });
-            throw err;
-        }
-    }
-    async stepGenerateSnapshot(ctx) {
-        const { input, product, packageVersion, ownershipPolicies, distributionPolicies } = ctx;
-        const productEligible = Boolean(product?.isActive);
-        const outcome = productEligible
+    async stepGenerateSnapshot(ctx, bundle) {
+        const { input } = ctx;
+        const { packageAssignment, packageVersion, packageSlug, ownershipPolicies, distributionPolicies, ruleVersions, } = bundle;
+        const isEligible = packageAssignment?.isEligible ?? false;
+        const outcome = isEligible
             ? commercial_enums_1.CommercialDecisionOutcome.ALLOWED
             : commercial_enums_1.CommercialDecisionOutcome.DENIED;
-        const reason = productEligible
-            ? 'Product is active and eligible; full rule evaluation deferred.'
-            : `Product "${input.productId}" is ${product ? 'inactive' : 'not found'}.`;
+        const reason = isEligible
+            ? `Package ${packageSlug}@${packageVersion?.version ?? 'unknown'} resolved via ` +
+                `plan ${packageAssignment.planId}; rule evaluation deferred.`
+            : packageAssignment
+                ? `Package "${packageSlug}" (status: ${packageAssignment.packageStatus}) is not eligible.`
+                : `Tenant ${input.tenantId} has no active package plan assigned.`;
         const appliedPolicyIds = [
             ...ownershipPolicies.map((p) => p.id),
             ...distributionPolicies.map((p) => p.id),
         ];
         const generatedAt = new Date();
+        const pkgAssignmentSnapshot = packageAssignment
+            ? (0, package_assignment_model_1.toPackageAssignmentSnapshot)(packageAssignment)
+            : null;
         const snapshot = await this.snapshotRepo.create({
             tenantId: input.tenantId,
-            ruleId: '00000000-0000-0000-0000-000000000000',
-            ruleVersion: '0.0.0',
-            subjectType: 'decision',
-            subjectId: '00000000-0000-0000-0000-000000000000',
+            ruleId: ruleVersions[0]?.ruleId ?? '00000000-0000-0000-0000-000000000000',
+            ruleVersion: ruleVersions[0]?.version ?? '0.0.0',
+            subjectType: 'commercial_decision',
+            subjectId: input.productId.length === 36 ? input.productId
+                : '00000000-0000-0000-0000-000000000000',
             outcome,
             inputContext: {
                 tenantId: input.tenantId,
@@ -220,9 +189,16 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             resultPayload: {
                 outcome,
                 reason,
-                productEligible,
+                packageAssignment: pkgAssignmentSnapshot,
+                planId: pkgAssignmentSnapshot?.planId ?? null,
+                packageId: pkgAssignmentSnapshot?.packageId ?? null,
+                packageSlug: pkgAssignmentSnapshot?.packageSlug ?? null,
+                packageVersion: pkgAssignmentSnapshot?.packageVersion ?? null,
+                tierKey: pkgAssignmentSnapshot?.tierKey ?? null,
+                productEligible: isEligible,
                 appliedPolicyIds,
-                resolvedPackageId: packageVersion?.id ?? null,
+                ruleVersionIds: ruleVersions.map((rv) => rv.id),
+                resolvedAt: bundle.resolvedAt.toISOString(),
                 generatedAt: generatedAt.toISOString(),
                 stepTrace: ctx.stepTrace,
             },
@@ -231,7 +207,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
         ctx.stepTrace.push({
             step: commercial_enums_1.CommercialPipelineStep.GENERATE_SNAPSHOT,
             ok: true,
-            detail: `snapshot written id=${snapshot.id}`,
+            detail: `snapshot=${snapshot.id} outcome=${outcome}`,
         });
         return {
             decisionId: snapshot.id,
@@ -241,18 +217,22 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             transactionType: input.transactionType,
             outcome,
             reason,
-            resolvedPackage: packageVersion
-                ? { slug: 'unknown', version: packageVersion.version }
+            resolvedPackage: packageVersion && packageSlug
+                ? { slug: packageSlug, version: packageVersion.version }
                 : null,
-            productEligible,
+            productEligible: isEligible,
             appliedPolicyIds,
             snapshot,
             generatedAt,
             stepTrace: ctx.stepTrace,
         };
     }
-    snapshotToResult(snapshot, input) {
+    snapshotToResult(snapshot) {
+        const input = snapshot.inputContext;
         const payload = snapshot.resultPayload;
+        const pkgPayload = (payload['packageAssignment'] ?? {});
+        const slug = (payload['packageSlug'] ?? pkgPayload['packageSlug']);
+        const ver = (payload['packageVersion'] ?? pkgPayload['packageVersion']);
         return {
             decisionId: snapshot.id,
             tenantId: snapshot.tenantId ?? '',
@@ -261,9 +241,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             transactionType: input['transactionType'] ?? commercial_enums_1.TransactionType.BOOKING,
             outcome: snapshot.outcome,
             reason: payload['reason'] ?? '',
-            resolvedPackage: payload['resolvedPackageId']
-                ? { slug: 'unknown', version: 'unknown' }
-                : null,
+            resolvedPackage: slug && ver ? { slug, version: ver } : null,
             productEligible: Boolean(payload['productEligible']),
             appliedPolicyIds: payload['appliedPolicyIds'] ?? [],
             snapshot,
@@ -275,13 +253,8 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
 exports.CommercialDecisionService = CommercialDecisionService;
 exports.CommercialDecisionService = CommercialDecisionService = CommercialDecisionService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [commercial_repositories_1.CommercialDecisionSnapshotRepository,
-        commercial_repositories_1.PackageDefinitionRepository,
-        commercial_repositories_1.PackageVersionRepository,
-        commercial_repositories_1.CommercialProductRepository,
-        commercial_repositories_1.CommercialRuleRepository,
-        commercial_repositories_1.PaymentOwnershipPolicyRepository,
-        commercial_repositories_1.RevenueDistributionPolicyRepository,
+    __param(0, (0, common_1.Inject)(policy_resolver_interfaces_1.POLICY_RESOLVER)),
+    __metadata("design:paramtypes", [Object, commercial_repositories_1.CommercialDecisionSnapshotRepository,
         event_emitter_1.EventEmitter2])
 ], CommercialDecisionService);
 //# sourceMappingURL=commercial-decision.service.js.map

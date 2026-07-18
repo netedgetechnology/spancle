@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+// Cross-module imports (no circular dependency)
+import { PlanModule }    from '../plan/plan.module';
+
 // Entities
 import { CommercialRuleEntity }              from './entities/commercial-rule.entity';
 import { CommercialRuleVersionEntity }       from './entities/commercial-rule-version.entity';
 import {
   CommercialDecisionSnapshotEntity,
-  PackageDefinitionEntity,
   PackageVersionEntity,
 }                                            from './entities/commercial-snapshot-and-package.entity';
 import {
@@ -34,7 +36,6 @@ import {
   GatewayCredentialRepository,
   GatewayDefinitionRepository,
   ModuleRegistryRepository,
-  PackageDefinitionRepository,
   PackageVersionRepository,
   PaymentOwnershipPolicyRepository,
   PricingModelRepository,
@@ -43,9 +44,15 @@ import {
 
 // Services
 import { CommercialDecisionService }         from './services/commercial-decision.service';
+import { DefaultPolicyResolver }             from './policy/default-policy-resolver';
+import { DefaultEntitlementResolver }        from './policy/default-entitlement-resolver';
 
 // Controllers
 import { CommercialDecisionController }      from './controllers/commercial-decision.controller';
+
+// Interfaces
+import { POLICY_RESOLVER }                   from './interfaces/policy-resolver.interfaces';
+import { ENTITLEMENT_RESOLVER }              from './interfaces/entitlement-resolver.interfaces';
 
 // Guards
 import { SuperAdminGuard }                   from '../admin/guards/super-admin.guard';
@@ -54,8 +61,7 @@ const ENTITIES = [
   CommercialRuleEntity,
   CommercialRuleVersionEntity,
   CommercialDecisionSnapshotEntity,
-  PackageDefinitionEntity,
-  PackageVersionEntity,
+  PackageVersionEntity,                // package_versions — new versioning layer
   CommercialProductEntity,
   ModuleRegistryEntity,
   PricingModelEntity,
@@ -71,7 +77,6 @@ const REPOSITORIES = [
   CommercialRuleRepository,
   CommercialRuleVersionRepository,
   CommercialDecisionSnapshotRepository,
-  PackageDefinitionRepository,
   PackageVersionRepository,
   CommercialProductRepository,
   ModuleRegistryRepository,
@@ -85,17 +90,31 @@ const REPOSITORIES = [
 ];
 
 /**
- * CommercialEngineModule — bounded context for commercial rules, pricing,
- * package definitions, payment ownership, revenue distribution, gateway
- * credentials, feature flags, and audit.
+ * CommercialEngineModule
  *
- * This module has NO dependency on BookingModule or FinanceModule.
- * Cross-engine communication uses events only (EventEmitter2).
+ * Package resolution authority: PlanModule (imported).
+ *   Tenant → PlanEntity → PackageEntity (existing system, no duplication)
+ *   PackageVersionEntity adds immutable versioning on top of PackageEntity.
+ *
+ * PackageDefinitionEntity was removed in Batch 7.5A.1.4 (table collision
+ * with the existing package module's PackageEntity / package_definitions table).
  */
 @Module({
-  imports: [TypeOrmModule.forFeature(ENTITIES)],
+  imports: [
+    TypeOrmModule.forFeature(ENTITIES),
+    PlanModule,               // provides PlanService for tenant→package resolution
+  ],
   controllers: [CommercialDecisionController],
-  providers: [...REPOSITORIES, CommercialDecisionService, SuperAdminGuard],
+  providers: [
+    ...REPOSITORIES,
+    { provide: ENTITLEMENT_RESOLVER, useClass: DefaultEntitlementResolver },
+    { provide: POLICY_RESOLVER,      useClass: DefaultPolicyResolver },
+    // String-token aliases for cross-module injection into DefaultPolicyResolver
+    { provide: 'PlanService',    useExisting: 'PlanService' },
+    { provide: 'PackageService', useExisting: 'PackageService' },
+    CommercialDecisionService,
+    SuperAdminGuard,
+  ],
   exports: [...REPOSITORIES, CommercialDecisionService],
 })
 export class CommercialEngineModule {}

@@ -38,7 +38,6 @@ const dataSource = new typeorm_1.DataSource({
         commercial_rule_entity_1.CommercialRuleEntity,
         commercial_rule_version_entity_1.CommercialRuleVersionEntity,
         commercial_snapshot_and_package_entity_1.CommercialDecisionSnapshotEntity,
-        commercial_snapshot_and_package_entity_1.PackageDefinitionEntity,
         commercial_snapshot_and_package_entity_1.PackageVersionEntity,
         commercial_product_module_pricing_entity_1.CommercialProductEntity,
         commercial_product_module_pricing_entity_1.ModuleRegistryEntity,
