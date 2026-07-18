@@ -21,6 +21,7 @@ const commercial_events_1 = require("../events/commercial.events");
 const policy_resolver_interfaces_1 = require("../interfaces/policy-resolver.interfaces");
 const package_assignment_model_1 = require("../policy/package-assignment.model");
 const commercial_repositories_1 = require("../commercial.repositories");
+const commercial_contract_builder_1 = require("../contracts/commercial-contract.builder");
 let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDecisionService {
     constructor(policyResolver, snapshotRepo, eventEmitter) {
         this.policyResolver = policyResolver;
@@ -50,11 +51,13 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             this.stepValidateRequest(pipelineCtx);
             const bundle = await this.stepResolveViaPolicy(pipelineCtx);
             const result = await this.stepGenerateSnapshot(pipelineCtx, bundle);
+            const contract = commercial_contract_builder_1.CommercialContractBuilder.build(result, bundle);
             await this.eventEmitter.emitAsync(commercial_events_1.CommercialEvents.DECISION_GENERATED, {
                 decisionId: result.decisionId,
                 tenantId: context.tenantId,
                 outcome: result.outcome,
                 timestamp: result.generatedAt.toISOString(),
+                contract,
             });
             return result;
         }

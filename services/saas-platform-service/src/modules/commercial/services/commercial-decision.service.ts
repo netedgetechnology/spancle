@@ -23,6 +23,7 @@ import { toPackageAssignmentSnapshot } from '../policy/package-assignment.model'
 import type { IPolicyResolver, ResolvedPolicyBundle } from '../interfaces/policy-resolver.interfaces';
 import { CommercialDecisionSnapshotRepository } from '../commercial.repositories';
 import type { CommercialDecisionSnapshotEntity } from '../entities/commercial-snapshot-and-package.entity';
+import { CommercialContractBuilder }            from '../contracts/commercial-contract.builder';
 
 /**
  * CommercialDecisionService
@@ -87,11 +88,16 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       // Step 5: generate immutable snapshot and build result
       const result = await this.stepGenerateSnapshot(pipelineCtx, bundle);
 
+      // Build the immutable inter-module contract and include in the event payload.
+      // Finance consumes this from the event body — no direct service call.
+      const contract = CommercialContractBuilder.build(result, bundle);
+
       await this.eventEmitter.emitAsync(CommercialEvents.DECISION_GENERATED, {
         decisionId: result.decisionId,
         tenantId:   context.tenantId,
         outcome:    result.outcome,
         timestamp:  result.generatedAt.toISOString(),
+        contract,
       });
 
       return result;
