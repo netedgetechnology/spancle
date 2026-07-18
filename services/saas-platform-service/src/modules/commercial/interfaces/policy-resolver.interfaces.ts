@@ -23,6 +23,7 @@ import type {
 import type { CommercialDecisionContext }     from './commercial-decision.interfaces';
 import type { PackageAssignment }            from '../policy/package-assignment.model';
 import type { EntitlementBundle }            from './entitlement-resolver.interfaces';
+import type { RuleBundle }                   from './rule-resolver.interfaces';
 
 // ── ResolvedPolicyBundle ──────────────────────────────────────────────────────
 
@@ -39,6 +40,12 @@ import type { EntitlementBundle }            from './entitlement-resolver.interf
  * All monetary values referenced via entity fields are INT minor units.
  */
 export interface ResolvedPolicyBundle {
+  /**
+   * The resolved, typed rule bundle — deterministically ordered evaluation results.
+   * Null when no active rules exist for this tenant.
+   */
+  ruleBundle: Readonly<RuleBundle> | null;
+
   /**
    * The resolved entitlement bundle — pre-computed feature access and limits.
    * Null when packageAssignment is null (tenant has no plan).

@@ -24,4 +24,7 @@ export enum CommercialEvents {
   // ── Entitlement resolution ───────────────────────────────────────────────
   ENTITLEMENTS_RESOLVED      = 'spancle.commercial.entitlements.resolved',
   ENTITLEMENT_RESOLUTION_FAILED = 'spancle.commercial.entitlements.resolution_failed',
+  // ── Rule resolution ───────────────────────────────────────────────────────
+  RULES_RESOLVED             = 'spancle.commercial.rules.resolved',
+  RULE_EVALUATION_FAILED     = 'spancle.commercial.rule.evaluation_failed',
 }

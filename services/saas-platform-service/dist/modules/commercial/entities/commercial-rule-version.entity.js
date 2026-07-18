@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CommercialRuleVersionEntity = void 0;
 const typeorm_1 = require("typeorm");
+const commercial_enums_1 = require("../enums/commercial.enums");
 let CommercialRuleVersionEntity = class CommercialRuleVersionEntity {
 };
 exports.CommercialRuleVersionEntity = CommercialRuleVersionEntity;
@@ -32,6 +33,10 @@ __decorate([
     __metadata("design:type", String)
 ], CommercialRuleVersionEntity.prototype, "version", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'rule_type', type: 'varchar', length: 64, nullable: false }),
+    __metadata("design:type", String)
+], CommercialRuleVersionEntity.prototype, "ruleType", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'definition', type: 'jsonb', nullable: false, default: '{}' }),
     __metadata("design:type", Object)
 ], CommercialRuleVersionEntity.prototype, "definition", void 0);
@@ -50,6 +55,7 @@ __decorate([
 exports.CommercialRuleVersionEntity = CommercialRuleVersionEntity = __decorate([
     (0, typeorm_1.Entity)('commercial_rule_versions'),
     (0, typeorm_1.Index)(['ruleId', 'version'], { unique: true }),
-    (0, typeorm_1.Index)(['tenantId', 'ruleId'])
+    (0, typeorm_1.Index)(['tenantId', 'ruleId']),
+    (0, typeorm_1.Index)(['tenantId', 'ruleType'])
 ], CommercialRuleVersionEntity);
 //# sourceMappingURL=commercial-rule-version.entity.js.map

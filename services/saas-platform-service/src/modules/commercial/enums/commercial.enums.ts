@@ -6,6 +6,9 @@ export enum CommercialRuleType {
   ELIGIBILITY   = 'ELIGIBILITY',
   RESTRICTION   = 'RESTRICTION',
   DISTRIBUTION  = 'DISTRIBUTION',
+  PROMOTION     = 'PROMOTION',
+  TRIAL         = 'TRIAL',
+  TAX           = 'TAX',
 }
 
 // ── CommercialRuleStatus ──────────────────────────────────────────────────────
@@ -121,4 +124,12 @@ export enum CommercialPipelineStep {
   RESOLVE_PRODUCT    = 'RESOLVE_PRODUCT',
   RESOLVE_POLICIES   = 'RESOLVE_POLICIES',
   GENERATE_SNAPSHOT  = 'GENERATE_SNAPSHOT',
+}
+
+// ── RuleEvaluationOutcome ─────────────────────────────────────────────────────
+
+export enum RuleEvaluationOutcome {
+  APPLIED  = 'APPLIED',
+  SKIPPED  = 'SKIPPED',
+  FAILED   = 'FAILED',
 }

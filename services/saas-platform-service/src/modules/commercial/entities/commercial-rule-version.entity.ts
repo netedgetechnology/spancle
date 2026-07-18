@@ -2,15 +2,19 @@ import {
   Column, CreateDateColumn,
   Entity, Index, PrimaryGeneratedColumn,
 } from 'typeorm';
+import { CommercialRuleType } from '../enums/commercial.enums';
 
 /**
  * CommercialRuleVersion — immutable snapshot of a rule at a given semver.
  *
  * INSERT-only. Never updated or deleted.
+ * ruleType is denormalized from CommercialRuleEntity for query performance
+ * and to allow type-based filtering without joining the parent entity.
  */
 @Entity('commercial_rule_versions')
 @Index(['ruleId', 'version'], { unique: true })
 @Index(['tenantId', 'ruleId'])
+@Index(['tenantId', 'ruleType'])
 export class CommercialRuleVersionEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -26,6 +30,13 @@ export class CommercialRuleVersionEntity {
   /** Semver string, e.g. "1.0.0", "2.1.3" */
   @Column({ name: 'version', type: 'varchar', length: 32, nullable: false })
   version!: string;
+
+  /**
+   * Denormalized from CommercialRuleEntity.ruleType.
+   * Stored on the version record for runtime filtering without joining.
+   */
+  @Column({ name: 'rule_type', type: 'varchar', length: 64, nullable: false })
+  ruleType!: CommercialRuleType;
 
   /**
    * Full rule definition snapshot at this version.

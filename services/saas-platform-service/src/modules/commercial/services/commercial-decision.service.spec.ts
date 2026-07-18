@@ -64,6 +64,7 @@ const PACKAGE_ASSIGNMENT: PackageAssignment = {
 
 function makeBundle(overrides: Partial<ResolvedPolicyBundle> = {}): ResolvedPolicyBundle {
   return {
+    ruleBundle:          null,
     entitlementBundle:   null,
     packageAssignment:   PACKAGE_ASSIGNMENT,
     packageVersion:      PACKAGE_VERSION,

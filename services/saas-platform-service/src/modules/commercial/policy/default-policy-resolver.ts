@@ -22,6 +22,8 @@ import type { CommercialDecisionContext } from '../interfaces/commercial-decisio
 import type { IPolicyResolver, ResolvedPolicyBundle } from '../interfaces/policy-resolver.interfaces';
 import type { IEntitlementResolver } from '../interfaces/entitlement-resolver.interfaces';
 import { ENTITLEMENT_RESOLVER } from '../interfaces/entitlement-resolver.interfaces';
+import type { IRuleResolver } from '../interfaces/rule-resolver.interfaces';
+import { RULE_RESOLVER } from '../interfaces/rule-resolver.interfaces';
 import { Inject } from '@nestjs/common';
 import type { PackageAssignment } from './package-assignment.model';
 
@@ -37,12 +39,13 @@ import type { PackageAssignment } from './package-assignment.model';
  *        → Error: DENIED when no plan
  *
  *   2. PackageService.findOne(plan.packageId)
- *        → PackageEntity { slug, status, features, limits }
- *        → Error: DENIED when status ∉ {'active', 'deprecated'}
+ *        → PackageEntity { slug, status } — used for status validation ONLY
+ *        → features/limits NOT read from PackageEntity (mutable); they come from step 3
  *
  *   3. PackageVersionRepository.findByPackageAndVersion(packageId, plan.tierKey)
- *        → PackageVersionEntity pinned by tierKey
- *        → Error: DENIED when no matching version
+ *        → PackageVersionEntity pinned by tierKey (immutable version snapshot)
+ *        → effectiveFeatures = pv.features + plan.featureOverrides
+ *        → effectiveLimits   = pv.limits   + plan.limitOverrides
  *
  * PlanEntity.tierKey is the version pin identifier.
  * The same plan always resolves to the same PackageVersion.
@@ -68,6 +71,8 @@ export class DefaultPolicyResolver implements IPolicyResolver {
     private readonly featureFlagRepo:    FeatureFlagRepository,
     @Inject(ENTITLEMENT_RESOLVER)
     private readonly entitlementResolver: IEntitlementResolver,
+    @Inject(RULE_RESOLVER)
+    private readonly ruleResolver: IRuleResolver,
     private readonly eventEmitter:       EventEmitter2,
   ) {}
 
@@ -105,7 +110,12 @@ export class DefaultPolicyResolver implements IPolicyResolver {
         this.resolveFeatureFlags(tenantId),
       ]);
 
+      const ruleBundle = ruleVersions.length
+        ? this.ruleResolver.resolve(ruleVersions)
+        : null;
+
       const bundle: ResolvedPolicyBundle = {
+        ruleBundle,
         entitlementBundle: packageAssignment && packageAssignment.packageVersion
           ? this.entitlementResolver.resolve(packageAssignment, featureFlags)
           : null,
@@ -228,7 +238,16 @@ export class DefaultPolicyResolver implements IPolicyResolver {
       throw new UnprocessableEntityException(msg);
     }
 
-    // 5. Build the immutable assignment
+    // 5. Build the immutable assignment.
+    //
+    // TD5 fix: effectiveFeatures and effectiveLimits are computed from
+    // PackageVersionEntity (immutable) + PlanEntity overrides.
+    // PackageEntity.features/limits are NOT used here — that would introduce a
+    // dependency on a mutable entity during runtime evaluation.
+    //
+    // PackageVersionEntity.features represents the canonicalised feature set
+    // at the time the version was published. PlanEntity overrides are tenant
+    // agreements applied on top of the immutable version snapshot.
     const assignment: PackageAssignment = {
       planId:           plan.id,
       packageId:        pkg.id,
@@ -237,8 +256,8 @@ export class DefaultPolicyResolver implements IPolicyResolver {
       packageVersion,
       packageStatus:    pkg.status,
       isEligible,
-      effectiveFeatures: { ...pkg.features, ...plan.featureOverrides },
-      effectiveLimits:   { ...pkg.limits,   ...plan.limitOverrides },
+      effectiveFeatures: { ...packageVersion.features, ...plan.featureOverrides },
+      effectiveLimits:   { ...packageVersion.limits,   ...plan.limitOverrides },
       resolvedAt,
     };
 

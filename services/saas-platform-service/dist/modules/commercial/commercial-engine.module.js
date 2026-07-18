@@ -19,9 +19,11 @@ const commercial_repositories_1 = require("./commercial.repositories");
 const commercial_decision_service_1 = require("./services/commercial-decision.service");
 const default_policy_resolver_1 = require("./policy/default-policy-resolver");
 const default_entitlement_resolver_1 = require("./policy/default-entitlement-resolver");
+const default_rule_resolver_1 = require("./policy/default-rule-resolver");
 const commercial_decision_controller_1 = require("./controllers/commercial-decision.controller");
 const policy_resolver_interfaces_1 = require("./interfaces/policy-resolver.interfaces");
 const entitlement_resolver_interfaces_1 = require("./interfaces/entitlement-resolver.interfaces");
+const rule_resolver_interfaces_1 = require("./interfaces/rule-resolver.interfaces");
 const super_admin_guard_1 = require("../admin/guards/super-admin.guard");
 const ENTITIES = [
     commercial_rule_entity_1.CommercialRuleEntity,
@@ -65,6 +67,7 @@ exports.CommercialEngineModule = CommercialEngineModule = __decorate([
         controllers: [commercial_decision_controller_1.CommercialDecisionController],
         providers: [
             ...REPOSITORIES,
+            { provide: rule_resolver_interfaces_1.RULE_RESOLVER, useClass: default_rule_resolver_1.DefaultRuleResolver },
             { provide: entitlement_resolver_interfaces_1.ENTITLEMENT_RESOLVER, useClass: default_entitlement_resolver_1.DefaultEntitlementResolver },
             { provide: policy_resolver_interfaces_1.POLICY_RESOLVER, useClass: default_policy_resolver_1.DefaultPolicyResolver },
             { provide: 'PlanService', useExisting: 'PlanService' },

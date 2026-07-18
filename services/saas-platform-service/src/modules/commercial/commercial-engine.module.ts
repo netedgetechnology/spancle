@@ -46,6 +46,7 @@ import {
 import { CommercialDecisionService }         from './services/commercial-decision.service';
 import { DefaultPolicyResolver }             from './policy/default-policy-resolver';
 import { DefaultEntitlementResolver }        from './policy/default-entitlement-resolver';
+import { DefaultRuleResolver }               from './policy/default-rule-resolver';
 
 // Controllers
 import { CommercialDecisionController }      from './controllers/commercial-decision.controller';
@@ -53,6 +54,7 @@ import { CommercialDecisionController }      from './controllers/commercial-deci
 // Interfaces
 import { POLICY_RESOLVER }                   from './interfaces/policy-resolver.interfaces';
 import { ENTITLEMENT_RESOLVER }              from './interfaces/entitlement-resolver.interfaces';
+import { RULE_RESOLVER }                     from './interfaces/rule-resolver.interfaces';
 
 // Guards
 import { SuperAdminGuard }                   from '../admin/guards/super-admin.guard';
@@ -107,6 +109,7 @@ const REPOSITORIES = [
   controllers: [CommercialDecisionController],
   providers: [
     ...REPOSITORIES,
+    { provide: RULE_RESOLVER,        useClass: DefaultRuleResolver },
     { provide: ENTITLEMENT_RESOLVER, useClass: DefaultEntitlementResolver },
     { provide: POLICY_RESOLVER,      useClass: DefaultPolicyResolver },
     // String-token aliases for cross-module injection into DefaultPolicyResolver

@@ -19,9 +19,10 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const commercial_repositories_1 = require("../commercial.repositories");
 const commercial_events_1 = require("../events/commercial.events");
 const entitlement_resolver_interfaces_1 = require("../interfaces/entitlement-resolver.interfaces");
+const rule_resolver_interfaces_1 = require("../interfaces/rule-resolver.interfaces");
 const common_2 = require("@nestjs/common");
 let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolver {
-    constructor(planService, packageService, packageVersionRepo, ruleRepo, ruleVersionRepo, ownershipRepo, distributionRepo, pricingModelRepo, gatewayDefRepo, featureFlagRepo, entitlementResolver, eventEmitter) {
+    constructor(planService, packageService, packageVersionRepo, ruleRepo, ruleVersionRepo, ownershipRepo, distributionRepo, pricingModelRepo, gatewayDefRepo, featureFlagRepo, entitlementResolver, ruleResolver, eventEmitter) {
         this.planService = planService;
         this.packageService = packageService;
         this.packageVersionRepo = packageVersionRepo;
@@ -33,6 +34,7 @@ let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolve
         this.gatewayDefRepo = gatewayDefRepo;
         this.featureFlagRepo = featureFlagRepo;
         this.entitlementResolver = entitlementResolver;
+        this.ruleResolver = ruleResolver;
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(DefaultPolicyResolver_1.name);
     }
@@ -49,7 +51,11 @@ let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolve
                 this.gatewayDefRepo.findAll(),
                 this.resolveFeatureFlags(tenantId),
             ]);
+            const ruleBundle = ruleVersions.length
+                ? this.ruleResolver.resolve(ruleVersions)
+                : null;
             const bundle = {
+                ruleBundle,
                 entitlementBundle: packageAssignment && packageAssignment.packageVersion
                     ? this.entitlementResolver.resolve(packageAssignment, featureFlags)
                     : null,
@@ -146,8 +152,8 @@ let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolve
             packageVersion,
             packageStatus: pkg.status,
             isEligible,
-            effectiveFeatures: { ...pkg.features, ...plan.featureOverrides },
-            effectiveLimits: { ...pkg.limits, ...plan.limitOverrides },
+            effectiveFeatures: { ...packageVersion.features, ...plan.featureOverrides },
+            effectiveLimits: { ...packageVersion.limits, ...plan.limitOverrides },
             resolvedAt,
         };
         await this.eventEmitter.emitAsync(commercial_events_1.CommercialEvents.PACKAGE_RESOLVED, {
@@ -195,6 +201,7 @@ exports.DefaultPolicyResolver = DefaultPolicyResolver = DefaultPolicyResolver_1 
     __param(0, (0, common_2.Inject)('PlanService')),
     __param(1, (0, common_2.Inject)('PackageService')),
     __param(10, (0, common_2.Inject)(entitlement_resolver_interfaces_1.ENTITLEMENT_RESOLVER)),
+    __param(11, (0, common_2.Inject)(rule_resolver_interfaces_1.RULE_RESOLVER)),
     __metadata("design:paramtypes", [Function, Function, commercial_repositories_1.PackageVersionRepository,
         commercial_repositories_1.CommercialRuleRepository,
         commercial_repositories_1.CommercialRuleVersionRepository,
@@ -202,6 +209,6 @@ exports.DefaultPolicyResolver = DefaultPolicyResolver = DefaultPolicyResolver_1 
         commercial_repositories_1.RevenueDistributionPolicyRepository,
         commercial_repositories_1.PricingModelRepository,
         commercial_repositories_1.GatewayDefinitionRepository,
-        commercial_repositories_1.FeatureFlagRepository, Object, event_emitter_1.EventEmitter2])
+        commercial_repositories_1.FeatureFlagRepository, Object, Object, event_emitter_1.EventEmitter2])
 ], DefaultPolicyResolver);
 //# sourceMappingURL=default-policy-resolver.js.map

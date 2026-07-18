@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CommercialPipelineStep = exports.TransactionType = exports.CommercialAuditAction = exports.FeatureFlagStatus = exports.CommercialDecisionOutcome = exports.CommercialProductType = exports.GatewayScope = exports.GatewayType = exports.RevenueDistributionType = exports.PaymentOwnershipType = exports.PricingModelType = exports.CommercialRuleStatus = exports.CommercialRuleType = void 0;
+exports.RuleEvaluationOutcome = exports.CommercialPipelineStep = exports.TransactionType = exports.CommercialAuditAction = exports.FeatureFlagStatus = exports.CommercialDecisionOutcome = exports.CommercialProductType = exports.GatewayScope = exports.GatewayType = exports.RevenueDistributionType = exports.PaymentOwnershipType = exports.PricingModelType = exports.CommercialRuleStatus = exports.CommercialRuleType = void 0;
 var CommercialRuleType;
 (function (CommercialRuleType) {
     CommercialRuleType["PRICING"] = "PRICING";
@@ -8,6 +8,9 @@ var CommercialRuleType;
     CommercialRuleType["ELIGIBILITY"] = "ELIGIBILITY";
     CommercialRuleType["RESTRICTION"] = "RESTRICTION";
     CommercialRuleType["DISTRIBUTION"] = "DISTRIBUTION";
+    CommercialRuleType["PROMOTION"] = "PROMOTION";
+    CommercialRuleType["TRIAL"] = "TRIAL";
+    CommercialRuleType["TAX"] = "TAX";
 })(CommercialRuleType || (exports.CommercialRuleType = CommercialRuleType = {}));
 var CommercialRuleStatus;
 (function (CommercialRuleStatus) {
@@ -100,4 +103,10 @@ var CommercialPipelineStep;
     CommercialPipelineStep["RESOLVE_POLICIES"] = "RESOLVE_POLICIES";
     CommercialPipelineStep["GENERATE_SNAPSHOT"] = "GENERATE_SNAPSHOT";
 })(CommercialPipelineStep || (exports.CommercialPipelineStep = CommercialPipelineStep = {}));
+var RuleEvaluationOutcome;
+(function (RuleEvaluationOutcome) {
+    RuleEvaluationOutcome["APPLIED"] = "APPLIED";
+    RuleEvaluationOutcome["SKIPPED"] = "SKIPPED";
+    RuleEvaluationOutcome["FAILED"] = "FAILED";
+})(RuleEvaluationOutcome || (exports.RuleEvaluationOutcome = RuleEvaluationOutcome = {}));
 //# sourceMappingURL=commercial.enums.js.map

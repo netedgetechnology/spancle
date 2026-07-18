@@ -148,7 +148,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
     }
     async stepGenerateSnapshot(ctx, bundle) {
         const { input } = ctx;
-        const { packageAssignment, packageVersion, packageSlug, ownershipPolicies, distributionPolicies, ruleVersions, } = bundle;
+        const { packageAssignment, packageVersion, packageSlug, ownershipPolicies, distributionPolicies, ruleVersions, ruleBundle, } = bundle;
         const isEligible = packageAssignment?.isEligible ?? false;
         const outcome = isEligible
             ? commercial_enums_1.CommercialDecisionOutcome.ALLOWED
@@ -167,10 +167,12 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
         const pkgAssignmentSnapshot = packageAssignment
             ? (0, package_assignment_model_1.toPackageAssignmentSnapshot)(packageAssignment)
             : null;
+        const primaryRuleVersionId = ruleBundle?.primaryRuleVersionId ?? null;
+        const primaryRuleVersionSemver = ruleBundle?.primaryRuleVersionSemver ?? null;
         const snapshot = await this.snapshotRepo.create({
             tenantId: input.tenantId,
-            ruleId: ruleVersions[0]?.ruleId ?? '00000000-0000-0000-0000-000000000000',
-            ruleVersion: ruleVersions[0]?.version ?? '0.0.0',
+            ruleId: primaryRuleVersionId ?? '00000000-0000-0000-0000-000000000000',
+            ruleVersion: primaryRuleVersionSemver ?? '0.0.0',
             subjectType: 'commercial_decision',
             subjectId: input.productId.length === 36 ? input.productId
                 : '00000000-0000-0000-0000-000000000000',
@@ -198,6 +200,18 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
                 productEligible: isEligible,
                 appliedPolicyIds,
                 ruleVersionIds: ruleVersions.map((rv) => rv.id),
+                primaryRuleVersionId,
+                primaryRuleVersionSemver,
+                pricingRuleCount: ruleBundle?.pricingRules.length ?? 0,
+                discountRuleCount: ruleBundle?.discountRules.length ?? 0,
+                promotionRuleCount: ruleBundle?.promotionRules.length ?? 0,
+                trialRuleCount: ruleBundle?.trialRules.length ?? 0,
+                evaluatedRules: ruleBundle?.evaluatedRules.map((e) => ({
+                    ruleVersionId: e.ruleVersion.id,
+                    ruleType: e.ruleType,
+                    outcome: e.outcome,
+                    reason: e.reason,
+                })) ?? [],
                 resolvedAt: bundle.resolvedAt.toISOString(),
                 generatedAt: generatedAt.toISOString(),
                 stepTrace: ctx.stepTrace,

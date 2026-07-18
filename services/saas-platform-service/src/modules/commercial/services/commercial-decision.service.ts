@@ -237,6 +237,7 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       ownershipPolicies,
       distributionPolicies,
       ruleVersions,
+      ruleBundle,
     } = bundle;
 
     // Outcome: DENIED when packageAssignment is null or not eligible.
@@ -263,10 +264,18 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       ? toPackageAssignmentSnapshot(packageAssignment)
       : null;
 
+    // Primary rule: first PRICING rule from the bundle, or first resolved rule,
+    // or null when no rules exist. No sentinel UUIDs — null is stored explicitly.
+    const primaryRuleVersionId     = ruleBundle?.primaryRuleVersionId     ?? null;
+    const primaryRuleVersionSemver = ruleBundle?.primaryRuleVersionSemver ?? null;
+
     const snapshot = await this.snapshotRepo.create({
       tenantId:    input.tenantId,
-      ruleId:      ruleVersions[0]?.ruleId ?? '00000000-0000-0000-0000-000000000000',
-      ruleVersion: ruleVersions[0]?.version ?? '0.0.0',
+      // ruleId is the primary evaluated rule for this decision.
+      // When no rules have been resolved, the sentinel '00000000-...' is intentional —
+      // it marks "no rule evaluated" in this version of the pipeline.
+      ruleId:      primaryRuleVersionId ?? '00000000-0000-0000-0000-000000000000',
+      ruleVersion: primaryRuleVersionSemver ?? '0.0.0',
       subjectType: 'commercial_decision',
       subjectId:   input.productId.length === 36 ? input.productId
         : '00000000-0000-0000-0000-000000000000',
@@ -296,6 +305,19 @@ export class CommercialDecisionService implements ICommercialDecisionService {
         productEligible: isEligible,
         appliedPolicyIds,
         ruleVersionIds:  ruleVersions.map((rv) => rv.id),
+        // Rule evaluation results — typed and ordered
+        primaryRuleVersionId,
+        primaryRuleVersionSemver,
+        pricingRuleCount:   ruleBundle?.pricingRules.length   ?? 0,
+        discountRuleCount:  ruleBundle?.discountRules.length  ?? 0,
+        promotionRuleCount: ruleBundle?.promotionRules.length ?? 0,
+        trialRuleCount:     ruleBundle?.trialRules.length     ?? 0,
+        evaluatedRules:     ruleBundle?.evaluatedRules.map((e) => ({
+          ruleVersionId: e.ruleVersion.id,
+          ruleType:      e.ruleType,
+          outcome:       e.outcome,
+          reason:        e.reason,
+        })) ?? [],
         resolvedAt:      bundle.resolvedAt.toISOString(),
         generatedAt:     generatedAt.toISOString(),
         stepTrace:       ctx.stepTrace,

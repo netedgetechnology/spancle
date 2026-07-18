@@ -21,6 +21,7 @@ import {
 import { CommercialEvents }            from '../events/commercial.events';
 import { TransactionType }             from '../enums/commercial.enums';
 import { ENTITLEMENT_RESOLVER }        from '../interfaces/entitlement-resolver.interfaces';
+import { RULE_RESOLVER }              from '../interfaces/rule-resolver.interfaces';
 import type { CommercialDecisionContext } from '../interfaces/commercial-decision.interfaces';
 
 
@@ -116,6 +117,14 @@ function makeMocks() {
     pricingModelRepo: { findByTenant: jest.fn().mockResolvedValue([]) },
     gatewayDefRepo:   { findAll: jest.fn().mockResolvedValue([]) },
     featureFlagRepo:  { findByTenant: jest.fn().mockResolvedValue([]) },
+    ruleResolver: {
+      resolve: jest.fn().mockReturnValue({
+        pricingRules: [], discountRules: [], promotionRules: [],
+        trialRules: [], taxRules: [], evaluatedRules: [],
+        primaryRuleVersionId: null, primaryRuleVersionSemver: null,
+        resolvedAt: new Date(),
+      }),
+    },
     entitlementResolver: {
       resolve: jest.fn().mockReturnValue({
         packageVersion:      PACKAGE_VERSION,
@@ -146,6 +155,7 @@ async function buildResolver(mocks: ReturnType<typeof makeMocks>) {
       { provide: PricingModelRepository,              useValue: mocks.pricingModelRepo },
       { provide: GatewayDefinitionRepository,         useValue: mocks.gatewayDefRepo },
       { provide: FeatureFlagRepository,               useValue: mocks.featureFlagRepo },
+      { provide: RULE_RESOLVER,                       useValue: mocks.ruleResolver },
       { provide: ENTITLEMENT_RESOLVER,                useValue: mocks.entitlementResolver },
       { provide: EventEmitter2,                       useValue: mocks.eventEmitter },
     ],
