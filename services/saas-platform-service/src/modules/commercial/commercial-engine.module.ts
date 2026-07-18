@@ -47,6 +47,7 @@ import { CommercialDecisionService }         from './services/commercial-decisio
 import { DefaultPolicyResolver }             from './policy/default-policy-resolver';
 import { DefaultEntitlementResolver }        from './policy/default-entitlement-resolver';
 import { DefaultRuleResolver }               from './policy/default-rule-resolver';
+import { DefaultGatewayRegistry }            from './policy/default-gateway-registry';
 
 // Controllers
 import { CommercialDecisionController }      from './controllers/commercial-decision.controller';
@@ -55,6 +56,7 @@ import { CommercialDecisionController }      from './controllers/commercial-deci
 import { POLICY_RESOLVER }                   from './interfaces/policy-resolver.interfaces';
 import { ENTITLEMENT_RESOLVER }              from './interfaces/entitlement-resolver.interfaces';
 import { RULE_RESOLVER }                     from './interfaces/rule-resolver.interfaces';
+import { GATEWAY_REGISTRY }                  from './interfaces/gateway-registry.interfaces';
 
 // Guards
 import { SuperAdminGuard }                   from '../admin/guards/super-admin.guard';
@@ -109,6 +111,7 @@ const REPOSITORIES = [
   controllers: [CommercialDecisionController],
   providers: [
     ...REPOSITORIES,
+    { provide: GATEWAY_REGISTRY,     useClass: DefaultGatewayRegistry },
     { provide: RULE_RESOLVER,        useClass: DefaultRuleResolver },
     { provide: ENTITLEMENT_RESOLVER, useClass: DefaultEntitlementResolver },
     { provide: POLICY_RESOLVER,      useClass: DefaultPolicyResolver },

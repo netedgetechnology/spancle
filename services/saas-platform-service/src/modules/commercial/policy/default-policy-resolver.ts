@@ -12,6 +12,7 @@ import {
   CommercialRuleVersionRepository,
   FeatureFlagRepository,
   GatewayDefinitionRepository,
+  GatewayCredentialRepository,
   PackageVersionRepository,
   PaymentOwnershipPolicyRepository,
   PricingModelRepository,
@@ -24,6 +25,9 @@ import type { IEntitlementResolver } from '../interfaces/entitlement-resolver.in
 import { ENTITLEMENT_RESOLVER } from '../interfaces/entitlement-resolver.interfaces';
 import type { IRuleResolver } from '../interfaces/rule-resolver.interfaces';
 import { RULE_RESOLVER } from '../interfaces/rule-resolver.interfaces';
+import type { IGatewayRegistry, GatewaySelectionContext } from '../interfaces/gateway-registry.interfaces';
+import { GATEWAY_REGISTRY } from '../interfaces/gateway-registry.interfaces';
+import { PaymentOwnershipType } from '../enums/commercial.enums';
 import { Inject } from '@nestjs/common';
 import type { PackageAssignment } from './package-assignment.model';
 
@@ -73,6 +77,9 @@ export class DefaultPolicyResolver implements IPolicyResolver {
     private readonly entitlementResolver: IEntitlementResolver,
     @Inject(RULE_RESOLVER)
     private readonly ruleResolver: IRuleResolver,
+    @Inject(GATEWAY_REGISTRY)
+    private readonly gatewayRegistry: IGatewayRegistry,
+    private readonly gatewayCredentialRepo: GatewayCredentialRepository,
     private readonly eventEmitter:       EventEmitter2,
   ) {}
 
@@ -92,6 +99,8 @@ export class DefaultPolicyResolver implements IPolicyResolver {
         pricingModels,
         gatewayDefinitions,
         featureFlags,
+        tenantCredentials,
+        platformCredentials,
       ] = await Promise.all([
         this.resolveRuleVersions(tenantId),
         this.resolveWithFallback(
@@ -108,7 +117,24 @@ export class DefaultPolicyResolver implements IPolicyResolver {
         ),
         this.gatewayDefRepo.findAll(),
         this.resolveFeatureFlags(tenantId),
+        this.gatewayCredentialRepo.findByTenant(tenantId),
+        this.gatewayCredentialRepo.findByTenant(null),
       ]);
+
+      const allCredentials = [...platformCredentials, ...tenantCredentials];
+      const ownershipType  = ownershipPolicies[0]?.ownershipType ?? PaymentOwnershipType.PLATFORM;
+
+      const gatewayCtx: GatewaySelectionContext = {
+        tenantId,
+        currency: context.currency,
+        country:  context.country,
+        tenantOwned: ownershipType === PaymentOwnershipType.TENANT ||
+                     ownershipType === PaymentOwnershipType.SPLIT,
+      };
+
+      const gatewayBundle = gatewayDefinitions.length
+        ? this.gatewayRegistry.resolve(gatewayDefinitions, allCredentials, ownershipType, gatewayCtx)
+        : null;
 
       const ruleBundle = ruleVersions.length
         ? this.ruleResolver.resolve(ruleVersions)
@@ -116,6 +142,7 @@ export class DefaultPolicyResolver implements IPolicyResolver {
 
       const bundle: ResolvedPolicyBundle = {
         ruleBundle,
+        gatewayBundle,
         entitlementBundle: packageAssignment && packageAssignment.packageVersion
           ? this.entitlementResolver.resolve(packageAssignment, featureFlags)
           : null,

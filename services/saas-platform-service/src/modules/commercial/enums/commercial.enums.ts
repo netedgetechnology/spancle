@@ -133,3 +133,11 @@ export enum RuleEvaluationOutcome {
   SKIPPED  = 'SKIPPED',
   FAILED   = 'FAILED',
 }
+
+// ── GatewayPriority ───────────────────────────────────────────────────────────
+
+export enum GatewayPriority {
+  PRIMARY   = 'PRIMARY',
+  SECONDARY = 'SECONDARY',
+  FALLBACK  = 'FALLBACK',
+}

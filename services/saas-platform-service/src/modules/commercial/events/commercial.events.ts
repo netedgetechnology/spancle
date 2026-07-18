@@ -27,4 +27,7 @@ export enum CommercialEvents {
   // ── Rule resolution ───────────────────────────────────────────────────────
   RULES_RESOLVED             = 'spancle.commercial.rules.resolved',
   RULE_EVALUATION_FAILED     = 'spancle.commercial.rule.evaluation_failed',
+  // ── Gateway registry ─────────────────────────────────────────────────────
+  GATEWAY_SELECTED           = 'spancle.commercial.gateway.selected',
+  GATEWAY_SELECTION_FAILED   = 'spancle.commercial.gateway.selection_failed',
 }

@@ -25,12 +25,12 @@ __decorate([
     __metadata("design:type", Object)
 ], CommercialDecisionSnapshotEntity.prototype, "tenantId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'rule_id', type: 'uuid', nullable: false }),
-    __metadata("design:type", String)
+    (0, typeorm_1.Column)({ name: 'rule_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
 ], CommercialDecisionSnapshotEntity.prototype, "ruleId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'rule_version', type: 'varchar', length: 32, nullable: false }),
-    __metadata("design:type", String)
+    (0, typeorm_1.Column)({ name: 'rule_version', type: 'varchar', length: 32, nullable: true }),
+    __metadata("design:type", Object)
 ], CommercialDecisionSnapshotEntity.prototype, "ruleVersion", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'subject_type', type: 'varchar', length: 64, nullable: false }),
@@ -52,6 +52,10 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'result_payload', type: 'jsonb', nullable: false, default: '{}' }),
     __metadata("design:type", Object)
 ], CommercialDecisionSnapshotEntity.prototype, "resultPayload", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'evaluated_rule_ids', type: 'jsonb', nullable: false, default: '[]' }),
+    __metadata("design:type", Array)
+], CommercialDecisionSnapshotEntity.prototype, "evaluatedRuleIds", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'evaluated_by_id', type: 'uuid', nullable: true }),
     __metadata("design:type", Object)

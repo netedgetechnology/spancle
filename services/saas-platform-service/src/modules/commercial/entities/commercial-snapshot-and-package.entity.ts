@@ -24,13 +24,14 @@ export class CommercialDecisionSnapshotEntity {
   @Index()
   tenantId!: string | null;
 
-  /** FK-equivalent → commercial_rules.id */
-  @Column({ name: 'rule_id', type: 'uuid', nullable: false })
-  ruleId!: string;
+  /** FK-equivalent → commercial_rule_versions.ruleId.
+   *  NULL when no rule has been evaluated for this decision (no sentinel UUID). */
+  @Column({ name: 'rule_id', type: 'uuid', nullable: true })
+  ruleId!: string | null;
 
-  /** Semver of the rule version that produced this decision */
-  @Column({ name: 'rule_version', type: 'varchar', length: 32, nullable: false })
-  ruleVersion!: string;
+  /** Semver of the primary rule version. NULL when no rule was evaluated. */
+  @Column({ name: 'rule_version', type: 'varchar', length: 32, nullable: true })
+  ruleVersion!: string | null;
 
   /** Entity type the rule was evaluated against, e.g. 'booking', 'subscription' */
   @Column({ name: 'subject_type', type: 'varchar', length: 64, nullable: false })
@@ -49,6 +50,14 @@ export class CommercialDecisionSnapshotEntity {
   /** Result payload produced by the rule */
   @Column({ name: 'result_payload', type: 'jsonb', nullable: false, default: '{}' })
   resultPayload!: Record<string, unknown>;
+
+  /**
+   * All CommercialRuleVersion UUIDs evaluated for this decision.
+   * Empty array when no rules were evaluated.
+   * Stored as JSONB for GIN-index query support.
+   */
+  @Column({ name: 'evaluated_rule_ids', type: 'jsonb', nullable: false, default: '[]' })
+  evaluatedRuleIds!: string[];
 
   @Column({ name: 'evaluated_by_id', type: 'uuid', nullable: true })
   evaluatedById!: string | null;

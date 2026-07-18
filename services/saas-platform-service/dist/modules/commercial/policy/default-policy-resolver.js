@@ -20,9 +20,11 @@ const commercial_repositories_1 = require("../commercial.repositories");
 const commercial_events_1 = require("../events/commercial.events");
 const entitlement_resolver_interfaces_1 = require("../interfaces/entitlement-resolver.interfaces");
 const rule_resolver_interfaces_1 = require("../interfaces/rule-resolver.interfaces");
+const gateway_registry_interfaces_1 = require("../interfaces/gateway-registry.interfaces");
+const commercial_enums_1 = require("../enums/commercial.enums");
 const common_2 = require("@nestjs/common");
 let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolver {
-    constructor(planService, packageService, packageVersionRepo, ruleRepo, ruleVersionRepo, ownershipRepo, distributionRepo, pricingModelRepo, gatewayDefRepo, featureFlagRepo, entitlementResolver, ruleResolver, eventEmitter) {
+    constructor(planService, packageService, packageVersionRepo, ruleRepo, ruleVersionRepo, ownershipRepo, distributionRepo, pricingModelRepo, gatewayDefRepo, featureFlagRepo, entitlementResolver, ruleResolver, gatewayRegistry, gatewayCredentialRepo, eventEmitter) {
         this.planService = planService;
         this.packageService = packageService;
         this.packageVersionRepo = packageVersionRepo;
@@ -35,6 +37,8 @@ let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolve
         this.featureFlagRepo = featureFlagRepo;
         this.entitlementResolver = entitlementResolver;
         this.ruleResolver = ruleResolver;
+        this.gatewayRegistry = gatewayRegistry;
+        this.gatewayCredentialRepo = gatewayCredentialRepo;
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(DefaultPolicyResolver_1.name);
     }
@@ -43,19 +47,34 @@ let DefaultPolicyResolver = DefaultPolicyResolver_1 = class DefaultPolicyResolve
         const resolvedAt = new Date();
         try {
             const packageAssignment = await this.resolvePackageAssignment(tenantId, resolvedAt);
-            const [ruleVersions, ownershipPolicies, distributionPolicies, pricingModels, gatewayDefinitions, featureFlags,] = await Promise.all([
+            const [ruleVersions, ownershipPolicies, distributionPolicies, pricingModels, gatewayDefinitions, featureFlags, tenantCredentials, platformCredentials,] = await Promise.all([
                 this.resolveRuleVersions(tenantId),
                 this.resolveWithFallback(() => this.ownershipRepo.findByTenant(tenantId), () => this.ownershipRepo.findByTenant(null)),
                 this.resolveWithFallback(() => this.distributionRepo.findByTenant(tenantId), () => this.distributionRepo.findByTenant(null)),
                 this.resolveWithFallback(() => this.pricingModelRepo.findByTenant(tenantId), () => this.pricingModelRepo.findByTenant(null)),
                 this.gatewayDefRepo.findAll(),
                 this.resolveFeatureFlags(tenantId),
+                this.gatewayCredentialRepo.findByTenant(tenantId),
+                this.gatewayCredentialRepo.findByTenant(null),
             ]);
+            const allCredentials = [...platformCredentials, ...tenantCredentials];
+            const ownershipType = ownershipPolicies[0]?.ownershipType ?? commercial_enums_1.PaymentOwnershipType.PLATFORM;
+            const gatewayCtx = {
+                tenantId,
+                currency: context.currency,
+                country: context.country,
+                tenantOwned: ownershipType === commercial_enums_1.PaymentOwnershipType.TENANT ||
+                    ownershipType === commercial_enums_1.PaymentOwnershipType.SPLIT,
+            };
+            const gatewayBundle = gatewayDefinitions.length
+                ? this.gatewayRegistry.resolve(gatewayDefinitions, allCredentials, ownershipType, gatewayCtx)
+                : null;
             const ruleBundle = ruleVersions.length
                 ? this.ruleResolver.resolve(ruleVersions)
                 : null;
             const bundle = {
                 ruleBundle,
+                gatewayBundle,
                 entitlementBundle: packageAssignment && packageAssignment.packageVersion
                     ? this.entitlementResolver.resolve(packageAssignment, featureFlags)
                     : null,
@@ -202,6 +221,7 @@ exports.DefaultPolicyResolver = DefaultPolicyResolver = DefaultPolicyResolver_1 
     __param(1, (0, common_2.Inject)('PackageService')),
     __param(10, (0, common_2.Inject)(entitlement_resolver_interfaces_1.ENTITLEMENT_RESOLVER)),
     __param(11, (0, common_2.Inject)(rule_resolver_interfaces_1.RULE_RESOLVER)),
+    __param(12, (0, common_2.Inject)(gateway_registry_interfaces_1.GATEWAY_REGISTRY)),
     __metadata("design:paramtypes", [Function, Function, commercial_repositories_1.PackageVersionRepository,
         commercial_repositories_1.CommercialRuleRepository,
         commercial_repositories_1.CommercialRuleVersionRepository,
@@ -209,6 +229,7 @@ exports.DefaultPolicyResolver = DefaultPolicyResolver = DefaultPolicyResolver_1 
         commercial_repositories_1.RevenueDistributionPolicyRepository,
         commercial_repositories_1.PricingModelRepository,
         commercial_repositories_1.GatewayDefinitionRepository,
-        commercial_repositories_1.FeatureFlagRepository, Object, Object, event_emitter_1.EventEmitter2])
+        commercial_repositories_1.FeatureFlagRepository, Object, Object, Object, commercial_repositories_1.GatewayCredentialRepository,
+        event_emitter_1.EventEmitter2])
 ], DefaultPolicyResolver);
 //# sourceMappingURL=default-policy-resolver.js.map

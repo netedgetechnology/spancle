@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RuleEvaluationOutcome = exports.CommercialPipelineStep = exports.TransactionType = exports.CommercialAuditAction = exports.FeatureFlagStatus = exports.CommercialDecisionOutcome = exports.CommercialProductType = exports.GatewayScope = exports.GatewayType = exports.RevenueDistributionType = exports.PaymentOwnershipType = exports.PricingModelType = exports.CommercialRuleStatus = exports.CommercialRuleType = void 0;
+exports.GatewayPriority = exports.RuleEvaluationOutcome = exports.CommercialPipelineStep = exports.TransactionType = exports.CommercialAuditAction = exports.FeatureFlagStatus = exports.CommercialDecisionOutcome = exports.CommercialProductType = exports.GatewayScope = exports.GatewayType = exports.RevenueDistributionType = exports.PaymentOwnershipType = exports.PricingModelType = exports.CommercialRuleStatus = exports.CommercialRuleType = void 0;
 var CommercialRuleType;
 (function (CommercialRuleType) {
     CommercialRuleType["PRICING"] = "PRICING";
@@ -109,4 +109,10 @@ var RuleEvaluationOutcome;
     RuleEvaluationOutcome["SKIPPED"] = "SKIPPED";
     RuleEvaluationOutcome["FAILED"] = "FAILED";
 })(RuleEvaluationOutcome || (exports.RuleEvaluationOutcome = RuleEvaluationOutcome = {}));
+var GatewayPriority;
+(function (GatewayPriority) {
+    GatewayPriority["PRIMARY"] = "PRIMARY";
+    GatewayPriority["SECONDARY"] = "SECONDARY";
+    GatewayPriority["FALLBACK"] = "FALLBACK";
+})(GatewayPriority || (exports.GatewayPriority = GatewayPriority = {}));
 //# sourceMappingURL=commercial.enums.js.map

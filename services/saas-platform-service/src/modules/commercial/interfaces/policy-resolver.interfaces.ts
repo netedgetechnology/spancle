@@ -24,6 +24,7 @@ import type { CommercialDecisionContext }     from './commercial-decision.interf
 import type { PackageAssignment }            from '../policy/package-assignment.model';
 import type { EntitlementBundle }            from './entitlement-resolver.interfaces';
 import type { RuleBundle }                   from './rule-resolver.interfaces';
+import type { GatewayBundle }               from './gateway-registry.interfaces';
 
 // ── ResolvedPolicyBundle ──────────────────────────────────────────────────────
 
@@ -45,6 +46,13 @@ export interface ResolvedPolicyBundle {
    * Null when no active rules exist for this tenant.
    */
   ruleBundle: Readonly<RuleBundle> | null;
+
+  /**
+   * The resolved gateway bundle — selected and ordered gateways for this context.
+   * Null when no gateway definitions exist.
+   * No payment execution — reference and selection only.
+   */
+  gatewayBundle: Readonly<GatewayBundle> | null;
 
   /**
    * The resolved entitlement bundle — pre-computed feature access and limits.

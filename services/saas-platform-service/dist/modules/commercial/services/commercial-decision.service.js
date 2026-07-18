@@ -171,11 +171,10 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
         const primaryRuleVersionSemver = ruleBundle?.primaryRuleVersionSemver ?? null;
         const snapshot = await this.snapshotRepo.create({
             tenantId: input.tenantId,
-            ruleId: primaryRuleVersionId ?? '00000000-0000-0000-0000-000000000000',
-            ruleVersion: primaryRuleVersionSemver ?? '0.0.0',
+            ruleId: primaryRuleVersionId,
+            ruleVersion: primaryRuleVersionSemver,
             subjectType: 'commercial_decision',
-            subjectId: input.productId.length === 36 ? input.productId
-                : '00000000-0000-0000-0000-000000000000',
+            subjectId: input.productId.length === 36 ? input.productId : '00000000-0000-0000-0000-000000000000',
             outcome,
             inputContext: {
                 tenantId: input.tenantId,
@@ -217,6 +216,7 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
                 stepTrace: ctx.stepTrace,
             },
             evaluatedById: input.actorId,
+            evaluatedRuleIds: ruleVersions.map((rv) => rv.id),
         });
         ctx.stepTrace.push({
             step: commercial_enums_1.CommercialPipelineStep.GENERATE_SNAPSHOT,

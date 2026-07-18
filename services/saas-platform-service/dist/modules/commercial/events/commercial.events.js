@@ -25,5 +25,7 @@ var CommercialEvents;
     CommercialEvents["ENTITLEMENT_RESOLUTION_FAILED"] = "spancle.commercial.entitlements.resolution_failed";
     CommercialEvents["RULES_RESOLVED"] = "spancle.commercial.rules.resolved";
     CommercialEvents["RULE_EVALUATION_FAILED"] = "spancle.commercial.rule.evaluation_failed";
+    CommercialEvents["GATEWAY_SELECTED"] = "spancle.commercial.gateway.selected";
+    CommercialEvents["GATEWAY_SELECTION_FAILED"] = "spancle.commercial.gateway.selection_failed";
 })(CommercialEvents || (exports.CommercialEvents = CommercialEvents = {}));
 //# sourceMappingURL=commercial.events.js.map

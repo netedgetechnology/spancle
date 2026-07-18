@@ -271,14 +271,11 @@ export class CommercialDecisionService implements ICommercialDecisionService {
 
     const snapshot = await this.snapshotRepo.create({
       tenantId:    input.tenantId,
-      // ruleId is the primary evaluated rule for this decision.
-      // When no rules have been resolved, the sentinel '00000000-...' is intentional —
-      // it marks "no rule evaluated" in this version of the pipeline.
-      ruleId:      primaryRuleVersionId ?? '00000000-0000-0000-0000-000000000000',
-      ruleVersion: primaryRuleVersionSemver ?? '0.0.0',
+      // ruleId is null when no rule has been evaluated (no sentinel UUID).
+      ruleId:      primaryRuleVersionId,
+      ruleVersion: primaryRuleVersionSemver,
       subjectType: 'commercial_decision',
-      subjectId:   input.productId.length === 36 ? input.productId
-        : '00000000-0000-0000-0000-000000000000',
+      subjectId:   input.productId.length === 36 ? input.productId : '00000000-0000-0000-0000-000000000000',
       outcome,
       inputContext: {
         tenantId:        input.tenantId,
@@ -323,6 +320,7 @@ export class CommercialDecisionService implements ICommercialDecisionService {
         stepTrace:       ctx.stepTrace,
       },
       evaluatedById: input.actorId,
+      evaluatedRuleIds: ruleVersions.map((rv) => rv.id),
     });
 
     ctx.stepTrace.push({

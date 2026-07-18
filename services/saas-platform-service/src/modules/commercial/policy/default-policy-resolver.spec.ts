@@ -22,6 +22,8 @@ import { CommercialEvents }            from '../events/commercial.events';
 import { TransactionType }             from '../enums/commercial.enums';
 import { ENTITLEMENT_RESOLVER }        from '../interfaces/entitlement-resolver.interfaces';
 import { RULE_RESOLVER }              from '../interfaces/rule-resolver.interfaces';
+import { GATEWAY_REGISTRY }         from '../interfaces/gateway-registry.interfaces';
+import { GatewayCredentialRepository } from '../commercial.repositories';
 import type { CommercialDecisionContext } from '../interfaces/commercial-decision.interfaces';
 
 
@@ -117,6 +119,15 @@ function makeMocks() {
     pricingModelRepo: { findByTenant: jest.fn().mockResolvedValue([]) },
     gatewayDefRepo:   { findAll: jest.fn().mockResolvedValue([]) },
     featureFlagRepo:  { findByTenant: jest.fn().mockResolvedValue([]) },
+    gatewayRegistry: {
+      resolve: jest.fn().mockReturnValue({
+        eligible: [], all: [], primary: null,
+        requestedCurrency: 'GBP', requestedCountry: 'GB', resolvedAt: new Date(),
+      }),
+    },
+    gatewayCredentialRepo: {
+      findByTenant: jest.fn().mockResolvedValue([]),
+    },
     ruleResolver: {
       resolve: jest.fn().mockReturnValue({
         pricingRules: [], discountRules: [], promotionRules: [],
@@ -155,6 +166,8 @@ async function buildResolver(mocks: ReturnType<typeof makeMocks>) {
       { provide: PricingModelRepository,              useValue: mocks.pricingModelRepo },
       { provide: GatewayDefinitionRepository,         useValue: mocks.gatewayDefRepo },
       { provide: FeatureFlagRepository,               useValue: mocks.featureFlagRepo },
+      { provide: GATEWAY_REGISTRY,                    useValue: mocks.gatewayRegistry },
+      { provide: GatewayCredentialRepository,         useValue: mocks.gatewayCredentialRepo },
       { provide: RULE_RESOLVER,                       useValue: mocks.ruleResolver },
       { provide: ENTITLEMENT_RESOLVER,                useValue: mocks.entitlementResolver },
       { provide: EventEmitter2,                       useValue: mocks.eventEmitter },
