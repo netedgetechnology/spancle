@@ -24,6 +24,14 @@ import type { IPolicyResolver, ResolvedPolicyBundle } from '../interfaces/policy
 import { CommercialDecisionSnapshotRepository } from '../commercial.repositories';
 import type { CommercialDecisionSnapshotEntity } from '../entities/commercial-snapshot-and-package.entity';
 import { CommercialContractBuilder }            from '../contracts/commercial-contract.builder';
+import {
+  PLATFORM_CONTRACT_PUBLISHER,
+  type IPlatformContractPublisher,
+  type CreateEnvelopeInput,
+  createEnvelope,
+  PlatformEventTypes,
+} from '../../../platform';
+import { COMMERCIAL_CONTRACT_VERSION }           from '../contracts/contract-version';
 
 /**
  * CommercialDecisionService
@@ -51,6 +59,8 @@ export class CommercialDecisionService implements ICommercialDecisionService {
     private readonly policyResolver: IPolicyResolver,
     private readonly snapshotRepo:   CommercialDecisionSnapshotRepository,
     private readonly eventEmitter:   EventEmitter2,
+    @Inject(PLATFORM_CONTRACT_PUBLISHER)
+    private readonly platformPublisher: IPlatformContractPublisher,
   ) {}
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -89,9 +99,26 @@ export class CommercialDecisionService implements ICommercialDecisionService {
       const result = await this.stepGenerateSnapshot(pipelineCtx, bundle);
 
       // Build the immutable inter-module contract and include in the event payload.
-      // Finance consumes this from the event body — no direct service call.
+      // Platform consumers receive this from the event body — no direct service import.
       const contract = CommercialContractBuilder.build(result, bundle);
 
+      // Publish via the platform boundary — transport is determined by the adapter
+      // registered for PLATFORM_CONTRACT_PUBLISHER (in-process EventEmitter2 initially).
+      const envelopeInput: CreateEnvelopeInput<typeof contract> = {
+        contractId:       `${PlatformEventTypes.COMMERCIAL_DECISION_GENERATED}-${result.decisionId}`,
+        contractVersion:  COMMERCIAL_CONTRACT_VERSION,
+        eventType:        PlatformEventTypes.COMMERCIAL_DECISION_GENERATED,
+        correlationId:    result.decisionId,
+        traceId:          result.decisionId,
+        deduplicationKey: `commercial-decision-${context.tenantId}-${result.decisionId}`,
+        occurredAt:       result.generatedAt.toISOString(),
+        producerVersion:  COMMERCIAL_CONTRACT_VERSION,
+        payload:          contract,
+      };
+
+      await this.platformPublisher.publish(createEnvelope(envelopeInput));
+
+      // Keep EventEmitter2 emission for backward compatibility with internal listeners
       await this.eventEmitter.emitAsync(CommercialEvents.DECISION_GENERATED, {
         decisionId: result.decisionId,
         tenantId:   context.tenantId,

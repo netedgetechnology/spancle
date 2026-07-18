@@ -10,6 +10,7 @@ exports.CommercialEngineModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const plan_module_1 = require("../plan/plan.module");
+const platform_module_1 = require("../../platform/platform.module");
 const commercial_rule_entity_1 = require("./entities/commercial-rule.entity");
 const commercial_rule_version_entity_1 = require("./entities/commercial-rule-version.entity");
 const commercial_snapshot_and_package_entity_1 = require("./entities/commercial-snapshot-and-package.entity");
@@ -65,6 +66,7 @@ exports.CommercialEngineModule = CommercialEngineModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature(ENTITIES),
             plan_module_1.PlanModule,
+            platform_module_1.PlatformModule,
         ],
         controllers: [commercial_decision_controller_1.CommercialDecisionController],
         providers: [

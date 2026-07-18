@@ -10,6 +10,7 @@ import { EventEmitter2 }                     from '@nestjs/event-emitter';
 import { CommercialDecisionService }         from './commercial-decision.service';
 import { CommercialDecisionSnapshotRepository } from '../commercial.repositories';
 import { POLICY_RESOLVER }                   from '../interfaces/policy-resolver.interfaces';
+import { PLATFORM_CONTRACT_PUBLISHER }        from '../../../platform';
 import {
   CommercialDecisionOutcome,
   CommercialPipelineStep,
@@ -97,6 +98,11 @@ const SNAPSHOT = {
 
 function makeMocks(bundleOverride?: Partial<ResolvedPolicyBundle>) {
   return {
+    platformPublisher: {
+      publish:    jest.fn().mockResolvedValue({ success: true, contractId: 'env-001', publishedAt: new Date().toISOString() }),
+      validate:   jest.fn().mockReturnValue({ valid: true, errors: [] }),
+      serialize:  jest.fn().mockReturnValue('{}'),
+    },
     policyResolver: {
       resolve: jest.fn().mockResolvedValue(makeBundle(bundleOverride)),
     },
@@ -112,6 +118,7 @@ async function buildService(mocks: ReturnType<typeof makeMocks>) {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       CommercialDecisionService,
+      { provide: PLATFORM_CONTRACT_PUBLISHER,            useValue: mocks.platformPublisher },
       { provide: POLICY_RESOLVER,                        useValue: mocks.policyResolver },
       { provide: CommercialDecisionSnapshotRepository,   useValue: mocks.snapshotRepo },
       { provide: EventEmitter2,                          useValue: mocks.eventEmitter },

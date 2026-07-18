@@ -1,0 +1,27 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PlatformModule = exports.isContractVersionCompatible = exports.checkPlatformVersionCompatibility = exports.isPlatformVersionDeprecated = exports.isPlatformVersionSupported = exports.isPlatformVersionCompatible = exports.PLATFORM_SCHEMA_DEPRECATED_VERSIONS = exports.PLATFORM_SCHEMA_SUPPORTED_VERSIONS = exports.PLATFORM_SCHEMA_CURRENT_VERSION = exports.PlatformContractSerializer = exports.PLATFORM_CONTRACT_RECEIVER = exports.PLATFORM_CONTRACT_PUBLISHER = exports.PLATFORM_SOURCE_SERVICE = exports.PLATFORM_SCHEMA_VERSION = exports.createEnvelope = exports.PlatformEventTypes = void 0;
+var platform_event_types_1 = require("./events/platform-event-types");
+Object.defineProperty(exports, "PlatformEventTypes", { enumerable: true, get: function () { return platform_event_types_1.PlatformEventTypes; } });
+var platform_contract_envelope_1 = require("./contracts/platform-contract-envelope");
+Object.defineProperty(exports, "createEnvelope", { enumerable: true, get: function () { return platform_contract_envelope_1.createEnvelope; } });
+Object.defineProperty(exports, "PLATFORM_SCHEMA_VERSION", { enumerable: true, get: function () { return platform_contract_envelope_1.PLATFORM_SCHEMA_VERSION; } });
+Object.defineProperty(exports, "PLATFORM_SOURCE_SERVICE", { enumerable: true, get: function () { return platform_contract_envelope_1.PLATFORM_SOURCE_SERVICE; } });
+var platform_contract_publisher_interface_1 = require("./publisher/platform-contract-publisher.interface");
+Object.defineProperty(exports, "PLATFORM_CONTRACT_PUBLISHER", { enumerable: true, get: function () { return platform_contract_publisher_interface_1.PLATFORM_CONTRACT_PUBLISHER; } });
+var platform_contract_receiver_interface_1 = require("./receiver/platform-contract-receiver.interface");
+Object.defineProperty(exports, "PLATFORM_CONTRACT_RECEIVER", { enumerable: true, get: function () { return platform_contract_receiver_interface_1.PLATFORM_CONTRACT_RECEIVER; } });
+var platform_contract_serializer_1 = require("./serialization/platform-contract-serializer");
+Object.defineProperty(exports, "PlatformContractSerializer", { enumerable: true, get: function () { return platform_contract_serializer_1.PlatformContractSerializer; } });
+var platform_version_compatibility_1 = require("./versioning/platform-version-compatibility");
+Object.defineProperty(exports, "PLATFORM_SCHEMA_CURRENT_VERSION", { enumerable: true, get: function () { return platform_version_compatibility_1.PLATFORM_SCHEMA_CURRENT_VERSION; } });
+Object.defineProperty(exports, "PLATFORM_SCHEMA_SUPPORTED_VERSIONS", { enumerable: true, get: function () { return platform_version_compatibility_1.PLATFORM_SCHEMA_SUPPORTED_VERSIONS; } });
+Object.defineProperty(exports, "PLATFORM_SCHEMA_DEPRECATED_VERSIONS", { enumerable: true, get: function () { return platform_version_compatibility_1.PLATFORM_SCHEMA_DEPRECATED_VERSIONS; } });
+Object.defineProperty(exports, "isPlatformVersionCompatible", { enumerable: true, get: function () { return platform_version_compatibility_1.isPlatformVersionCompatible; } });
+Object.defineProperty(exports, "isPlatformVersionSupported", { enumerable: true, get: function () { return platform_version_compatibility_1.isPlatformVersionSupported; } });
+Object.defineProperty(exports, "isPlatformVersionDeprecated", { enumerable: true, get: function () { return platform_version_compatibility_1.isPlatformVersionDeprecated; } });
+Object.defineProperty(exports, "checkPlatformVersionCompatibility", { enumerable: true, get: function () { return platform_version_compatibility_1.checkPlatformVersionCompatibility; } });
+Object.defineProperty(exports, "isContractVersionCompatible", { enumerable: true, get: function () { return platform_version_compatibility_1.isContractVersionCompatible; } });
+var platform_module_1 = require("./platform.module");
+Object.defineProperty(exports, "PlatformModule", { enumerable: true, get: function () { return platform_module_1.PlatformModule; } });
+//# sourceMappingURL=index.js.map

@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 // Cross-module imports (no circular dependency)
-import { PlanModule }    from '../plan/plan.module';
+import { PlanModule }      from '../plan/plan.module';
+import { PlatformModule }  from '../../platform/platform.module';
 
 // Entities
 import { CommercialRuleEntity }              from './entities/commercial-rule.entity';
@@ -107,6 +108,7 @@ const REPOSITORIES = [
   imports: [
     TypeOrmModule.forFeature(ENTITIES),
     PlanModule,               // provides PlanService for tenant→package resolution
+    PlatformModule,           // provides PLATFORM_CONTRACT_PUBLISHER
   ],
   controllers: [CommercialDecisionController],
   providers: [

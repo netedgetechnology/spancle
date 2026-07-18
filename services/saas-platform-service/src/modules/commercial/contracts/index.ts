@@ -1,12 +1,13 @@
 /**
  * contracts/index.ts
  *
- * Public API surface for Commercial→Finance contracts.
+ * Public API surface for Commercial platform contracts.
  *
- * Finance Engine imports ONLY from this barrel.
- * Internal implementation details (builder, interfaces from other modules) are not exported.
+ * Platform consumers import from this barrel.
+ * Internal implementation details (builder, pipeline interfaces) are not exported.
  *
  * Frozen at contractVersion 1.0.0.
+ * See src/platform/index.ts for the platform integration boundary.
  */
 export { COMMERCIAL_CONTRACT_VERSION, isCompatibleVersion } from './contract-version';
 export type { VersionedContract, CommercialContractVersion }  from './contract-version';

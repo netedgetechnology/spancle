@@ -22,11 +22,14 @@ const policy_resolver_interfaces_1 = require("../interfaces/policy-resolver.inte
 const package_assignment_model_1 = require("../policy/package-assignment.model");
 const commercial_repositories_1 = require("../commercial.repositories");
 const commercial_contract_builder_1 = require("../contracts/commercial-contract.builder");
+const platform_1 = require("../../../platform");
+const contract_version_1 = require("../contracts/contract-version");
 let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDecisionService {
-    constructor(policyResolver, snapshotRepo, eventEmitter) {
+    constructor(policyResolver, snapshotRepo, eventEmitter, platformPublisher) {
         this.policyResolver = policyResolver;
         this.snapshotRepo = snapshotRepo;
         this.eventEmitter = eventEmitter;
+        this.platformPublisher = platformPublisher;
         this.logger = new common_1.Logger(CommercialDecisionService_1.name);
     }
     async evaluate(context) {
@@ -52,6 +55,18 @@ let CommercialDecisionService = CommercialDecisionService_1 = class CommercialDe
             const bundle = await this.stepResolveViaPolicy(pipelineCtx);
             const result = await this.stepGenerateSnapshot(pipelineCtx, bundle);
             const contract = commercial_contract_builder_1.CommercialContractBuilder.build(result, bundle);
+            const envelopeInput = {
+                contractId: `${platform_1.PlatformEventTypes.COMMERCIAL_DECISION_GENERATED}-${result.decisionId}`,
+                contractVersion: contract_version_1.COMMERCIAL_CONTRACT_VERSION,
+                eventType: platform_1.PlatformEventTypes.COMMERCIAL_DECISION_GENERATED,
+                correlationId: result.decisionId,
+                traceId: result.decisionId,
+                deduplicationKey: `commercial-decision-${context.tenantId}-${result.decisionId}`,
+                occurredAt: result.generatedAt.toISOString(),
+                producerVersion: contract_version_1.COMMERCIAL_CONTRACT_VERSION,
+                payload: contract,
+            };
+            await this.platformPublisher.publish((0, platform_1.createEnvelope)(envelopeInput));
             await this.eventEmitter.emitAsync(commercial_events_1.CommercialEvents.DECISION_GENERATED, {
                 decisionId: result.decisionId,
                 tenantId: context.tenantId,
@@ -271,7 +286,8 @@ exports.CommercialDecisionService = CommercialDecisionService;
 exports.CommercialDecisionService = CommercialDecisionService = CommercialDecisionService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(policy_resolver_interfaces_1.POLICY_RESOLVER)),
+    __param(3, (0, common_1.Inject)(platform_1.PLATFORM_CONTRACT_PUBLISHER)),
     __metadata("design:paramtypes", [Object, commercial_repositories_1.CommercialDecisionSnapshotRepository,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2, Object])
 ], CommercialDecisionService);
 //# sourceMappingURL=commercial-decision.service.js.map
