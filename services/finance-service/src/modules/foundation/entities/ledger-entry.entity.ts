@@ -2,7 +2,8 @@ import {
   Column, CreateDateColumn, Entity,
   Index, PrimaryGeneratedColumn,
 } from 'typeorm';
-import type { PostingStatus, DebitOrCredit } from '../aggregates/ledger-entry.aggregate';
+import type { PostingStatus } from '../aggregates/posting-status';
+import type { DebitOrCredit } from '../aggregates/ledger-entry.aggregate';
 
 /**
  * LedgerEntryEntity — persistence record for a LedgerEntry aggregate.
