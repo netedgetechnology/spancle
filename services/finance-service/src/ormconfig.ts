@@ -11,6 +11,11 @@ import { PaymentEntity }                   from './modules/payment/entities/paym
 import { PaymentRefundEntity }             from './modules/payment/entities/payment-refund.entity';
 import { PaymentReconciliationLogEntity }  from './modules/payment/entities/payment-reconciliation-log.entity';
 import { WalletEntity }                    from './modules/wallet/entities/wallet.entity';
+import { LedgerEntryEntity }              from './modules/foundation/entities/ledger-entry.entity';
+import {
+  FinancialTransactionEntity,
+  AccountingPeriodEntity,
+}                                         from './modules/foundation/entities/financial-transaction.entity';
 
 const dataSource = new DataSource({
   type:               'postgres',
@@ -22,6 +27,9 @@ const dataSource = new DataSource({
     PaymentRefundEntity,
     PaymentReconciliationLogEntity,
     WalletEntity,
+    LedgerEntryEntity,
+    FinancialTransactionEntity,
+    AccountingPeriodEntity,
   ],
   migrations:         ['dist/migrations/*.js'],
   migrationsTableName: 'typeorm_migrations',
