@@ -32,4 +32,5 @@ __exportStar(require("./academy.types"), exports);
 __exportStar(require("./communication.types"), exports);
 __exportStar(require("./reporting.types"), exports);
 __exportStar(require("./api.types"), exports);
+__exportStar(require("./platform-contracts.types"), exports);
 //# sourceMappingURL=index.js.map

@@ -16,4 +16,5 @@ export * from './academy.types';
 export * from './communication.types';
 export * from './reporting.types';
 export * from './api.types';
+export * from './platform-contracts.types';
 //# sourceMappingURL=index.d.ts.map
