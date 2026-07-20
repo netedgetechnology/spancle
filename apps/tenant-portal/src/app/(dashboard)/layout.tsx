@@ -6,18 +6,17 @@ interface DashboardRouteLayoutProps {
 
 const NAV_ITEMS = [
   { label: 'Dashboard',    href: '/dashboard'    },
-  { label: 'Analytics',    href: '/analytics'    },
-  { label: 'Branches',     href: '/branches'     },
-  { label: 'Sports',       href: '/sports'       },
-  { label: 'Courts',       href: '/courts'       },
-  { label: 'Pricing',      href: '/pricing'      },
-  { label: 'Rate Cards',   href: '/rate-cards'   },
-  { label: 'Book Court',   href: '/booking'      },
   { label: 'Bookings',     href: '/bookings'     },
   { label: 'Calendar',     href: '/calendar'     },
+  { label: 'Customers',    href: '/customers'    },
+  { label: 'Courts',       href: '/courts'       },
+  { label: 'Branches',     href: '/branches'     },
+  { label: 'Invoices',     href: '/invoices'     },
+  { label: 'Settlements',  href: '/settlements'  },
+  { label: 'Revenue',      href: '/revenue'      },
+  { label: 'Analytics',    href: '/analytics'    },
   { label: 'Blog',         href: '/blog'         },
-  { label: 'Homepage',     href: '/homepage'     },
-  { label: 'Subscription', href: '/subscription' },
+  { label: 'Settings',     href: '/settings'     },
 ];
 
 export default function DashboardRouteLayout({ children }: DashboardRouteLayoutProps): React.ReactElement {

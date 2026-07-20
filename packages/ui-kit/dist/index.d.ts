@@ -12,6 +12,8 @@
  * All interactive components are Client Components ('use client').
  * Display-only components (Card, Badge, Table) are RSC-safe.
  */
+export { colors, typography, spacing, tw } from './tokens/design-tokens';
+export type { NavItem } from './tokens/design-tokens';
 export { Button, buttonVariants } from './components/button/button';
 export type { ButtonProps } from './components/button/button';
 export type { ButtonVariantProps } from './components/button/button.variants';

@@ -9,8 +9,10 @@ const NAV_ITEMS = [
   { label: 'Dashboard',   href: '/dashboard'   },
   { label: 'Tenants',     href: '/tenants'     },
   { label: 'Packages',    href: '/packages'    },
+  { label: 'Finance',     href: '/finance'     },
   { label: 'Website CMS', href: '/website-cms' },
   { label: 'Venues',      href: '/venues'      },
+  { label: 'Settings',    href: '/settings'    },
 ];
 
 export default function DashboardRouteLayout({ children }: DashboardRouteLayoutProps): React.ReactElement {

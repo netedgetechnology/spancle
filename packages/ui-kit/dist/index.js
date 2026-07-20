@@ -14,7 +14,13 @@
  * Display-only components (Card, Badge, Table) are RSC-safe.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cn = exports.useDebounce = exports.useDisclosure = exports.useToast = exports.ToastProvider = exports.Toast = exports.TableCaption = exports.TableCell = exports.TableHead = exports.TableRow = exports.TableFooter = exports.TableBody = exports.TableHeader = exports.Table = exports.Select = exports.Modal = exports.CardFooter = exports.CardContent = exports.CardDescription = exports.CardTitle = exports.CardHeader = exports.Card = exports.badgeVariants = exports.Badge = exports.Input = exports.buttonVariants = exports.Button = void 0;
+exports.cn = exports.useDebounce = exports.useDisclosure = exports.useToast = exports.ToastProvider = exports.Toast = exports.TableCaption = exports.TableCell = exports.TableHead = exports.TableRow = exports.TableFooter = exports.TableBody = exports.TableHeader = exports.Table = exports.Select = exports.Modal = exports.CardFooter = exports.CardContent = exports.CardDescription = exports.CardTitle = exports.CardHeader = exports.Card = exports.badgeVariants = exports.Badge = exports.Input = exports.buttonVariants = exports.Button = exports.tw = exports.spacing = exports.typography = exports.colors = void 0;
+// ── Design tokens ─────────────────────────────────────────────────────────────
+var design_tokens_1 = require("./tokens/design-tokens");
+Object.defineProperty(exports, "colors", { enumerable: true, get: function () { return design_tokens_1.colors; } });
+Object.defineProperty(exports, "typography", { enumerable: true, get: function () { return design_tokens_1.typography; } });
+Object.defineProperty(exports, "spacing", { enumerable: true, get: function () { return design_tokens_1.spacing; } });
+Object.defineProperty(exports, "tw", { enumerable: true, get: function () { return design_tokens_1.tw; } });
 // ── Components ────────────────────────────────────────────────────────────────
 var button_1 = require("./components/button/button");
 Object.defineProperty(exports, "Button", { enumerable: true, get: function () { return button_1.Button; } });

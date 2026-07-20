@@ -13,6 +13,10 @@
  * Display-only components (Card, Badge, Table) are RSC-safe.
  */
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+export { colors, typography, spacing, tw } from './tokens/design-tokens';
+export type { NavItem }                    from './tokens/design-tokens';
+
 // ── Components ────────────────────────────────────────────────────────────────
 export { Button, buttonVariants }            from './components/button/button';
 export type { ButtonProps }                  from './components/button/button';
