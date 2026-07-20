@@ -1,6 +1,6 @@
 import { type VariantProps } from 'class-variance-authority';
 export declare const buttonVariants: (props?: ({
-    variant?: "primary" | "secondary" | "outline" | "ghost" | "destructive" | "link" | null | undefined;
+    variant?: "link" | "primary" | "secondary" | "outline" | "ghost" | "destructive" | null | undefined;
     size?: "xs" | "sm" | "md" | "lg" | "xl" | null | undefined;
     fullWidth?: boolean | null | undefined;
     iconOnly?: boolean | null | undefined;

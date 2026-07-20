@@ -14,6 +14,9 @@
  */
 export { colors, typography, spacing, tw } from './tokens/design-tokens';
 export type { NavItem } from './tokens/design-tokens';
+export type { AuthUser, AuthState, AuthStatus, LogoutOptions } from './hooks/auth.hooks';
+export { UserMenu } from './components/user-menu/user-menu';
+export type { UserMenuProps, UserMenuLink } from './components/user-menu/user-menu';
 export { Button, buttonVariants } from './components/button/button';
 export type { ButtonProps } from './components/button/button';
 export type { ButtonVariantProps } from './components/button/button.variants';

@@ -16,9 +16,11 @@ export default function LoginPage(): React.ReactElement {
     setError('');
     setLoading(true);
     try {
+      const tenantId = process.env['NEXT_PUBLIC_TENANT_ID'] ?? '';
       const result = await signIn('credentials', {
         email,
         password,
+        tenantId,
         redirect: false,
       });
       if (result?.error) {

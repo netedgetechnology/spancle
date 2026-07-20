@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Sidebar } from './sidebar';
-import { Topbar }  from './topbar';
+import { useState }          from 'react';
+import { Sidebar }           from './sidebar';
+import { Topbar }            from './topbar';
+import { useSessionGuard }   from '@/hooks/auth.hooks';
 
 interface DashboardLayoutProps {
   children:   React.ReactNode;
@@ -16,6 +17,7 @@ export function DashboardLayout({
   pageTitle,
 }: DashboardLayoutProps): React.ReactElement {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useSessionGuard();   // detects token expiry mid-session → /session-expired
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">

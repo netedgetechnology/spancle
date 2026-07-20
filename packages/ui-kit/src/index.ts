@@ -17,6 +17,14 @@
 export { colors, typography, spacing, tw } from './tokens/design-tokens';
 export type { NavItem }                    from './tokens/design-tokens';
 
+// ── Auth types (framework-agnostic shape only) ────────────────────────────────
+export type { AuthUser, AuthState, AuthStatus, LogoutOptions } from './hooks/auth.hooks';
+
+// ── Auth components ───────────────────────────────────────────────────────────
+export { UserMenu }   from './components/user-menu/user-menu';
+export type { UserMenuProps, UserMenuLink } from './components/user-menu/user-menu';
+// RouteGuard lives in each app (requires next-auth + next/navigation)
+
 // ── Components ────────────────────────────────────────────────────────────────
 export { Button, buttonVariants }            from './components/button/button';
 export type { ButtonProps }                  from './components/button/button';
