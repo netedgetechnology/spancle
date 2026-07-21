@@ -18,6 +18,7 @@ import { useQuery }        from '@tanstack/react-query';
 import { cn }              from '@/lib/utils/cn';
 import { useRequireAuth }             from '@/hooks/use-require-auth';
 import { fetchBooking, bookingKeys }  from '@/lib/api/booking.api';
+import { BookingPricingBreakdown }    from '@/components/pricing/pricing-breakdown';
 import {
   formatDate,
   formatTime,
@@ -112,22 +113,22 @@ export default function BookingConfirmationPage(): React.ReactElement {
 
         {/* Details */}
         <div className="px-5 py-4 space-y-3">
-          <DetailRow label="Date"     value={formatDate(booking.startsAt)} />
+          <DetailRow label="Date"       value={formatDate(booking.startsAt)} />
           <DetailRow
             label="Time"
             value={`${formatTime(booking.startsAt)} – ${formatTime(booking.endsAt)}`}
           />
-          <DetailRow label="Duration" value={`${booking.totalDurationMins} minutes`} />
-          {booking.finalPriceMinor != null && (
-            <DetailRow
-              label="Total paid"
-              value={formatPrice(booking.finalPriceMinor, booking.currency)}
-            />
-          )}
+          <DetailRow label="Duration"  value={`${booking.totalDurationMins} minutes`} />
           <DetailRow label="Booked for" value={booking.customerName} />
           {booking.customerNotes && (
-            <DetailRow label="Notes" value={booking.customerNotes} />
+            <DetailRow label="Notes"   value={booking.customerNotes} />
           )}
+
+          {/* Pricing breakdown — uses BookingPricingBreakdown for consistency */}
+          <div className="border-t border-gray-100 pt-3 mt-1">
+            <p className="text-xs font-medium text-gray-500 mb-2">Payment</p>
+            <BookingPricingBreakdown booking={booking} />
+          </div>
         </div>
 
         {/* QR placeholder */}

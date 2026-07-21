@@ -22,10 +22,9 @@ import { BookingStatusBadge }           from '@/components/booking/booking-statu
 import { fetchBooking, rescheduleBooking, bookingKeys } from '@/lib/api/booking.api';
 import { fetchCourt, courtKeys }        from '@/lib/api/court.api';
 import { fetchVenue, venueKeys }        from '@/lib/api/venue.api';
+import { SlotPricingBreakdown }            from '@/components/pricing/pricing-breakdown';
 import {
-  formatDate, formatTime, formatPrice,
-  totalPriceMinor, totalDuration,
-  slotPrice,
+  formatDate, formatTime,
   BOOKING_STATUS_CONFIG,
   type Slot,
 } from '@/types/booking.types';
@@ -139,9 +138,6 @@ export default function ReschedulePage(): React.ReactElement {
   const sortedSelected = [...selectedSlots].sort(
     (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
   );
-  const currency = sortedSelected[0]?.currency ?? booking.currency;
-  const newTotal = totalPriceMinor(sortedSelected);
-
   return (
     <div className="max-w-3xl mx-auto flex flex-col gap-5">
       {/* Breadcrumb */}
@@ -203,10 +199,10 @@ export default function ReschedulePage(): React.ReactElement {
                   <SRow label="Time"     value={`${formatTime(sortedSelected[0]!.startAt)} – ${formatTime(sortedSelected[sortedSelected.length - 1]!.endAt)}`} />
                   <SRow label="Duration" value={`${totalDuration(sortedSelected)} min`} />
                   <div className="border-t border-gray-100 pt-2.5">
-                    <div className="flex justify-between">
-                      <span className="text-xs font-semibold text-gray-700">New total</span>
-                      <span className="text-sm font-bold text-gray-900">{formatPrice(newTotal, currency)}</span>
-                    </div>
+                    <SlotPricingBreakdown
+                      slots={sortedSelected}
+                      isMember={booking.isMember}
+                    />
                   </div>
                 </>
               ) : (

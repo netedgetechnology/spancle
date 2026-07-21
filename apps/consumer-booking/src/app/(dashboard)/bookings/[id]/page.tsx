@@ -25,6 +25,7 @@ import { BookingStatusBadge }          from '@/components/booking/booking-status
 import { BookingTimeline }             from '@/components/booking/booking-timeline';
 import { CancelBookingModal }          from '@/components/booking/cancel-booking-modal';
 import { fetchBooking, bookingKeys }   from '@/lib/api/booking.api';
+import { BookingPricingBreakdown }     from '@/components/pricing/pricing-breakdown';
 import {
   formatDate, formatTime, formatPrice,
   BOOKING_STATUS_CONFIG,
@@ -109,20 +110,7 @@ export default function BookingDetailPage(): React.ReactElement {
 
           {/* Payment summary */}
           <InfoCard title="Payment">
-            {booking.finalPriceMinor != null ? (
-              <>
-                <InfoRow label="Total amount" value={formatPrice(booking.finalPriceMinor, booking.currency)} />
-                <InfoRow label="Amount paid"  value={formatPrice(booking.amountPaidMinor, booking.currency)} />
-                {booking.amountRefundedMinor > 0 && (
-                  <InfoRow label="Refunded" value={formatPrice(booking.amountRefundedMinor, booking.currency)} />
-                )}
-                {balance > 0 && (
-                  <InfoRow label="Balance due" value={formatPrice(balance, booking.currency)} highlight />
-                )}
-              </>
-            ) : (
-              <p className="text-xs text-gray-400">No payment required</p>
-            )}
+            <BookingPricingBreakdown booking={booking} />
           </InfoCard>
 
           {/* Notes */}
