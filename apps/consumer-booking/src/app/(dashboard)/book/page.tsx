@@ -22,6 +22,7 @@ import { BookingSummaryCard }      from '@/components/booking/booking-summary-ca
 import { fetchVenues, venueKeys }  from '@/lib/api/venue.api';
 import { fetchCourts, courtKeys }  from '@/lib/api/court.api';
 import { fetchDaySlots, slotKeys } from '@/lib/api/slot.api';
+import { useRequireAuth }              from '@/hooks/use-require-auth';
 import { createBooking, bookingKeys } from '@/lib/api/booking.api';
 import type { Venue, Court, Slot, CreateBookingPayload } from '@/types/booking.types';
 
@@ -43,6 +44,7 @@ function todayISO(): string {
 export default function BookPage(): React.ReactElement {
   const router         = useRouter();
   const { data: session } = useSession();
+  const { isLoading: authLoading } = useRequireAuth();
 
   const [step,         setStep]         = useState(1);
   const [venueId,      setVenueId]      = useState('');

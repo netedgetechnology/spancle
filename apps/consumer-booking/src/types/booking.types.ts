@@ -169,15 +169,35 @@ export const SLOT_STATUS_CONFIG: Record<SlotStatus, {
   unavailable: { label: 'Unavailable', bg: 'bg-red-50',      text: 'text-red-400',     border: 'border-red-200',     selectable: false },
 };
 
-export const BOOKING_STATUS_CONFIG: Partial<Record<BookingStatus, { label: string; bg: string; text: string }>> = {
-  pending_payment: { label: 'Pending Payment', bg: 'bg-amber-50',   text: 'text-amber-700'   },
-  confirmed:       { label: 'Confirmed',        bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  completed:       { label: 'Completed',        bg: 'bg-blue-50',    text: 'text-blue-700'    },
-  cancelled:       { label: 'Cancelled',        bg: 'bg-gray-100',   text: 'text-gray-600'    },
-  no_show:         { label: 'No Show',          bg: 'bg-red-50',     text: 'text-red-700'     },
-  refunded:        { label: 'Refunded',         bg: 'bg-purple-50',  text: 'text-purple-700'  },
-  reserved:        { label: 'Reserved',         bg: 'bg-amber-50',   text: 'text-amber-700'   },
+export const BOOKING_STATUS_CONFIG: Record<BookingStatus, {
+  label:  string;
+  bg:     string;
+  text:   string;
+  dot:    string;
+  /** Whether a consumer can cancel this booking */
+  cancellable: boolean;
+  /** Whether a consumer can reschedule this booking */
+  reschedulable: boolean;
+}> = {
+  reserved:        { label: 'Reserved',        bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-400',   cancellable: true,  reschedulable: false },
+  pending_payment: { label: 'Pending Payment', bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-500',   cancellable: true,  reschedulable: false },
+  confirmed:       { label: 'Confirmed',       bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', cancellable: true,  reschedulable: true  },
+  checked_in:      { label: 'Checked In',      bg: 'bg-teal-50',    text: 'text-teal-700',    dot: 'bg-teal-500',    cancellable: false, reschedulable: false },
+  in_progress:     { label: 'In Progress',     bg: 'bg-blue-50',    text: 'text-blue-700',    dot: 'bg-blue-500',    cancellable: false, reschedulable: false },
+  completed:       { label: 'Completed',       bg: 'bg-slate-100',  text: 'text-slate-600',   dot: 'bg-slate-400',   cancellable: false, reschedulable: false },
+  cancelled:       { label: 'Cancelled',       bg: 'bg-gray-100',   text: 'text-gray-600',    dot: 'bg-gray-400',    cancellable: false, reschedulable: false },
+  no_show:         { label: 'No Show',         bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-400',     cancellable: false, reschedulable: false },
+  refunded:        { label: 'Refunded',        bg: 'bg-purple-50',  text: 'text-purple-700',  dot: 'bg-purple-400',  cancellable: false, reschedulable: false },
+  rescheduled:     { label: 'Rescheduled',     bg: 'bg-indigo-50',  text: 'text-indigo-700',  dot: 'bg-indigo-400',  cancellable: false, reschedulable: false },
+  expired:         { label: 'Expired',         bg: 'bg-gray-100',   text: 'text-gray-400',    dot: 'bg-gray-300',    cancellable: false, reschedulable: false },
 };
+
+// ── Reschedule request ────────────────────────────────────────────────────────
+
+export interface ReschedulePayload {
+  newSlotIds: string[];
+  reason?:    string;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

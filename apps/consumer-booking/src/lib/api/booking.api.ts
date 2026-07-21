@@ -72,3 +72,16 @@ export async function cancelBooking(id: string, reason: string): Promise<Booking
   );
   return res.data;
 }
+
+export async function rescheduleBooking(
+  id:         string,
+  newSlotIds: string[],
+  reason?:    string,
+): Promise<Booking> {
+  const res = await apiClient.patch<Booking>(
+    `${BASE}/${id}/reschedule`,
+    { newSlotIds, ...(reason ? { reason } : {}) },
+    { baseURL: BOOKING_BASE },
+  );
+  return res.data;
+}

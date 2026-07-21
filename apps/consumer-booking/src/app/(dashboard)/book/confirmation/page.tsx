@@ -16,7 +16,8 @@ import { useSearchParams } from 'next/navigation';
 import Link                from 'next/link';
 import { useQuery }        from '@tanstack/react-query';
 import { cn }              from '@/lib/utils/cn';
-import { fetchBooking, bookingKeys } from '@/lib/api/booking.api';
+import { useRequireAuth }             from '@/hooks/use-require-auth';
+import { fetchBooking, bookingKeys }  from '@/lib/api/booking.api';
 import {
   formatDate,
   formatTime,
@@ -27,6 +28,7 @@ import {
 export default function BookingConfirmationPage(): React.ReactElement {
   const searchParams = useSearchParams();
   const id           = searchParams.get('id') ?? '';
+  const { isLoading: authLoading } = useRequireAuth();
 
   const { data: booking, isLoading, error } = useQuery({
     queryKey: bookingKeys.detail(id),
@@ -46,7 +48,7 @@ export default function BookingConfirmationPage(): React.ReactElement {
     );
   }
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
         <svg className="h-6 w-6 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
