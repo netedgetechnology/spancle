@@ -2,7 +2,7 @@
   "name": "@spancle/consumer-booking",
   "version": "0.1.0",
   "private": true,
-  "description": "Spancle Sports OS \u2014 Consumer-Facing Booking App",
+  "description": "Spancle Sports OS — Consumer-Facing Booking App",
   "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev --port 3003",
@@ -14,23 +14,24 @@
     "clean": "rimraf .next out"
   },
   "dependencies": {
-    "next": "^14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "next-auth": "^4.24.7",
-    "axios": "^1.7.2",
+    "@spancle/ui-kit": "workspace:*",
     "@tanstack/react-query": "^5.51.1",
     "@tanstack/react-query-devtools": "^5.51.1",
-    "zustand": "^4.5.4",
-    "zod": "^3.23.8",
+    "axios": "^1.7.2",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.4.0",
     "lucide-react": "^0.408.0",
-    "@spancle/ui-kit": "workspace:*"
+    "next": "^14.2.5",
+    "next-auth": "^4.24.7",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.4.0",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.4"
   },
   "devDependencies": {
-    "@spancle/tsconfig": "workspace:*",
     "@spancle/eslint-config": "workspace:*",
+    "@spancle/tsconfig": "workspace:*",
     "@types/node": "^20.14.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

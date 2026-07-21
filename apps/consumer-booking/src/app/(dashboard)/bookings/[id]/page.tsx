@@ -25,6 +25,7 @@ import { BookingStatusBadge }          from '@/components/booking/booking-status
 import { BookingTimeline }             from '@/components/booking/booking-timeline';
 import { CancelBookingModal }          from '@/components/booking/cancel-booking-modal';
 import { fetchBooking, bookingKeys }   from '@/lib/api/booking.api';
+import { QrDisplay }                   from '@/components/qr/qr-display';
 import { BookingPricingBreakdown }     from '@/components/pricing/pricing-breakdown';
 import {
   formatDate, formatTime, formatPrice,
@@ -144,19 +145,12 @@ export default function BookingDetailPage(): React.ReactElement {
             </p>
           </div>
 
-          {/* QR placeholder */}
-          <div className="flex items-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3">
-            <svg className="h-10 w-10 text-gray-200 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-            </svg>
-            <div>
-              <p className="text-xs font-medium text-gray-600">Check-in QR code</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Show <span className="font-mono">{booking.reference}</span> at the venue until QR tokens are available.
-              </p>
-            </div>
-          </div>
+          {/* QR check-in */}
+          <QrDisplay
+            bookingRef={booking.reference}
+            bookingStatus={booking.status}
+            startsAt={booking.startsAt}
+          />
         </div>
 
         {/* Right column — Timeline */}

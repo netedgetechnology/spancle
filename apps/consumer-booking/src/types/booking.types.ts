@@ -152,7 +152,80 @@ export interface CreateBookingPayload {
   customerNotes?:   string;
 }
 
-// ── Slot status display ───────────────────────────────────────────────────────
+// ── QR Token ──────────────────────────────────────────────────────────────────
+
+export type QrTokenStatus  = 'active' | 'used' | 'expired' | 'revoked';
+export type QrTokenPurpose =
+  | 'booking_checkin'
+  | 'access_gate'
+  | 'locker_unlock'
+  | 'equipment_room'
+  | 'visitor_pass';
+
+/** QrToken — mirrors QrTokenEntity fields returned by GET /qr/booking/:bookingId */
+export interface QrToken {
+  id:            string;
+  tenantId:      string;
+  bookingId:     string;
+  branchId:      string;
+  courtId:       string;
+  userId:        string | null;
+  // rawToken is NEVER returned by any read endpoint — only at issuance
+  // signedPayload is returned and is the HMAC-signed payload for devices
+  signedPayload: string;
+  purpose:       QrTokenPurpose;
+  status:        QrTokenStatus;
+  maxUses:       number;
+  useCount:      number;
+  expiresAt:     string;   // ISO string
+  firstUsedAt:   string | null;
+  lastUsedAt:    string | null;
+  revokedAt:     string | null;
+  revokeReason:  string | null;
+  issuedById:    string | null;
+  createdAt:     string;
+}
+
+/**
+ * IssuedQrToken — shape returned by POST /qr/issue.
+ * rawToken and qrContent are ONLY available at issuance — never again.
+ * qrContent format: spancle://verify?t={rawToken}&p={purpose}
+ */
+export interface IssuedQrToken {
+  tokenId:       string;
+  rawToken:      string;     // embed in QR image
+  qrContent:     string;     // spancle://verify?t=...&p=...
+  signedPayload: string;
+  purpose:       string;
+  expiresAt:     string;
+  maxUses:       number;
+}
+
+export const QR_STATUS_CONFIG: Record<QrTokenStatus, {
+  label:  string;
+  bg:     string;
+  text:   string;
+  dot:    string;
+  desc:   string;
+}> = {
+  active:  { label: 'Active',   bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', desc: 'Ready to scan' },
+  used:    { label: 'Used',     bg: 'bg-blue-50',    text: 'text-blue-700',    dot: 'bg-blue-500',    desc: 'Check-in complete' },
+  expired: { label: 'Expired',  bg: 'bg-gray-100',   text: 'text-gray-500',    dot: 'bg-gray-400',    desc: 'Token has expired' },
+  revoked: { label: 'Revoked',  bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-500',     desc: 'Token was revoked' },
+};
+
+// ── QR availability states for consumer display ───────────────────────────────
+
+/**
+ * QrAvailability — what the consumer sees when they open a booking.
+ *
+ * 'has_qr'     → backend has an active token with qrContent (only possible
+ *                 at issuance time — future when consumer endpoint ships)
+ * 'token_meta' → backend has a token; metadata visible but no QR image
+ * 'no_token'   → no token issued yet; staff must issue it
+ * 'ineligible' → booking status does not support QR (cancelled, expired, etc.)
+ */
+export type QrAvailability = 'has_qr' | 'token_meta' | 'no_token' | 'ineligible';
 
 export const SLOT_STATUS_CONFIG: Record<SlotStatus, {
   label:     string;

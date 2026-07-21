@@ -19,6 +19,7 @@ import { cn }              from '@/lib/utils/cn';
 import { useRequireAuth }             from '@/hooks/use-require-auth';
 import { fetchBooking, bookingKeys }  from '@/lib/api/booking.api';
 import { BookingPricingBreakdown }    from '@/components/pricing/pricing-breakdown';
+import { QrDisplay }                  from '@/components/qr/qr-display';
 import {
   formatDate,
   formatTime,
@@ -131,20 +132,13 @@ export default function BookingConfirmationPage(): React.ReactElement {
           </div>
         </div>
 
-        {/* QR placeholder */}
-        <div className="mx-5 mb-5 rounded-xl border-2 border-dashed border-gray-200 p-6 text-center bg-gray-50">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-200 mx-auto mb-2">
-            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
-            </svg>
-          </div>
-          <p className="text-xs font-medium text-gray-500">Check-in QR code</p>
-          <p className="text-[10px] text-gray-400 mt-1">
-            QR token generation coming soon. Show your booking reference at the venue.
-          </p>
+        {/* QR check-in */}
+        <div className="px-5 pb-5">
+          <QrDisplay
+            bookingRef={booking.reference}
+            bookingStatus={booking.status}
+            startsAt={booking.startsAt}
+          />
         </div>
       </div>
 
