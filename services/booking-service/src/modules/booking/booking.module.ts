@@ -14,10 +14,11 @@ import {
   BookingLogRepository,
 } from './repositories/booking-support.repository';
 
-import { BookingService }           from './services/booking.service';
-import { BookingValidationService } from './services/booking-validation.service';
-import { BookingSchedulerService }  from './services/booking-scheduler.service';
-import { BookingController }        from './controllers/booking.controller';
+import { BookingService }              from './services/booking.service';
+import { BookingValidationService }    from './services/booking-validation.service';
+import { BookingSchedulerService }     from './services/booking-scheduler.service';
+import { BookingAuthorizationService } from './services/booking-authorization.service';
+import { BookingController }           from './controllers/booking.controller';
 import { SlotModule }               from '../slot/slot.module';
 import { CourtModule }              from '../court/court.module';
 import { VenueModule }              from '../venue/venue.module';
@@ -51,9 +52,10 @@ import { QrModule }                 from '../qr/qr.module';
     BookingRefundRepository,
     BookingLogRepository,
     BookingValidationService,
+    BookingAuthorizationService,
     BookingService,
     BookingSchedulerService,
   ],
-  exports: [BookingService, BookingValidationService, BookingRepository, BookingLogRepository],
+  exports: [BookingService, BookingValidationService, BookingAuthorizationService, BookingRepository, BookingLogRepository],
 })
 export class BookingModule {}

@@ -21,8 +21,9 @@ import { Roles }           from '../../../common/decorators/roles.decorator';
 import { AuditInterceptor }       from '../../../common/interceptors/audit.interceptor';
 import { TenantGuard, RbacGuard } from '../guards/booking.guard';
 
-import { BookingService }      from '../services/booking.service';
-import { QrGenerationService } from '../../qr/services/qr-generation.service';
+import { BookingService }              from '../services/booking.service';
+import { BookingAuthorizationService } from '../services/booking-authorization.service';
+import { QrGenerationService }         from '../../qr/services/qr-generation.service';
 import { CreateBookingDto }    from '../dto/create-booking.dto';
 import { BookingQueryDto }     from '../dto/booking-query.dto';
 import type {
@@ -70,6 +71,7 @@ import {
 export class BookingController {
   constructor(
     private readonly bookingService:      BookingService,
+    private readonly authzService:        BookingAuthorizationService,
     private readonly qrGenerationService: QrGenerationService,
   ) {}
 
@@ -104,22 +106,30 @@ export class BookingController {
   }
 
   /** Declared before /:id to prevent route shadowing */
+  /** VULN-2 fix: PLAYER limited to own booking by reference. */
   @Get('by-reference/:reference')
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'COACH', 'PLAYER')
-  findByReference(
+  async findByReference(
     @Param('reference') reference: string,
     @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
   ) {
-    return this.bookingService.findByReference(reference, tenant.tenantId);
+    const booking = await this.bookingService.findByReference(reference, tenant.tenantId);
+    this.authzService.assertOwnerOrStaff(booking, actor, 'booking by reference');
+    return booking;
   }
 
+  /** VULN-1 fix: PLAYER limited to own booking. */
   @Get(':id')
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'COACH', 'PLAYER')
-  findOne(
+  async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
   ) {
-    return this.bookingService.findOne(id, tenant.tenantId);
+    const booking = await this.bookingService.findOne(id, tenant.tenantId);
+    this.authzService.assertOwnerOrStaff(booking, actor, 'booking');
+    return booking;
   }
 
   // ── Status transitions ─────────────────────────────────────────────────────
@@ -157,15 +167,18 @@ export class BookingController {
     return this.bookingService.confirm(id, tenant.tenantId, actor.actorId);
   }
 
+  /** VULN-3 fix: PLAYER can only cancel own booking. */
   @Patch(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'PLAYER')
-  cancel(
+  async cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelDto,
     @TenantCtx() tenant: TenantContext,
     @BookingActor() actor: BookingActorContext,
   ) {
+    const booking = await this.bookingService.findOne(id, tenant.tenantId);
+    this.authzService.assertOwnerOrStaff(booking, actor, 'cancellation');
     return this.bookingService.cancel(id, dto, tenant.tenantId, actor.actorId);
   }
 
@@ -222,13 +235,18 @@ export class BookingController {
    * Called by payment gateway webhook or client when payment is declined/timed-out.
    * Transitions pending_payment → cancelled and releases reserved slots immediately.
    */
+  /** VULN-4 fix: was missing @Roles entirely; any auth user could call this. */
   @Patch(':id/payment-failed')
-  paymentFailed(
+  @HttpCode(HttpStatus.OK)
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'PLAYER')
+  async paymentFailed(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PaymentFailedDto,
     @TenantCtx() tenant: TenantContext,
     @BookingActor() actor: BookingActorContext,
   ) {
+    const booking = await this.bookingService.findOne(id, tenant.tenantId);
+    this.authzService.assertOwnerOrStaff(booking, actor, 'payment-failed');
     return this.bookingService.paymentFailed(id, dto, tenant.tenantId, actor.actorId);
   }
 
@@ -340,20 +358,7 @@ export class BookingController {
     // Load booking — findOne already enforces tenantId scoping
     const booking = await this.bookingService.findOne(bookingId, tenant.tenantId);
 
-    // Ownership: booking.userId must match the authenticated user's profile ID
-    if (!actor.userId || booking.userId !== actor.userId) {
-      throw new ForbiddenException(
-        'You do not have permission to access the QR code for this booking',
-      );
-    }
-
-    // Delegate entirely to existing QR issuance service — no new token logic
-    // QrGenerationService.issue() validates booking status, revokes existing
-    // active tokens, and returns rawToken + qrContent exactly once.
-    return this.qrGenerationService.issue(
-      { bookingId },
-      tenant.tenantId,
-      actor.actorId,
-    );
+    this.authzService.assertOwnerOrStaff(booking, actor, 'QR code');
+    return this.qrGenerationService.issue({ bookingId }, tenant.tenantId, actor.actorId);
   }
 }
