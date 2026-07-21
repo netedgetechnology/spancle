@@ -23,6 +23,13 @@ import { CourtModule }              from '../court/court.module';
 import { VenueModule }              from '../venue/venue.module';
 import { PricingModule }            from '../pricing/pricing.module';
 
+// Forward-reference to avoid circular dependency: BookingModule → QrModule → BookingModule
+// QrModule imports BookingModule for BookingRepository/Service.
+// BookingModule imports QrModule for QrGenerationService (consumer QR endpoint only).
+// NestJS forwardRef() breaks the cycle.
+import { forwardRef }               from '@nestjs/common';
+import { QrModule }                 from '../qr/qr.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -35,6 +42,7 @@ import { PricingModule }            from '../pricing/pricing.module';
     PricingModule,   // re-exports SlotModule — provides SlotRepository + PricingService
     CourtModule,
     VenueModule,
+    forwardRef(() => QrModule),   // consumer QR endpoint — breaks BookingModule↔QrModule cycle
   ],
   controllers: [BookingController],
   providers: [

@@ -1,4 +1,4 @@
-import { Module }           from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule }    from '@nestjs/typeorm';
 import { CacheModule }      from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -42,7 +42,7 @@ import { BookingModule }       from '../booking/booking.module';
         max:      500,
       }),
     }),
-    BookingModule,
+    forwardRef(() => BookingModule),
   ],
   controllers: [QrController],
   providers: [

@@ -147,6 +147,7 @@ export default function BookingDetailPage(): React.ReactElement {
 
           {/* QR check-in */}
           <QrDisplay
+            bookingId={booking.id}
             bookingRef={booking.reference}
             bookingStatus={booking.status}
             startsAt={booking.startsAt}

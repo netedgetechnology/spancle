@@ -106,6 +106,7 @@ export class RbacGuard implements CanActivate {
       actorId:  payload.sub,
       tenantId: req.tenant?.tenantId ?? payload.tenantId,
       role:     payload.role,
+      userId:   (payload as Record<string, unknown>)['userId'] as string ?? null,
     };
 
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [

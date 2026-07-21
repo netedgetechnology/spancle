@@ -2,9 +2,19 @@ import { createParamDecorator, type ExecutionContext, UnauthorizedException } fr
 import type { Request } from 'express';
 
 export interface BookingActorContext {
+  /**
+   * actorId = JWT `sub` = identityId (the Identity record, not the User profile).
+   * Used for audit logging and admin ownership.
+   */
   actorId:  string;
   tenantId: string;
   role:     string;
+  /**
+   * userId = JWT `userId` = the User profile ID stored on BookingEntity.userId.
+   * Populated by RbacGuard from the verified JWT payload.
+   * Required for booking ownership checks (booking.userId == actor.userId).
+   */
+  userId:   string | null;
 }
 
 /**

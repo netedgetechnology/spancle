@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -18,8 +19,10 @@ import { TenantCtx, type TenantContext } from '../../../common/decorators/tenant
 import { BookingActor, type BookingActorContext } from '../../../common/decorators/current-user.decorator';
 import { Roles }           from '../../../common/decorators/roles.decorator';
 import { AuditInterceptor }       from '../../../common/interceptors/audit.interceptor';
+import { TenantGuard, RbacGuard } from '../guards/booking.guard';
 
 import { BookingService }      from '../services/booking.service';
+import { QrGenerationService } from '../../qr/services/qr-generation.service';
 import { CreateBookingDto }    from '../dto/create-booking.dto';
 import { BookingQueryDto }     from '../dto/booking-query.dto';
 import type {
@@ -65,7 +68,10 @@ import {
 @Controller('bookings')
 @UseInterceptors(AuditInterceptor)
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) {}
+  constructor(
+    private readonly bookingService:      BookingService,
+    private readonly qrGenerationService: QrGenerationService,
+  ) {}
 
   // ── Create ─────────────────────────────────────────────────────────────────
 
@@ -290,5 +296,64 @@ export class BookingController {
     @BookingActor() actor: BookingActorContext,
   ) {
     return this.bookingService.processRefund(id, dto, tenant.tenantId, actor.actorId);
+  }
+
+  // ── Consumer QR endpoint ──────────────────────────────────────────────────
+
+  /**
+   * GET /api/v1/bookings/:bookingId/qr
+   *
+   * Issues (or re-issues) a QR token for the authenticated PLAYER's own booking.
+   *
+   * Security:
+   *   - Role: PLAYER only
+   *   - booking.userId must equal actor.userId (JWT payload.userId)
+   *   - Booking must be in an active, QR-eligible status
+   *
+   * Ownership check:
+   *   BookingEntity.userId stores the user profile ID (from CreateBookingDto.customer.userId).
+   *   The JWT payload contains userId (user profile ID) and sub (identityId — different field).
+   *   RbacGuard populates actor.userId from payload.userId for this comparison.
+   *
+   * Behaviour:
+   *   Delegates to QrGenerationService.issue() which:
+   *   1. Validates booking status (must be confirmed or pending_payment)
+   *   2. Revokes any existing active token for this booking
+   *   3. Generates new rawToken + HMAC-signed payload
+   *   4. Returns IssuedQrToken including rawToken and qrContent (returned ONCE)
+   *
+   * Response shape: IssuedQrToken
+   *   { tokenId, rawToken, qrContent, signedPayload, purpose, expiresAt, maxUses }
+   *
+   * Audit: AuditInterceptor logs every request.
+   * Events: QrGenerationService emits spancle.qr.issued.
+   */
+  @Get(':bookingId/qr')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(TenantGuard, RbacGuard)
+  @Roles('PLAYER')
+  async getConsumerQr(
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @TenantCtx() tenant: TenantContext,
+    @BookingActor() actor: BookingActorContext,
+  ) {
+    // Load booking — findOne already enforces tenantId scoping
+    const booking = await this.bookingService.findOne(bookingId, tenant.tenantId);
+
+    // Ownership: booking.userId must match the authenticated user's profile ID
+    if (!actor.userId || booking.userId !== actor.userId) {
+      throw new ForbiddenException(
+        'You do not have permission to access the QR code for this booking',
+      );
+    }
+
+    // Delegate entirely to existing QR issuance service — no new token logic
+    // QrGenerationService.issue() validates booking status, revokes existing
+    // active tokens, and returns rawToken + qrContent exactly once.
+    return this.qrGenerationService.issue(
+      { bookingId },
+      tenant.tenantId,
+      actor.actorId,
+    );
   }
 }

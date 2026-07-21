@@ -70,7 +70,30 @@ export async function fetchToken(tokenId: string): Promise<QrToken> {
   return res.data;
 }
 
-// ── Write endpoints ───────────────────────────────────────────────────────────
+// ── Consumer endpoint (PLAYER role) ──────────────────────────────────────────
+
+/**
+ * getConsumerQr — GET /api/v1/bookings/:bookingId/qr
+ *
+ * Consumer-facing QR endpoint — PLAYER role only.
+ * Ownership: booking.userId must equal the authenticated user's profile ID.
+ * Returns IssuedQrToken including rawToken and qrContent.
+ * rawToken and qrContent are returned ONCE per call (re-issuing revokes the old token).
+ *
+ * Throws 403 if the booking does not belong to the authenticated user.
+ * Throws 422 if the booking is not in an eligible status (confirmed/pending_payment).
+ */
+export async function getConsumerQr(bookingId: string): Promise<IssuedQrToken> {
+  const res = await apiClient.get<IssuedQrToken>(
+    `${BOOKING_BASE}/api/v1/bookings/${bookingId}/qr`,
+    { baseURL: BOOKING_BASE },
+  );
+  return res.data;
+}
+
+export const consumerQrKeys = {
+  forBooking: (bookingId: string) => ['consumer-qr', bookingId] as const,
+} as const;
 
 /**
  * issueQrToken — POST /qr/issue
