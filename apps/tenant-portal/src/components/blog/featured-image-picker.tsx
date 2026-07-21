@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Input, Button } from '@spancle/ui-kit';
-import { cn } from '@/lib/utils/cn';
+import { useState }           from 'react';
+import { Button }             from '@spancle/ui-kit';
+import { cn }                 from '@/lib/utils/cn';
+import { AssetPickerModal }   from '@/components/media/asset-picker-modal';
+import type { MediaAsset }    from '@/lib/media.api';
 
 interface FeaturedImagePickerProps {
   value:      string | null | undefined;
@@ -11,35 +13,29 @@ interface FeaturedImagePickerProps {
 }
 
 /**
- * FeaturedImagePicker — allows admins to set a featured image by URL.
+ * FeaturedImagePicker — select a featured image from the Media Library
+ * or paste a URL directly.
  *
- * Features:
- *   - URL text input with real-time preview
- *   - Image load error state with descriptive message
- *   - Clear button to remove the image
- *   - Accessible — image has alt text, error is announced via role="alert"
- *
- * Sprint 3: Replace URL input with MediaLibrary modal picker
- * that browses cms_media_assets for this tenant.
+ * Sprint 3: Direct-upload path is blocked behind the FEATURE_UPLOAD_ENABLED flag
+ * (see media.api.ts). This component uses the Asset Picker modal to browse
+ * cms_media_assets, and falls back to manual URL entry.
  */
 export function FeaturedImagePicker({
   value,
   onChange,
   className,
 }: FeaturedImagePickerProps): React.ReactElement {
-  const [inputVal, setInputVal]   = useState(value ?? '');
-  const [imgError, setImgError]   = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [imgError,   setImgError]   = useState(false);
+  const [imgLoaded,  setImgLoaded]  = useState(false);
 
-  const handleBlur = (): void => {
-    const trimmed = inputVal.trim();
-    onChange(trimmed || null);
+  const handleSelect = (asset: MediaAsset) => {
+    onChange(asset.url);
     setImgError(false);
     setImgLoaded(false);
   };
 
-  const handleClear = (): void => {
-    setInputVal('');
+  const handleClear = () => {
     onChange(null);
     setImgError(false);
     setImgLoaded(false);
@@ -49,24 +45,22 @@ export function FeaturedImagePicker({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
-          <Input
-            label="Featured image URL"
-            description="Paste a public image URL. Media library picker coming in Sprint 3."
-            type="url"
-            placeholder="https://example.com/image.jpg"
-            value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            onBlur={handleBlur}
-          />
-        </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setPickerOpen(true)}
+        >
+          {value ? 'Change image' : 'Choose from library'}
+        </Button>
         {value && (
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             onClick={handleClear}
-            className="text-red-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0 mb-0.5"
+            className="text-red-500 hover:text-red-600 hover:bg-red-50"
             aria-label="Remove featured image"
           >
             Remove
@@ -74,14 +68,10 @@ export function FeaturedImagePicker({
         )}
       </div>
 
-      {/* Preview */}
       {previewUrl && (
         <div className="rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
           {imgError ? (
-            <div
-              className="flex items-center justify-center h-40 text-center px-4"
-              role="alert"
-            >
+            <div className="flex items-center justify-center h-40 text-center px-4" role="alert">
               <div>
                 <p className="text-sm font-medium text-red-600">Image could not be loaded</p>
                 <p className="text-xs text-gray-400 mt-1">Check the URL is publicly accessible</p>
@@ -102,13 +92,21 @@ export function FeaturedImagePicker({
               />
               {!imgLoaded && !imgError && (
                 <div className="absolute inset-0 flex items-center justify-center h-40 bg-gray-100">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary-500" aria-hidden="true" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
                 </div>
               )}
             </div>
           )}
         </div>
       )}
+
+      <AssetPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handleSelect}
+        imagesOnly
+        title="Select featured image"
+      />
     </div>
   );
 }
