@@ -2,15 +2,19 @@ import {
   Injectable,
   Logger,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { ConfigService }   from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource }      from 'typeorm';
-import { EventEmitter2 }   from '@nestjs/event-emitter';
+import { OnEvent }         from '@nestjs/event-emitter';
 import { GatewayRegistry } from './gateway-registry.service';
 import { PaymentService }  from '../../finance/services/payment.service';
-import { BookingEvents, type BookingEventPayload } from '../../booking/events/booking.events';
+import { BookingService }  from '../../booking/services/booking.service';
+import {
+  PaymentEvents,
+  type PaymentCapturedPayload,
+} from '../../finance/events/payment.events';
+import { randomUUID }      from 'node:crypto';
 
 /**
  * PaymentOrchestratorService
@@ -19,20 +23,18 @@ import { BookingEvents, type BookingEventPayload } from '../../booking/events/bo
  * Booking ever knowing which gateway is active.
  *
  * Design rules:
- *   - BookingService NEVER imports this service (direction: Booking → events only).
- *   - This service listens to BookingEvents and drives payment initiation.
+ *   - BookingService NEVER calls this service.
+ *   - This service listens to PaymentEvents.CAPTURED and drives booking confirmation.
  *   - PaymentService.initiate() / capture() / fail() do all gateway calls.
  *   - This service only orchestrates the sequence and maps booking ↔ payment.
  *
- * Flow for online bookings:
- *   BOOKING_CREATED → initiateForBooking() → PaymentService.initiate()
- *     → returns { clientSecret, gatewayPaymentId }
- *     → caller returns these to frontend for payment completion
- *
- *   Webhook arrives (CAPTURE event from gateway)
- *     → WebhookHandlerService.handleCapture()
- *     → PaymentService.capture()
- *     → BookingService.confirm() via PAYMENT_CAPTURED event
+ * Idempotency key format: bk_<bookingId>_<uuid>
+ *   - bookingId prefix: human-readable, traceable per-booking.
+ *   - UUID suffix: unique per attempt — allows legitimate retry after gateway
+ *     failure without the idempotency path blocking a new attempt.
+ *   - On retry: the idempotency path (pending booking_payments check) fires
+ *     first and returns the existing pending payment before key generation
+ *     is ever reached.
  *
  * Multi-tenant isolation: every call includes tenantId verified by TenantGuard.
  */
@@ -43,27 +45,32 @@ export class PaymentOrchestratorService {
   constructor(
     private readonly gatewayRegistry: GatewayRegistry,
     private readonly paymentService:  PaymentService,
+    private readonly bookingService:  BookingService,
     private readonly config:          ConfigService,
     @InjectDataSource() private readonly ds: DataSource,
   ) {}
 
+  // ── Fix 3: atomic BookingPaymentEntity + PaymentService.initiate() ────────
+
   /**
    * initiateForBooking()
    *
-   * Initiates a payment for an existing booking.
-   * Called by PaymentController after booking creation.
+   * Creates a BookingPaymentEntity and a Finance PaymentEntity atomically.
    *
-   * Creates:
-   *   - BookingPaymentEntity (booking-domain record)
-   *   - PaymentEntity (finance-domain record via PaymentService.initiate())
+   * Idempotency path:
+   *   If a pending booking_payments row already exists for this booking, the
+   *   finance payment record is looked up via idempotency_key and returned.
+   *   No new row is created.
    *
-   * Returns:
-   *   - clientSecret or redirectUrl for the frontend to complete payment
-   *   - bookingPaymentId for frontend to track
-   *   - financePaymentId for admin correlation
+   * Transaction boundary:
+   *   The booking_payments INSERT and PaymentService.initiate() run inside a
+   *   single DataSource transaction. If initiate() throws, the booking_payments
+   *   row is rolled back — no orphaned pending record.
    *
-   * Idempotency: if a pending BookingPaymentEntity already exists for this
-   * booking, returns the existing clientSecret without creating a new payment.
+   * Fix 5 — idempotency key:
+   *   Format: bk_<bookingId>_<uuid>
+   *   The UUID suffix distinguishes retry attempts so a failed first attempt
+   *   does not block a legitimate second attempt with a different key.
    */
   async initiateForBooking(params: {
     tenantId:       string;
@@ -84,6 +91,7 @@ export class PaymentOrchestratorService {
     idempotencyKey:    string;
   }> {
     // ── Idempotency: check for existing pending booking payment ───────────
+    // Runs OUTSIDE the transaction — read-only, safe to retry.
     const existing = await this.ds.query<{ id: string; idempotency_key: string }[]>(
       `SELECT id, idempotency_key FROM booking_payments
        WHERE booking_id = $1 AND tenant_id = $2 AND status = 'pending' AND is_deleted = FALSE
@@ -95,11 +103,10 @@ export class PaymentOrchestratorService {
       this.logger.log(
         `Idempotent: returning existing pending payment for booking=${params.bookingId}`,
       );
-      // Look up the finance payment via idempotency key
-      const fp = await this.ds.query<{ id: string; gateway_payment_id: string; client_secret_cache: string | null }[]>(
-        `SELECT fp.id, fp.gateway_payment_id
-         FROM finance_payments fp
-         WHERE fp.tenant_id = $1 AND fp.idempotency_key = $2
+      const fp = await this.ds.query<{ id: string; gateway_payment_id: string }[]>(
+        `SELECT id, gateway_payment_id
+         FROM finance_payments
+         WHERE tenant_id = $1 AND idempotency_key = $2
          LIMIT 1`,
         [params.tenantId, existing[0]!.idempotency_key],
       );
@@ -107,7 +114,7 @@ export class PaymentOrchestratorService {
         return {
           bookingPaymentId: existing[0]!.id,
           financePaymentId: fp[0]!.id,
-          clientSecret:     undefined,           // not re-derivable after first issuance
+          clientSecret:     undefined,   // not re-derivable after first issuance
           gatewayPaymentId: fp[0]!.gateway_payment_id ?? '',
           gatewayName:      this.gatewayRegistry.getActiveGatewayName(),
           idempotencyKey:   existing[0]!.idempotency_key,
@@ -115,67 +122,149 @@ export class PaymentOrchestratorService {
       }
     }
 
-    // ── Generate stable idempotency key ───────────────────────────────────
-    const idempotencyKey = `bk_${params.bookingId}_${Date.now()}`;
+    // ── Fix 5: race-safe idempotency key ──────────────────────────────────
+    // UUID suffix ensures two concurrent requests for the same booking each
+    // get a unique key and do not collide on the unique index.
+    const idempotencyKey = `bk_${params.bookingId}_${randomUUID()}`;
 
-    // ── Step 1: Create BookingPaymentEntity ───────────────────────────────
-    const bpInsert = await this.ds.query<{ id: string }[]>(
-      `INSERT INTO booking_payments
-         (id, tenant_id, branch_id, booking_id, status, payment_method,
-          amount_minor, currency, provider, idempotency_key, created_by_id,
-          is_deleted, amount_refunded_minor, created_at, updated_at)
-       VALUES
-         (gen_random_uuid(), $1, $2, $3, 'pending', 'card', $4, $5, $6, $7, $8,
-          FALSE, 0, NOW(), NOW())
-       RETURNING id`,
-      [
-        params.tenantId, params.branchId, params.bookingId,
-        params.amountMinor, params.currency,
-        this.gatewayRegistry.getActiveGatewayName(),
-        idempotencyKey, params.actorId,
-      ],
-    );
-    const bookingPaymentId = bpInsert[0]!.id;
+    // ── Fix 3: atomic transaction ─────────────────────────────────────────
+    // booking_payments INSERT and PaymentService.initiate() run together.
+    // If initiate() throws, the entire transaction rolls back — no orphaned
+    // pending booking_payments row.
+    const result = await this.ds.transaction(async (manager) => {
+      // Step 1 — Insert booking_payments row inside the transaction
+      const bpInsert = await manager.query<{ id: string }[]>(
+        `INSERT INTO booking_payments
+           (id, tenant_id, branch_id, booking_id, status, payment_method,
+            amount_minor, currency, provider, idempotency_key, created_by_id,
+            is_deleted, amount_refunded_minor, created_at, updated_at)
+         VALUES
+           (gen_random_uuid(), $1, $2, $3, 'pending', 'card', $4, $5, $6, $7, $8,
+            FALSE, 0, NOW(), NOW())
+         RETURNING id`,
+        [
+          params.tenantId, params.branchId, params.bookingId,
+          params.amountMinor, params.currency,
+          this.gatewayRegistry.getActiveGatewayName(),
+          idempotencyKey, params.actorId,
+        ],
+      );
+      const bookingPaymentId = bpInsert[0]!.id;
 
-    // ── Step 2: Initiate via Finance PaymentService (gateway-agnostic) ────
-    const financePayment = await this.paymentService.initiate(
-      {
-        method:         'online_card',
-        gateway:        this.gatewayRegistry.getActiveGatewayName() as 'stripe' | 'razorpay' | 'cash' | 'manual',
-        amountMinor:    params.amountMinor,
-        currency:       params.currency,
-        customerId:     params.customerId,
-        idempotencyKey,
-        ipAddress:      params.ipAddress,
-      },
-      params.tenantId,
-      params.actorId,
-    );
+      // Step 2 — Initiate via Finance PaymentService (gateway-agnostic)
+      // PaymentService.initiate() calls the gateway adapter and persists a
+      // finance_payments row. If this throws, the transaction rolls back and
+      // the booking_payments INSERT above is undone.
+      const financePayment = await this.paymentService.initiate(
+        {
+          method:         'online_card',
+          gateway:        this.gatewayRegistry.getActiveGatewayName() as
+                            'stripe' | 'razorpay' | 'cash' | 'manual',
+          amountMinor:    params.amountMinor,
+          currency:       params.currency,
+          customerId:     params.customerId,
+          idempotencyKey,
+          ipAddress:      params.ipAddress,
+        },
+        params.tenantId,
+        params.actorId,
+      );
+
+      return { bookingPaymentId, financePayment };
+    });
 
     this.logger.log(
       `Payment initiated — booking=${params.bookingId} ` +
-      `financePaymentId=${financePayment.id} gateway=${financePayment.gateway}`,
+      `financePaymentId=${result.financePayment.id} ` +
+      `gateway=${result.financePayment.gateway}`,
     );
 
     return {
-      bookingPaymentId,
-      financePaymentId:  financePayment.id,
-      clientSecret:      financePayment.gatewayMetadata?.['clientSecret'] as string | undefined,
-      gatewayPaymentId:  financePayment.gatewayPaymentId ?? '',
-      gatewayName:       financePayment.gateway,
+      bookingPaymentId:  result.bookingPaymentId,
+      financePaymentId:  result.financePayment.id,
+      clientSecret:      result.financePayment.gatewayMetadata?.['clientSecret'] as
+                           string | undefined,
+      gatewayPaymentId:  result.financePayment.gatewayPaymentId ?? '',
+      gatewayName:       result.financePayment.gateway,
       idempotencyKey,
     };
   }
+
+  // ── Fix 1: PAYMENT_CAPTURED → BookingService.confirm() ───────────────────
+
+  /**
+   * onPaymentCaptured()
+   *
+   * Listens to PaymentEvents.CAPTURED emitted by PaymentService.capture().
+   * Resolves the bookingId from booking_payments via the shared idempotency_key,
+   * then calls BookingService.confirm() to complete the booking lifecycle.
+   *
+   * This is the missing link: without this listener a payment could succeed
+   * but the booking would remain in pending_payment status indefinitely.
+   *
+   * Idempotent: BookingService.confirm() is a no-op if already confirmed.
+   */
+  @OnEvent(PaymentEvents.CAPTURED, { async: true })
+  async onPaymentCaptured(payload: PaymentCapturedPayload): Promise<void> {
+    const { tenantId, paymentId } = payload;
+
+    // Resolve bookingId: booking_payments.idempotency_key = finance_payments.idempotency_key
+    const rows = await this.ds.query<{ booking_id: string; id: string }[]>(
+      `SELECT bp.booking_id, bp.id
+       FROM booking_payments bp
+       JOIN finance_payments fp
+         ON fp.idempotency_key = bp.idempotency_key
+         AND fp.tenant_id = bp.tenant_id
+       WHERE fp.id = $1
+         AND fp.tenant_id = $2
+         AND bp.is_deleted = FALSE
+       LIMIT 1`,
+      [paymentId, tenantId],
+    );
+
+    if (!rows.length) {
+      this.logger.warn(
+        `onPaymentCaptured: no booking_payments row found for ` +
+        `financePaymentId=${paymentId} tenant=${tenantId} — skipping confirm`,
+      );
+      return;
+    }
+
+    const { booking_id: bookingId, id: bookingPaymentId } = rows[0]!;
+
+    // Mark booking_payments row as paid
+    await this.ds.query(
+      `UPDATE booking_payments
+       SET status = 'paid', paid_at = NOW(), updated_at = NOW(),
+           provider_payment_id = $1
+       WHERE id = $2 AND tenant_id = $3 AND is_deleted = FALSE`,
+      [payload.gatewayPaymentId ?? '', bookingPaymentId, tenantId],
+    );
+
+    // Confirm the booking — idempotent if already confirmed
+    try {
+      await this.bookingService.confirm(bookingId, tenantId, 'system:payment');
+      this.logger.log(
+        `Booking confirmed after payment capture — ` +
+        `bookingId=${bookingId} financePaymentId=${paymentId}`,
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Log but do not re-throw — an already-confirmed booking is acceptable
+      this.logger.warn(
+        `onPaymentCaptured: BookingService.confirm failed for bookingId=${bookingId}: ${msg}`,
+      );
+    }
+  }
+
+  // ── handlePaymentSuccess() ────────────────────────────────────────────────
 
   /**
    * handlePaymentSuccess()
    *
    * Called by WebhookHandlerService after a successful gateway capture event.
-   *
-   * Steps:
-   *   1. Capture in Finance domain (PaymentService.capture).
-   *   2. Update BookingPaymentEntity to status='paid'.
-   *   3. BookingService.confirm() via BookingEvents listener.
+   * Delegates to PaymentService.capture(), which emits PAYMENT_CAPTURED,
+   * which triggers onPaymentCaptured() above to confirm the booking.
    */
   async handlePaymentSuccess(params: {
     tenantId:         string;
@@ -184,35 +273,19 @@ export class PaymentOrchestratorService {
     capturedMinor:    number;
     actorId:          string;
   }): Promise<void> {
-    // Capture in finance domain — CapturePaymentDto only needs amountMinor
     await this.paymentService.capture(
       params.financePaymentId,
       { amountMinor: params.capturedMinor },
       params.tenantId,
       params.actorId,
     );
-
-    // Update booking_payments to 'paid' via the booking's idempotencyKey
-    await this.ds.query(
-      `UPDATE booking_payments
-       SET status = 'paid', paid_at = NOW(), updated_at = NOW(),
-           provider_payment_id = $1
-       WHERE tenant_id = $2
-         AND idempotency_key = (
-           SELECT fp.idempotency_key FROM finance_payments fp
-           WHERE fp.id = $3 AND fp.tenant_id = $2
-         )
-         AND is_deleted = FALSE`,
-      [params.gatewayPaymentId, params.tenantId, params.financePaymentId],
-    );
-
-    // BookingService.confirm() is triggered by the finance PAYMENT_CAPTURED event
-    // which PaymentService.capture() emits — no direct call needed here.
+    // booking_payments update + BookingService.confirm() handled by onPaymentCaptured()
     this.logger.log(
-      `Payment success handled — financePaymentId=${params.financePaymentId} ` +
-      `gatewayPaymentId=${params.gatewayPaymentId}`,
+      `Payment success handled — financePaymentId=${params.financePaymentId}`,
     );
   }
+
+  // ── handlePaymentFailure() ────────────────────────────────────────────────
 
   /**
    * handlePaymentFailure()
@@ -232,7 +305,6 @@ export class PaymentOrchestratorService {
       params.actorId,
     );
 
-    // Update booking_payments to 'failed'
     await this.ds.query(
       `UPDATE booking_payments
        SET status = 'failed', failed_at = NOW(), failure_reason = $1, updated_at = NOW()

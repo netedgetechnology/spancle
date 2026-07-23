@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller, HttpCode, HttpStatus, Param, Post,
   Req, UseGuards,
 } from '@nestjs/common';
@@ -52,8 +53,16 @@ export class WebhookController {
     @Param('provider') provider: string,
     @Req() req: Request & { rawBody?: Buffer },
   ) {
-    // Raw body required for HMAC signature verification
-    const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
+    // Fix 4: raw body is required for HMAC signature verification.
+    // If req.rawBody is absent the raw-body middleware is not configured in
+    // main.ts (PAY-1). Fail loudly rather than silently computing an incorrect
+    // HMAC against re-serialised JSON.
+    if (!req.rawBody) {
+      throw new BadRequestException(
+        'Raw body unavailable — configure bodyParser.raw() for /webhooks/* in main.ts (PAY-1)',
+      );
+    }
+    const rawBody = req.rawBody;
 
     const signature =
       (req.headers['stripe-signature'] as string | undefined) ??

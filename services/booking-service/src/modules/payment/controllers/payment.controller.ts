@@ -8,6 +8,8 @@ import { AuditInterceptor }           from '../../../common/interceptors/audit.i
 import { Roles }                      from '../../../common/decorators/roles.decorator';
 import { TenantCtx, type TenantContext } from '../../../common/decorators/tenant.decorator';
 import { BookingActor, type BookingActorContext } from '../../../common/decorators/current-user.decorator';
+import { BookingService }              from '../../booking/services/booking.service';
+import { BookingAuthorizationService } from '../../booking/services/booking-authorization.service';
 import { PaymentOrchestratorService }  from '../services/payment-orchestrator.service';
 import { InitiateBookingPaymentDto }   from '../dto/payment.dto';
 
@@ -17,30 +19,25 @@ import { InitiateBookingPaymentDto }   from '../dto/payment.dto';
  *
  * POST /initiate  — initiate payment for a booking (PLAYER)
  *
- * The webhook endpoint lives in WebhookController to allow raw-body
- * parsing without affecting this controller's JSON parsing.
+ * Fix 2: BookingAuthorizationService.assertOwnerOrStaff() is called before
+ * initiateForBooking(). A PLAYER cannot initiate payment for another user's
+ * booking. ADMIN and MANAGER bypass the ownership check.
  */
 @Controller('payments')
 @UseGuards(TenantGuard, RbacGuard)
 @UseInterceptors(AuditInterceptor)
 export class PaymentController {
   constructor(
-    private readonly orchestrator: PaymentOrchestratorService,
+    private readonly orchestrator:  PaymentOrchestratorService,
+    private readonly bookingService: BookingService,
+    private readonly authzService:   BookingAuthorizationService,
   ) {}
 
   /**
    * POST /api/v1/payments/initiate
    *
-   * Initiates a payment for an existing booking.
-   *
-   * PLAYER: can only initiate payment for their own bookings.
-   * ADMIN/MANAGER: can initiate for any tenant booking.
-   *
-   * Returns:
-   *   - clientSecret — for Stripe Elements (undefined for Razorpay)
-   *   - gatewayPaymentId — for Razorpay SDK (order_id)
-   *   - bookingPaymentId — for status polling
-   *   - gatewayName — tells frontend which SDK to initialize
+   * Ownership check: booking is loaded and verified against the actor before
+   * any payment record is created. ForbiddenException thrown for non-owners.
    */
   @Post('initiate')
   @HttpCode(HttpStatus.CREATED)
@@ -51,6 +48,10 @@ export class PaymentController {
     @BookingActor() actor: BookingActorContext,
     @Req() req: Request,
   ) {
+    // Fix 2 — ownership enforcement
+    const booking = await this.bookingService.findOne(dto.bookingId, tenant.tenantId);
+    this.authzService.assertOwnerOrStaff(booking, actor, 'payment initiation');
+
     const ip = (req.headers['x-forwarded-for'] as string | undefined)
       ?? req.socket.remoteAddress
       ?? undefined;
