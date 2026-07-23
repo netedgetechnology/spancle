@@ -9,6 +9,8 @@ import { MessageEntity } from './modules/message/entities/message.entity';
 import { NotificationEntity } from './modules/notification/entities/notification.entity';
 import { TemplateEntity } from './modules/template/entities/template.entity';
 
+import { AddTemplateFields1722000001000 } from './migrations/1722000001000-AddTemplateFields';
+
 const dataSource = new DataSource({
   type:               'postgres',
   url:                process.env['DATABASE_URL']!,
@@ -17,7 +19,8 @@ const dataSource = new DataSource({
     NotificationEntity,
     TemplateEntity,
   ],
-  migrations:         ['dist/migrations/*.js'],
+  migrations:         [AddTemplateFields1722000001000],
+  migrationsDir:      'src/migrations',
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,
   logging:            ['error', 'migration'],
