@@ -7,9 +7,10 @@ import { ConfigService }   from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource }      from 'typeorm';
 import { OnEvent }         from '@nestjs/event-emitter';
-import { GatewayRegistry } from './gateway-registry.service';
-import { PaymentService }  from '../../finance/services/payment.service';
-import { BookingService }  from '../../booking/services/booking.service';
+import { GatewayRegistry }          from './gateway-registry.service';
+import { PaymentService }          from '../../finance/services/payment.service';
+import { BookingService }          from '../../booking/services/booking.service';
+import { RedisEventBusPublisher }  from '../../../common/event-bus/redis-event-bus.publisher';
 import {
   PaymentEvents,
   type PaymentCapturedPayload,
@@ -46,6 +47,7 @@ export class PaymentOrchestratorService {
     private readonly gatewayRegistry: GatewayRegistry,
     private readonly paymentService:  PaymentService,
     private readonly bookingService:  BookingService,
+    private readonly publisher:       RedisEventBusPublisher,
     private readonly config:          ConfigService,
     @InjectDataSource() private readonly ds: DataSource,
   ) {}
@@ -241,6 +243,16 @@ export class PaymentOrchestratorService {
       [payload.gatewayPaymentId ?? '', bookingPaymentId, tenantId],
     );
 
+    // Publish PAYMENT_SUCCEEDED to Redis for communication-service
+    await this.publisher.publishPaymentSucceeded({
+      tenantId,
+      paymentId,
+      bookingId,
+      amountMinor:      payload.amountMinor,
+      currency:         payload.currency,
+      gatewayPaymentId: payload.gatewayPaymentId ?? undefined,
+    });
+
     // Confirm the booking — idempotent if already confirmed
     try {
       await this.bookingService.confirm(bookingId, tenantId, 'system:payment');
@@ -248,6 +260,12 @@ export class PaymentOrchestratorService {
         `Booking confirmed after payment capture — ` +
         `bookingId=${bookingId} financePaymentId=${paymentId}`,
       );
+      // Publish BOOKING_CONFIRMED to Redis for communication-service
+      await this.publisher.publishBookingConfirmed({
+        tenantId,
+        bookingId,
+        actorId: 'system:payment',
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       // Log but do not re-throw — an already-confirmed booking is acceptable
@@ -316,6 +334,13 @@ export class PaymentOrchestratorService {
          AND is_deleted = FALSE`,
       [params.reason, params.tenantId, params.financePaymentId],
     );
+
+    // Publish PAYMENT_FAILED to Redis for communication-service
+    await this.publisher.publishPaymentFailed({
+      tenantId:   params.tenantId,
+      paymentId:  params.financePaymentId,
+      reason:     params.reason,
+    });
 
     this.logger.log(
       `Payment failure handled — financePaymentId=${params.financePaymentId}`,

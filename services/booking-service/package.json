@@ -30,6 +30,7 @@
     "@nestjs/schedule": "^4.1.0",
     "@nestjs/throttler": "^5.2.0",
     "@nestjs/typeorm": "^10.0.2",
+    "@spancle/event-contracts": "workspace:^",
     "@spancle/types": "workspace:*",
     "axios": "^1.7.2",
     "bullmq": "^5.12.12",
@@ -43,7 +44,8 @@
     "rxjs": "^7.8.1",
     "stripe": "^16",
     "tslib": "^2.6.3",
-    "typeorm": "^0.3.20"
+    "typeorm": "^0.3.20",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.2",
