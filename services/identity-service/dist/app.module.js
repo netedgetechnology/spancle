@@ -28,6 +28,7 @@ const roles_guard_1 = require("./common/guards/roles.guard");
 const permissions_guard_1 = require("./common/guards/permissions.guard");
 const tenant_status_guard_1 = require("./modules/tenant/guards/tenant-status.guard");
 const plan_limit_guard_1 = require("./modules/tenant/guards/plan-limit.guard");
+const consumer_module_1 = require("./modules/consumer/consumer.module");
 const tenant_context_middleware_1 = require("./common/middleware/tenant-context.middleware");
 const tenant_context_interceptor_1 = require("./common/interceptors/tenant-context.interceptor");
 let AppModule = class AppModule {
@@ -71,6 +72,7 @@ exports.AppModule = AppModule = __decorate([
             auth_module_1.AuthModule,
             identity_module_1.IdentityModule,
             user_module_1.UserModule,
+            consumer_module_1.ConsumerModule,
             role_module_1.RoleModule,
             onboarding_module_1.OnboardingModule,
             branch_module_1.BranchModule,

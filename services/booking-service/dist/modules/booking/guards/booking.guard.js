@@ -83,6 +83,7 @@ let RbacGuard = RbacGuard_1 = class RbacGuard {
             actorId: payload.sub,
             tenantId: req.tenant?.tenantId ?? payload.tenantId,
             role: payload.role,
+            userId: payload['userId'] ?? null,
         };
         const requiredRoles = this.reflector.getAllAndOverride(roles_decorator_1.ROLES_KEY, [
             ctx.getHandler(),

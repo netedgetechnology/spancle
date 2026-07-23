@@ -19,10 +19,13 @@ const booking_support_repository_1 = require("./repositories/booking-support.rep
 const booking_service_1 = require("./services/booking.service");
 const booking_validation_service_1 = require("./services/booking-validation.service");
 const booking_scheduler_service_1 = require("./services/booking-scheduler.service");
+const booking_authorization_service_1 = require("./services/booking-authorization.service");
 const booking_controller_1 = require("./controllers/booking.controller");
 const court_module_1 = require("../court/court.module");
 const venue_module_1 = require("../venue/venue.module");
 const pricing_module_1 = require("../pricing/pricing.module");
+const common_2 = require("@nestjs/common");
+const qr_module_1 = require("../qr/qr.module");
 let BookingModule = class BookingModule {
 };
 exports.BookingModule = BookingModule;
@@ -39,6 +42,7 @@ exports.BookingModule = BookingModule = __decorate([
             pricing_module_1.PricingModule,
             court_module_1.CourtModule,
             venue_module_1.VenueModule,
+            (0, common_2.forwardRef)(() => qr_module_1.QrModule),
         ],
         controllers: [booking_controller_1.BookingController],
         providers: [
@@ -47,10 +51,11 @@ exports.BookingModule = BookingModule = __decorate([
             booking_support_repository_1.BookingRefundRepository,
             booking_support_repository_1.BookingLogRepository,
             booking_validation_service_1.BookingValidationService,
+            booking_authorization_service_1.BookingAuthorizationService,
             booking_service_1.BookingService,
             booking_scheduler_service_1.BookingSchedulerService,
         ],
-        exports: [booking_service_1.BookingService, booking_validation_service_1.BookingValidationService, booking_repository_1.BookingRepository, booking_support_repository_1.BookingLogRepository],
+        exports: [booking_service_1.BookingService, booking_validation_service_1.BookingValidationService, booking_authorization_service_1.BookingAuthorizationService, booking_repository_1.BookingRepository, booking_support_repository_1.BookingLogRepository],
     })
 ], BookingModule);
 //# sourceMappingURL=booking.module.js.map

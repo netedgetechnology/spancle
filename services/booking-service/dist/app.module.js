@@ -16,6 +16,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const throttler_1 = require("@nestjs/throttler");
 const schedule_1 = require("@nestjs/schedule");
 const booking_guard_1 = require("./modules/booking/guards/booking.guard");
+const guest_module_1 = require("./modules/guest/guest.module");
 const booking_module_1 = require("./modules/booking/booking.module");
 const slot_module_1 = require("./modules/slot/slot.module");
 const venue_module_1 = require("./modules/venue/venue.module");
@@ -66,8 +67,10 @@ exports.AppModule = AppModule = __decorate([
                 }),
             }),
             booking_module_1.BookingModule, slot_module_1.SlotModule, venue_module_1.VenueModule, court_module_1.CourtModule, qr_module_1.QrModule, membership_module_1.MembershipModule,
+            guest_module_1.GuestModule,
         ],
         providers: [
+            { provide: core_1.APP_GUARD, useClass: throttler_1.ThrottlerGuard },
             { provide: core_1.APP_GUARD, useClass: booking_guard_1.TenantGuard },
             { provide: core_1.APP_GUARD, useClass: booking_guard_1.RbacGuard },
         ],

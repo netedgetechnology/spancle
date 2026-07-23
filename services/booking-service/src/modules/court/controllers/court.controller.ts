@@ -9,12 +9,15 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { TenantCtx, type TenantContext } from '../../../common/decorators/tenant.decorator';
 import { TenantGuard }       from '../../booking/guards/booking.guard';
 import { AuditInterceptor }  from '../../../common/interceptors/audit.interceptor';
+import { Public, Roles }    from '../../../common/decorators/roles.decorator';
 import { CourtService }      from '../services/court.service';
 import { CreateCourtDto }    from '../dto/create-court.dto';
 import { UpdateCourtDto }    from '../dto/update-court.dto';
@@ -35,14 +38,18 @@ export class CourtController {
     return this.courtService.create(dto, tenant.tenantId);
   }
 
-  /** GET /api/v1/courts */
+  /** GET /api/v1/courts — Public for guest discovery. Rate-limited 60/min. */
   @Get()
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   findAll(@TenantCtx() tenant: TenantContext): Promise<unknown[]> {
     return this.courtService.findAll(tenant.tenantId);
   }
 
-  /** GET /api/v1/courts/:id */
+  /** GET /api/v1/courts/:id — Public for guest discovery. */
   @Get(':id')
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @TenantCtx() tenant: TenantContext,

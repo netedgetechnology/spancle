@@ -4,10 +4,11 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { TenantGuard, RbacGuard } from './modules/booking/guards/booking.guard';
+import { GuestModule }         from './modules/guest/guest.module';
 import { BookingModule }    from './modules/booking/booking.module';
 import { SlotModule }       from './modules/slot/slot.module';
 import { VenueModule }      from './modules/venue/venue.module';
@@ -61,13 +62,16 @@ import { FinanceModule }    from './modules/finance/finance.module';
     }),
 
     BookingModule, SlotModule, VenueModule, CourtModule, QrModule, MembershipModule,
+    GuestModule,
   ],
   providers: [
     // Global guard chain for all booking-service routes:
-    // 1. TenantGuard — validates x-tenant-id header
-    // 2. RbacGuard   — validates x-actor-role against @Roles() metadata
-    { provide: APP_GUARD, useClass: TenantGuard },
-    { provide: APP_GUARD, useClass: RbacGuard   },
+    // 1. ThrottlerGuard — rate limiting (configured per-route with @Throttle)
+    // 2. TenantGuard    — validates x-tenant-id header
+    // 3. RbacGuard      — validates x-actor-role against @Roles() metadata
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: TenantGuard    },
+    { provide: APP_GUARD, useClass: RbacGuard      },
   ],
 })
 export class AppModule {}

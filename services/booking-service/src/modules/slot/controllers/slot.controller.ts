@@ -3,6 +3,7 @@ import {
   Param, ParseUUIDPipe, Patch, Post, Query,
   UseGuards, UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Roles, Public } from '../../../common/decorators/roles.decorator';
 import { TenantCtx, type TenantContext } from '../../../common/decorators/tenant.decorator';
 import { TenantGuard }      from '../guards/slot.guard';
@@ -63,7 +64,14 @@ export class SlotController {
     return this.slotService.getStatusSummary(tenant.tenantId);
   }
 
+  /**
+   * GET /api/v1/slots/availability
+   * Public — guests browse available slots before booking.
+   * Requires x-tenant-id. Rate-limited: 120/min (browsing is high-frequency).
+   */
   @Get('availability')
+  @Public()
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   getAvailability(
     @Query() query: AvailabilityQueryDto,
     @TenantCtx() tenant: TenantContext,

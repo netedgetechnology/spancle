@@ -14,8 +14,10 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueController = void 0;
 const common_1 = require("@nestjs/common");
+const throttler_1 = require("@nestjs/throttler");
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
-const venue_guard_1 = require("../../venue/guards/venue.guard");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
+const venue_guard_1 = require("../guards/venue.guard");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
 const venue_service_1 = require("../services/venue.service");
 const create_venue_dto_1 = require("../dto/create-venue.dto");
@@ -43,6 +45,7 @@ let VenueController = class VenueController {
 exports.VenueController = VenueController;
 __decorate([
     (0, common_1.Post)(),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
@@ -51,6 +54,8 @@ __decorate([
 ], VenueController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, roles_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
     __param(0, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -58,6 +63,8 @@ __decorate([
 ], VenueController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, roles_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
@@ -66,6 +73,7 @@ __decorate([
 ], VenueController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, tenant_decorator_1.TenantCtx)()),
@@ -75,6 +83,7 @@ __decorate([
 ], VenueController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),

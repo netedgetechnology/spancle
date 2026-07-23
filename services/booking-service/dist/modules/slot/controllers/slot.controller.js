@@ -14,6 +14,8 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SlotController = void 0;
 const common_1 = require("@nestjs/common");
+const throttler_1 = require("@nestjs/throttler");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const slot_guard_1 = require("../guards/slot.guard");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
@@ -105,6 +107,8 @@ __decorate([
 ], SlotController.prototype, "getStatusSummary", null);
 __decorate([
     (0, common_1.Get)('availability'),
+    (0, roles_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 120, ttl: 60_000 } }),
     __param(0, (0, common_1.Query)()),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),

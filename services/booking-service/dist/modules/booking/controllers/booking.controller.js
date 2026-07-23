@@ -18,13 +18,18 @@ const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator"
 const current_user_decorator_1 = require("../../../common/decorators/current-user.decorator");
 const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
+const booking_guard_1 = require("../guards/booking.guard");
 const booking_service_1 = require("../services/booking.service");
+const booking_authorization_service_1 = require("../services/booking-authorization.service");
+const qr_generation_service_1 = require("../../qr/services/qr-generation.service");
 const create_booking_dto_1 = require("../dto/create-booking.dto");
 const booking_query_dto_1 = require("../dto/booking-query.dto");
 const update_booking_dto_1 = require("../dto/update-booking.dto");
 let BookingController = class BookingController {
-    constructor(bookingService) {
+    constructor(bookingService, authzService, qrGenerationService) {
         this.bookingService = bookingService;
+        this.authzService = authzService;
+        this.qrGenerationService = qrGenerationService;
     }
     create(dto, tenant, actor) {
         return this.bookingService.create(dto, tenant.tenantId, actor.actorId);
@@ -35,11 +40,15 @@ let BookingController = class BookingController {
     getStatusSummary(tenant) {
         return this.bookingService.getStatusSummary(tenant.tenantId);
     }
-    findByReference(reference, tenant) {
-        return this.bookingService.findByReference(reference, tenant.tenantId);
+    async findByReference(reference, tenant, actor) {
+        const booking = await this.bookingService.findByReference(reference, tenant.tenantId);
+        this.authzService.assertOwnerOrStaff(booking, actor, 'booking by reference');
+        return booking;
     }
-    findOne(id, tenant) {
-        return this.bookingService.findOne(id, tenant.tenantId);
+    async findOne(id, tenant, actor) {
+        const booking = await this.bookingService.findOne(id, tenant.tenantId);
+        this.authzService.assertOwnerOrStaff(booking, actor, 'booking');
+        return booking;
     }
     reserve(id, tenant, actor) {
         return this.bookingService.reserve(id, tenant.tenantId, actor.actorId);
@@ -50,7 +59,9 @@ let BookingController = class BookingController {
     confirm(id, tenant, actor) {
         return this.bookingService.confirm(id, tenant.tenantId, actor.actorId);
     }
-    cancel(id, dto, tenant, actor) {
+    async cancel(id, dto, tenant, actor) {
+        const booking = await this.bookingService.findOne(id, tenant.tenantId);
+        this.authzService.assertOwnerOrStaff(booking, actor, 'cancellation');
         return this.bookingService.cancel(id, dto, tenant.tenantId, actor.actorId);
     }
     reschedule(id, dto, tenant, actor) {
@@ -65,7 +76,9 @@ let BookingController = class BookingController {
     waiveNoShow(id, dto, tenant, actor) {
         return this.bookingService.waiveNoShow(id, dto, tenant.tenantId, actor.actorId);
     }
-    paymentFailed(id, dto, tenant, actor) {
+    async paymentFailed(id, dto, tenant, actor) {
+        const booking = await this.bookingService.findOne(id, tenant.tenantId);
+        this.authzService.assertOwnerOrStaff(booking, actor, 'payment-failed');
         return this.bookingService.paymentFailed(id, dto, tenant.tenantId, actor.actorId);
     }
     markInProgress(id, tenant, actor) {
@@ -82,6 +95,11 @@ let BookingController = class BookingController {
     }
     processRefund(id, dto, tenant, actor) {
         return this.bookingService.processRefund(id, dto, tenant.tenantId, actor.actorId);
+    }
+    async getConsumerQr(bookingId, tenant, actor) {
+        const booking = await this.bookingService.findOne(bookingId, tenant.tenantId);
+        this.authzService.assertOwnerOrStaff(booking, actor, 'QR code');
+        return this.qrGenerationService.issue({ bookingId }, tenant.tenantId, actor.actorId);
     }
 };
 exports.BookingController = BookingController;
@@ -118,18 +136,20 @@ __decorate([
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER', 'COACH', 'PLAYER'),
     __param(0, (0, common_1.Param)('reference')),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
 ], BookingController.prototype, "findByReference", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER', 'COACH', 'PLAYER'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
 ], BookingController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':id/reserve'),
@@ -174,7 +194,7 @@ __decorate([
     __param(3, (0, current_user_decorator_1.BookingActor)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_booking_dto_1.CancelBookingDto, Object, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], BookingController.prototype, "cancel", null);
 __decorate([
     (0, common_1.Patch)(':id/reschedule'),
@@ -226,13 +246,15 @@ __decorate([
 ], BookingController.prototype, "waiveNoShow", null);
 __decorate([
     (0, common_1.Patch)(':id/payment-failed'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, roles_decorator_1.Roles)('TENANT_ADMIN', 'TENANT_MANAGER', 'PLAYER'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, tenant_decorator_1.TenantCtx)()),
     __param(3, (0, current_user_decorator_1.BookingActor)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Function, Object, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], BookingController.prototype, "paymentFailed", null);
 __decorate([
     (0, common_1.Patch)(':id/mark-in-progress'),
@@ -280,9 +302,23 @@ __decorate([
     __metadata("design:paramtypes", [String, update_booking_dto_1.ProcessBookingRefundDto, Object, Object]),
     __metadata("design:returntype", void 0)
 ], BookingController.prototype, "processRefund", null);
+__decorate([
+    (0, common_1.Get)(':bookingId/qr'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, common_1.UseGuards)(booking_guard_1.TenantGuard, booking_guard_1.RbacGuard),
+    (0, roles_decorator_1.Roles)('PLAYER'),
+    __param(0, (0, common_1.Param)('bookingId', common_1.ParseUUIDPipe)),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, current_user_decorator_1.BookingActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], BookingController.prototype, "getConsumerQr", null);
 exports.BookingController = BookingController = __decorate([
     (0, common_1.Controller)('bookings'),
     (0, common_1.UseInterceptors)(audit_interceptor_1.AuditInterceptor),
-    __metadata("design:paramtypes", [booking_service_1.BookingService])
+    __metadata("design:paramtypes", [booking_service_1.BookingService,
+        booking_authorization_service_1.BookingAuthorizationService,
+        qr_generation_service_1.QrGenerationService])
 ], BookingController);
 //# sourceMappingURL=booking.controller.js.map

@@ -14,9 +14,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VenueCourtController = exports.CourtController = void 0;
 const common_1 = require("@nestjs/common");
+const throttler_1 = require("@nestjs/throttler");
 const tenant_decorator_1 = require("../../../common/decorators/tenant.decorator");
 const booking_guard_1 = require("../../booking/guards/booking.guard");
 const audit_interceptor_1 = require("../../../common/interceptors/audit.interceptor");
+const roles_decorator_1 = require("../../../common/decorators/roles.decorator");
 const court_service_1 = require("../services/court.service");
 const create_court_dto_1 = require("../dto/create-court.dto");
 const update_court_dto_1 = require("../dto/update-court.dto");
@@ -52,6 +54,8 @@ __decorate([
 ], CourtController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, roles_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
     __param(0, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -59,6 +63,8 @@ __decorate([
 ], CourtController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, roles_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, tenant_decorator_1.TenantCtx)()),
     __metadata("design:type", Function),

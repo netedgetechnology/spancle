@@ -72,7 +72,7 @@ exports.QrModule = QrModule = __decorate([
                     max: 500,
                 }),
             }),
-            booking_module_1.BookingModule,
+            (0, common_1.forwardRef)(() => booking_module_1.BookingModule),
         ],
         controllers: [qr_controller_1.QrController],
         providers: [

@@ -21,6 +21,7 @@ import { RolesGuard }               from './common/guards/roles.guard';
 import { PermissionsGuard }         from './common/guards/permissions.guard';
 import { TenantStatusGuard }        from './modules/tenant/guards/tenant-status.guard';
 import { PlanLimitGuard }           from './modules/tenant/guards/plan-limit.guard';
+import { ConsumerModule }    from './modules/consumer/consumer.module';
 import { TenantContextMiddleware }  from './common/middleware/tenant-context.middleware';
 import { TenantContextInterceptor } from './common/interceptors/tenant-context.interceptor';
 
@@ -82,6 +83,7 @@ import { TenantContextInterceptor } from './common/interceptors/tenant-context.i
     AuthModule,
     IdentityModule,
     UserModule,
+    ConsumerModule,
     RoleModule,
     OnboardingModule,
     BranchModule,
