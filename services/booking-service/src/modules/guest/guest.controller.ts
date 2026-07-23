@@ -4,10 +4,12 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   ParseUUIDPipe,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -19,6 +21,7 @@ import { TenantCtx, type TenantContext } from '../../common/decorators/tenant.de
 import { TenantGuard } from '../booking/guards/booking.guard';
 import { AuditInterceptor } from '../../common/interceptors/audit.interceptor';
 import { GuestSessionService } from './guest-session.service';
+import { PaymentOrchestratorService } from '../payment/services/payment-orchestrator.service';
 import { GuestBookingLinkingService } from './guest-booking-linking.service';
 import { BookingService }      from '../booking/services/booking.service';
 import { BookingAuthorizationService } from '../booking/services/booking-authorization.service';
@@ -28,6 +31,7 @@ import {
   GuestCreateBookingDto,
   GuestLookupDto,
   LinkGuestBookingsDto,
+  GuestInitiatePaymentDto,
 } from './dto/guest.dto';
 
 /**
@@ -63,6 +67,7 @@ export class GuestController {
     private readonly bookingService:        BookingService,
     private readonly authzService:          BookingAuthorizationService,
     private readonly qrGenerationService:   QrGenerationService,
+    private readonly paymentOrchestrator:   PaymentOrchestratorService,
   ) {}
 
   // ── Phase 2: Guest Session ────────────────────────────────────────────────
@@ -168,10 +173,20 @@ export class GuestController {
       tenantId:      tenant.tenantId,
     });
 
+    // Issue guest payment token — authorises this guest to pay for this booking
+    const guestPaymentToken = this.guestSessionService.issueGuestPaymentToken({
+      bookingId:     booking.id,
+      customerEmail: dto.customer.email,
+      tenantId:      tenant.tenantId,
+      amountMinor:   booking.finalPriceMinor ?? 0,
+      currency:      booking.currency ?? 'GBP',
+    });
+
     return {
       booking,
-      qr,                // includes qrContent for frontend display and email
-      guestLookupToken,  // embed in confirmation email link
+      qr,                 // includes qrContent for frontend display and email
+      guestLookupToken,   // embed in confirmation email link
+      guestPaymentToken,  // authorises POST /guest/payments/initiate
     };
   }
 
@@ -223,6 +238,87 @@ export class GuestController {
    * Called by the consumer app after successful registration.
    * userId comes from the verified JWT — never from the request body.
    */
+  // ── Guest Payment Initiation ─────────────────────────────────────────────
+
+  /**
+   * POST /api/v1/guest/payments/initiate
+   *
+   * Initiates a payment for a guest booking.
+   *
+   * Security model:
+   *   The guestPaymentToken was issued by POST /guest/bookings and is bound to:
+   *     bookingId      — verified: only the correct booking
+   *     customerEmail  — verified: must match booking.customerEmail in DB
+   *     tenantId       — verified: token is tenant-scoped
+   *     amountMinor    — verified: amount pinned at token issuance
+   *     currency       — verified: currency pinned at token issuance
+   *     exp            — verified: 30-minute TTL
+   *     jti            — unique per token; stored in booking_payments on use
+   *
+   *   Replay attack protection:
+   *     The PaymentOrchestratorService.initiateForBooking() idempotency check
+   *     returns the existing pending booking_payments row on retry. Once a
+   *     payment succeeds (status != pending_payment), the orchestrator's
+   *     idempotency path returns without creating a new payment.
+   *
+   * Rate limit: 5/min per IP.
+   * Does NOT require JWT — authenticated by guestPaymentToken.
+   */
+  @Post('payments/initiate')
+  @Public()
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async initiateGuestPayment(
+    @Body() dto: GuestInitiatePaymentDto,
+    @TenantCtx() tenant: TenantContext,
+    @Req() req: Request,
+  ) {
+    // 1. Validate HMAC + expiry + tenant — throws 401 on any failure
+    const claims = this.guestSessionService.validateGuestPaymentToken(
+      dto.guestPaymentToken,
+      tenant.tenantId,
+    );
+
+    // 2. Verify bookingId matches token claim (prevents token re-use on another booking)
+    if (claims.bid !== dto.bookingId) {
+      throw new UnauthorizedException('Guest payment token does not match booking');
+    }
+
+    // 3. Load booking and verify customerEmail — prevents token use by wrong guest
+    const booking = await this.bookingService.findOne(dto.bookingId, tenant.tenantId);
+    if (booking.customerEmail.toLowerCase() !== claims.em) {
+      // Email mismatch — log and throw same generic error to prevent oracle
+      new Logger('GuestController').warn(
+        `Guest payment email mismatch — token em masked booking masked tenant=${tenant.tenantId}`,
+      );
+      throw new UnauthorizedException('Guest payment token does not match booking');
+    }
+
+    // 4. Verify amount + currency matches booking (prevents amount tampering)
+    if (
+      (booking.finalPriceMinor ?? 0) !== claims.amt ||
+      (booking.currency ?? 'GBP').toLowerCase() !== claims.cur
+    ) {
+      throw new UnauthorizedException('Guest payment token amount mismatch');
+    }
+
+    // 5. Delegate to PaymentOrchestratorService — no duplicate payment logic
+    const ip = (req.headers['x-forwarded-for'] as string | undefined)
+      ?? req.socket.remoteAddress
+      ?? undefined;
+
+    return this.paymentOrchestrator.initiateForBooking({
+      tenantId:      tenant.tenantId,
+      bookingId:     booking.id,
+      branchId:      dto.branchId,
+      amountMinor:   claims.amt,   // amount from token, not from request body
+      currency:      claims.cur.toUpperCase(),
+      customerEmail: claims.em,
+      actorId:       `guest:${claims.jti}`,   // stable actor for audit log
+      ipAddress:     ip,
+    });
+  }
+
   @Post('link-bookings')
   @HttpCode(HttpStatus.OK)
   @Roles('PLAYER')

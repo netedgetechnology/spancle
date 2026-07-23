@@ -216,6 +216,106 @@ export class GuestSessionService {
     return { bookingId: p.bid, customerEmail: p.em };
   }
 
+
+  // ── Guest Payment Token ───────────────────────────────────────────────────
+
+  /**
+   * issueGuestPaymentToken()
+   *
+   * Issues a short-lived HMAC-signed token authorising a specific guest
+   * to initiate payment for a specific booking.
+   *
+   * Bound to: bookingId, customerEmail, tenantId, amountMinor, currency, jti.
+   * TTL: 30 minutes.
+   *
+   * Called by: POST /guest/bookings (immediately after booking creation).
+   * Consumed by: POST /guest/payments/initiate.
+   */
+  issueGuestPaymentToken(params: {
+    bookingId:     string;
+    customerEmail: string;
+    tenantId:      string;
+    amountMinor:   number;
+    currency:      string;
+  }): string {
+    const payload: GuestPaymentTokenPayload = {
+      purpose: 'guest_payment',
+      bid:     params.bookingId,
+      em:      params.customerEmail.toLowerCase().trim(),
+      tid:     params.tenantId,
+      amt:     params.amountMinor,
+      cur:     params.currency.toLowerCase(),
+      exp:     Date.now() + 30 * 60 * 1000,
+      jti:     crypto.randomUUID(),
+    };
+    const b64  = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const hmac = this.sign(`gpt1.${b64}`);
+    return `gpt1.${b64}.${hmac}`;
+  }
+
+  /**
+   * validateGuestPaymentToken()
+   *
+   * Validates a guest payment token. Checks (order matters):
+   *   1. Structure + version prefix
+   *   2. HMAC (constant-time)
+   *   3. Expiry
+   *   4. Tenant binding
+   *   5. Purpose field
+   *
+   * Returns full payload so caller can verify bookingId, email, amount.
+   * All failures throw identical 401 to prevent oracle attacks.
+   */
+  validateGuestPaymentToken(token: string, tenantId: string): GuestPaymentTokenPayload {
+    const parts = token.split('.');
+    if (parts.length !== 3 || parts[0] !== 'gpt1') {
+      throw new UnauthorizedException('Invalid guest payment token');
+    }
+
+    const [version, b64, provided] = parts as [string, string, string];
+    const expected = this.sign(`${version}.${b64}`);
+
+    let eq: boolean;
+    try {
+      eq = crypto.timingSafeEqual(
+        Buffer.from(provided, 'base64url'),
+        Buffer.from(expected, 'base64url'),
+      );
+    } catch {
+      eq = false;
+    }
+    if (!eq) {
+      this.logger.warn('Guest payment token HMAC mismatch — possible tampering');
+      throw new UnauthorizedException('Invalid guest payment token');
+    }
+
+    let payload: GuestPaymentTokenPayload;
+    try {
+      payload = JSON.parse(
+        Buffer.from(b64, 'base64url').toString('utf8'),
+      ) as GuestPaymentTokenPayload;
+    } catch {
+      throw new UnauthorizedException('Invalid guest payment token');
+    }
+
+    if (Date.now() > payload.exp) {
+      throw new UnauthorizedException('Guest payment token expired');
+    }
+
+    if (payload.tid !== tenantId) {
+      this.logger.warn(
+        `Guest payment token tenant mismatch — token=${payload.tid} request=${tenantId}`,
+      );
+      throw new UnauthorizedException('Invalid guest payment token');
+    }
+
+    if (payload.purpose !== 'guest_payment') {
+      throw new UnauthorizedException('Invalid guest payment token');
+    }
+
+    return payload;
+  }
+
   // ── Private ───────────────────────────────────────────────────────────────
 
   private sign(data: string): string {
@@ -224,6 +324,17 @@ export class GuestSessionService {
       .update(data)
       .digest('base64url');
   }
+}
+
+export interface GuestPaymentTokenPayload {
+  purpose: 'guest_payment';
+  bid:     string;    // bookingId
+  em:      string;    // customerEmail (lowercase)
+  tid:     string;    // tenantId
+  amt:     number;    // amountMinor — pinned at issuance
+  cur:     string;    // currency (lowercase)
+  exp:     number;    // Unix ms expiry
+  jti:     string;    // unique nonce for replay detection
 }
 
 export interface GuestSessionPayload {

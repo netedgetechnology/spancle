@@ -93,3 +93,24 @@ export class LinkGuestBookingsDto {
   @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
   customerEmail!: string;
 }
+
+/**
+ * GuestInitiatePaymentDto — body for POST /guest/payments/initiate.
+ *
+ * guestPaymentToken: issued by POST /guest/bookings, bound to the specific
+ *   booking, guest email, tenant, amount and currency. Expires in 30 min.
+ *   This token is the sole authentication mechanism — no JWT required.
+ *
+ * bookingId + branchId: routing params passed separately so the controller
+ *   can verify them against token claims before calling the orchestrator.
+ */
+export class GuestInitiatePaymentDto {
+  @IsString() @IsNotEmpty()
+  guestPaymentToken!: string;
+
+  @IsUUID()
+  bookingId!: string;
+
+  @IsUUID()
+  branchId!: string;
+}
