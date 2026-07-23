@@ -9,6 +9,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 
 import { TenantGuard, RbacGuard } from './modules/booking/guards/booking.guard';
 import { GuestModule }         from './modules/guest/guest.module';
+import { PaymentModule }       from './modules/payment/payment.module';
 import { BookingModule }    from './modules/booking/booking.module';
 import { SlotModule }       from './modules/slot/slot.module';
 import { VenueModule }      from './modules/venue/venue.module';
@@ -63,6 +64,7 @@ import { FinanceModule }    from './modules/finance/finance.module';
 
     BookingModule, SlotModule, VenueModule, CourtModule, QrModule, MembershipModule,
     GuestModule,
+    PaymentModule,
   ],
   providers: [
     // Global guard chain for all booking-service routes:
