@@ -9,7 +9,8 @@ import { MessageEntity } from './modules/message/entities/message.entity';
 import { NotificationEntity } from './modules/notification/entities/notification.entity';
 import { TemplateEntity } from './modules/template/entities/template.entity';
 
-import { AddTemplateFields1722000001000 } from './migrations/1722000001000-AddTemplateFields';
+import { AddTemplateFields1722000001000 }            from './migrations/1722000001000-AddTemplateFields';
+import { AddNotificationDeliveryFields1722000002000 } from './migrations/1722000002000-AddNotificationDeliveryFields';
 
 const dataSource = new DataSource({
   type:               'postgres',
@@ -19,7 +20,7 @@ const dataSource = new DataSource({
     NotificationEntity,
     TemplateEntity,
   ],
-  migrations:         [AddTemplateFields1722000001000],
+  migrations:         [AddTemplateFields1722000001000, AddNotificationDeliveryFields1722000002000],
   migrationsDir:      'src/migrations',
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,

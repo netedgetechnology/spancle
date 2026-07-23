@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -41,6 +42,19 @@ import { TemplateModule } from './modules/template/template.module';
           ttl: config.get<number>('RATE_LIMIT_TTL_MS', 60000),
           limit: config.get<number>('RATE_LIMIT_MAX_REQUESTS', 100),
         }],
+      }),
+    }),
+
+    BullModule.forRootAsync({
+      inject:     [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        redis: config.getOrThrow<string>('REDIS_URL'),
+        defaultJobOptions: {
+          attempts:  3,
+          backoff:   { type: 'exponential', delay: 5_000 },
+          removeOnComplete: 100,
+          removeOnFail:     false,
+        },
       }),
     }),
 
