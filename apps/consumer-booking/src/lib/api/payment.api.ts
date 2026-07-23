@@ -60,17 +60,25 @@ export async function initiatePayment(
   return res.data;
 }
 
+export interface GuestInitiatePaymentPayload {
+  guestPaymentToken: string;
+  bookingId:         string;
+  branchId:          string;
+}
+
 /**
- * initiateGuestPayment — unauthenticated (guest) path.
- * Uses guestClient (no JWT, injects x-tenant-id from env).
- * Note: backend enforces ownership via booking creation idempotency;
- * the bookingId was returned from POST /guest/bookings on this same device.
+ * initiateGuestPayment — unauthenticated guest path.
+ *
+ * Calls POST /api/v1/guest/payments/initiate — the dedicated guest endpoint
+ * that validates the HMAC-signed guestPaymentToken before delegating to the
+ * payment orchestrator. The authenticated POST /payments/initiate endpoint
+ * is never called from the guest flow.
  */
 export async function initiateGuestPayment(
-  payload: InitiatePaymentPayload,
+  payload: GuestInitiatePaymentPayload,
 ): Promise<InitiatePaymentResult> {
   const res = await publicPaymentClient.post<InitiatePaymentResult>(
-    '/api/v1/payments/initiate',
+    '/api/v1/guest/payments/initiate',
     payload,
   );
   return res.data;

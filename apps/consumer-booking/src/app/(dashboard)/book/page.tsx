@@ -166,11 +166,9 @@ export default function BookPage(): React.ReactElement {
     onSuccess: async (result) => {
       try {
         const payment = await initiateGuestPayment({
-          bookingId:     result.booking.id,
+          guestPaymentToken: result.guestPaymentToken,
+          bookingId:         result.booking.id,
           branchId,
-          amountMinor:   result.booking.finalPriceMinor ?? 0,
-          currency:      result.booking.currency ?? 'GBP',
-          customerEmail: guestFields.email.toLowerCase().trim(),
         });
         setBookingForPayment({
           id:          result.booking.id,

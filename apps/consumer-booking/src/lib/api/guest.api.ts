@@ -64,9 +64,11 @@ export interface GuestBookingPayload {
 }
 
 export interface GuestBookingResult {
-  booking:         Booking;
-  qr:              IssuedQrToken | null;
+  booking:          Booking;
+  qr:               IssuedQrToken | null;
   guestLookupToken: string;
+  /** HMAC-signed token authorising this guest to call POST /guest/payments/initiate */
+  guestPaymentToken: string;
 }
 
 export async function createGuestBooking(
