@@ -1,6 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService }         from '@nestjs/config';
-import { StripeAdapter, RazorpayAdapter, PaymentGatewayAdapter } from '../../finance/gateway/payment-gateway.adapter';
+import { ConfigService }                          from '@nestjs/config';
+import { StripeAdapter }                          from '../../finance/gateway/stripe.adapter';
+import {
+  PaymentGatewayAdapter,
+  RazorpayAdapter,
+} from '../../finance/gateway/payment-gateway.adapter';
 
 /**
  * GatewayRegistry
@@ -13,24 +17,30 @@ import { StripeAdapter, RazorpayAdapter, PaymentGatewayAdapter } from '../../fin
  *   PAYMENT_GATEWAY=stripe     (default)
  *   PAYMENT_GATEWAY=razorpay
  *
- * Adding a new gateway:
- *   1. Extend PaymentGatewayAdapter (existing abstract class).
- *   2. Register it here.
- *   3. No changes to PaymentService, BookingService, or any consumer.
+ * Fix (Batch 7.5):
+ *   StripeAdapter is now DI-injected (receives ConfigService for STRIPE_SECRET_KEY).
+ *   RazorpayAdapter remains a stub (Batch 7.5 Razorpay sprint).
  *
- * Adapters are created lazily to avoid loading unused SDK dependencies.
+ * Adding a new gateway:
+ *   1. Extend PaymentGatewayAdapter.
+ *   2. Register it in FinanceModule as a provider.
+ *   3. Inject it here.
+ *   4. No changes to PaymentService, BookingService, or any consumer.
  */
 @Injectable()
 export class GatewayRegistry {
-  private readonly logger    = new Logger(GatewayRegistry.name);
-  private readonly adapters  = new Map<string, PaymentGatewayAdapter>();
+  private readonly logger   = new Logger(GatewayRegistry.name);
+  private readonly adapters = new Map<string, PaymentGatewayAdapter>();
 
-  constructor(private readonly config: ConfigService) {
-    // Register all available adapters — 'stripe' and 'razorpay' are built-in
-    const stripe   = new StripeAdapter();   // gatewayName = 'stripe'
+  constructor(
+    private readonly config:  ConfigService,
+    private readonly stripe:  StripeAdapter,
+  ) {
+    // StripeAdapter is DI-injected — ConfigService is available for API key
+    this.adapters.set(this.stripe.gatewayName, this.stripe);
+
+    // RazorpayAdapter remains a stub until Batch 7.5 Razorpay sprint
     const razorpay = new RazorpayAdapter(); // gatewayName = 'razorpay'
-
-    this.adapters.set(stripe.gatewayName,   stripe);
     this.adapters.set(razorpay.gatewayName, razorpay);
 
     this.logger.log(
@@ -38,40 +48,30 @@ export class GatewayRegistry {
     );
   }
 
-  /**
-   * Returns the adapter configured as the default gateway.
-   * Reads PAYMENT_GATEWAY env var; defaults to 'stripe'.
-   */
+  /** Returns the adapter configured as the default gateway. */
   getActiveGateway(): PaymentGatewayAdapter {
     const name = this.config.get<string>('PAYMENT_GATEWAY', 'stripe').toLowerCase().trim();
     return this.getGateway(name);
   }
 
-  /**
-   * Returns a specific adapter by gateway name string.
-   * Used when the gateway name is already known (e.g. from a stored PaymentEntity.gateway).
-   */
+  /** Returns a specific adapter by gateway name string. */
   getGateway(name: string): PaymentGatewayAdapter {
     const adapter = this.adapters.get(name.toLowerCase());
     if (!adapter) {
       throw new NotFoundException(
-        `Payment gateway '${name}' is not registered. Available: [${[...this.adapters.keys()].join(', ')}]`,
+        `Payment gateway '${name}' is not registered. ` +
+        `Available: [${[...this.adapters.keys()].join(', ')}]`,
       );
     }
     return adapter;
   }
 
-  /**
-   * Returns the name of the currently configured default gateway.
-   * Used when creating a PaymentEntity to record which gateway was used.
-   */
+  /** Returns the name of the currently configured default gateway. */
   getActiveGatewayName(): string {
     return this.config.get<string>('PAYMENT_GATEWAY', 'stripe').toLowerCase().trim();
   }
 
-  /**
-   * Lists all registered gateway names. Useful for admin diagnostics.
-   */
+  /** Lists all registered gateway names. Useful for admin diagnostics. */
   listGateways(): string[] {
     return [...this.adapters.keys()];
   }

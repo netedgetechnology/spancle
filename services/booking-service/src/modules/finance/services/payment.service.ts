@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   UnprocessableEntityException,
@@ -19,8 +20,7 @@ import {
 } from '../events/payment.events';
 import {
   PaymentGatewayAdapter,
-  StripeAdapter,
-  RazorpayAdapter,
+  PAYMENT_GATEWAY_ADAPTERS,
 } from '../gateway/payment-gateway.adapter';
 import type { PaymentEntity, PaymentStatus } from '../entities/payment.entity';
 import { PaymentEntity as PaymentEntityClass } from '../entities/payment.entity';
@@ -137,11 +137,11 @@ export class PaymentService {
     private readonly periodService:      AccountingPeriodService,
     private readonly eventEmitter:       EventEmitter2,
     @InjectDataSource() private readonly dataSource: DataSource,
+    @Inject(PAYMENT_GATEWAY_ADAPTERS) adapters: PaymentGatewayAdapter[],
   ) {
-    this.adapters = new Map<string, PaymentGatewayAdapter>([
-      ['stripe',   new StripeAdapter()],
-      ['razorpay', new RazorpayAdapter()],
-    ]);
+    this.adapters = new Map<string, PaymentGatewayAdapter>(
+      adapters.map((a) => [a.gatewayName, a]),
+    );
   }
 
   private adapter(gateway: string): PaymentGatewayAdapter | null {

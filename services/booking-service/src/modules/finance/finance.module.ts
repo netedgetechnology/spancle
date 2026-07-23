@@ -1,4 +1,5 @@
 import { Module }        from '@nestjs/common';
+import { ConfigModule }  from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AccountingPeriodEntity }   from './entities/accounting-period.entity';
@@ -43,10 +44,13 @@ import { RefundAdminController }                     from './controllers/refund-
 import { PaymentCorrelationAdminController }         from './controllers/payment-correlation-admin.controller';
 import { FinanceBookingRefundJobAdminController }    from './controllers/finance-booking-refund-job-admin.controller';
 
-import { BookingFinanceListener } from './listeners/booking-finance.listener';
+import { BookingFinanceListener }        from './listeners/booking-finance.listener';
+import { StripeAdapter }                 from './gateway/stripe.adapter';
+import { PAYMENT_GATEWAY_ADAPTERS }      from './gateway/payment-gateway.adapter';
 
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([
       AccountingPeriodEntity,
       ChartOfAccountEntity,
@@ -86,6 +90,7 @@ import { BookingFinanceListener } from './listeners/booking-finance.listener';
     RefundRepository,
     PaymentCorrelationRepository,
     FinanceBookingRefundJobRepository,
+    StripeAdapter,
     AccountingPeriodService,
     DoubleEntryService,
     TaxResolver,
@@ -97,6 +102,12 @@ import { BookingFinanceListener } from './listeners/booking-finance.listener';
     PaymentCorrelationService,
     FinanceBookingRefundJobService,
     BookingFinanceListener,
+    StripeAdapter,
+    {
+      provide:  PAYMENT_GATEWAY_ADAPTERS,
+      useFactory: (stripe: StripeAdapter) => [stripe],
+      inject:   [StripeAdapter],
+    },
   ],
   exports: [
     AccountingPeriodService,
@@ -118,6 +129,7 @@ import { BookingFinanceListener } from './listeners/booking-finance.listener';
     RefundRepository,
     PaymentCorrelationRepository,
     FinanceBookingRefundJobRepository,
+    StripeAdapter,
   ],
 })
 export class FinanceModule {}

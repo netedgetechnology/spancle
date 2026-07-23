@@ -14,6 +14,10 @@
  * Real SDK integration is Batch 7.5 (gateway implementation sprint).
  */
 
+// ── DI token ─────────────────────────────────────────────────────────────────
+/** DI token for the PaymentGatewayAdapter array injected into PaymentService. */
+export const PAYMENT_GATEWAY_ADAPTERS = 'PAYMENT_GATEWAY_ADAPTERS' as const;
+
 // ── Input / Output types ──────────────────────────────────────────────────────
 
 export interface GatewayInitiateInput {
