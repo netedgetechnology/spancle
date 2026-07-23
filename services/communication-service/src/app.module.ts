@@ -5,6 +5,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import { EventBusModule }     from './common/event-bus/event-bus.module';
+import { EmailModule }        from './modules/email/email.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { MessageModule } from './modules/message/message.module';
 import { TemplateModule } from './modules/template/template.module';
@@ -44,6 +45,7 @@ import { TemplateModule } from './modules/template/template.module';
     }),
 
     EventBusModule,
+    EmailModule,
     NotificationModule, MessageModule, TemplateModule,
   ],
 })
