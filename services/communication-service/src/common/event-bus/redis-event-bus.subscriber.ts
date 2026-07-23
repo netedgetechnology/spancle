@@ -43,6 +43,7 @@ export class RedisEventBusSubscriber implements OnModuleInit, OnModuleDestroy {
   /** Channels this service cares about receiving. */
   private readonly CHANNELS = [
     EventRegistry.BOOKING_CONFIRMED,
+    EventRegistry.BOOKING_CANCELLED,
     EventRegistry.PAYMENT_SUCCEEDED,
     EventRegistry.PAYMENT_FAILED,
   ] as const;

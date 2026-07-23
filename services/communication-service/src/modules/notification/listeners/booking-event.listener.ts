@@ -4,94 +4,165 @@ import {
   EventRegistry,
   type EventEnvelope,
 } from '@spancle/event-contracts';
+import { EmailQueueProducer }  from '../queue/email-queue.producer';
 
 /**
  * BookingEventListener (communication-service)
  *
- * Handles cross-service events dispatched by RedisEventBusSubscriber.
- * Receives EventEnvelope objects — tenant context and correlationId are
- * always available on the envelope; channel-specific payload is in envelope.payload.
+ * Receives EventEnvelope objects dispatched by RedisEventBusSubscriber
+ * and enqueues email notifications via EmailQueueProducer.
  *
- * Current handlers — foundation only (Sprint 1):
- *   BOOKING_CONFIRMED   → log + placeholder for email queue enqueue
- *   PAYMENT_SUCCEEDED   → log + placeholder for receipt email
- *   PAYMENT_FAILED      → log + placeholder for retry-prompt email
+ * Event → template mapping:
+ *   BOOKING_CONFIRMED  → booking_confirmed_email
+ *   BOOKING_CANCELLED  → booking_cancelled_email
+ *   PAYMENT_SUCCEEDED  → payment_received_email
  *
- * Sprint 2 will replace the placeholder log lines with EmailQueueProducer calls.
- * This listener does NOT change when email delivery is added.
+ * Design:
+ *   - Handlers never block the bus (@OnEvent async: true).
+ *   - Missing customerEmail: skip + warn, never throw.
+ *   - Enqueue errors: catch + log, never propagate.
+ *   - Variable maps built from payload; unknown fields absent (not errors).
  */
 @Injectable()
 export class BookingEventListener {
   private readonly logger = new Logger(BookingEventListener.name);
 
-  /**
-   * onBookingConfirmed
-   *
-   * Triggered when a booking transitions to 'confirmed' status, either
-   * via payment capture (webhook) or admin confirmation.
-   *
-   * Expected payload fields (booking-service publishes):
-   *   bookingId, actorId, customerEmail?, customerName?, reference?,
-   *   startsAt?, courtId?, finalPriceMinor?, currency?
-   */
+  constructor(
+    private readonly emailQueue: EmailQueueProducer,
+  ) {}
+
   @OnEvent(EventRegistry.BOOKING_CONFIRMED, { async: true })
   async onBookingConfirmed(envelope: EventEnvelope): Promise<void> {
-    const { tenantId, id, correlationId, payload } = envelope;
-
-    this.logger.log(
-      `[BOOKING_CONFIRMED] tenant=${tenantId} ` +
-      `bookingId=${String(payload['bookingId'] ?? 'unknown')} ` +
-      `envelopeId=${id} correlationId=${correlationId ?? 'none'} ` +
-      `— email delivery pending Sprint 2`,
-    );
-
-    // Sprint 2: await this.emailQueue.enqueue('booking_confirmed', tenantId, payload);
+    const { tenantId, payload } = envelope;
+    const customerEmail = asString(payload['customerEmail']);
+    if (!customerEmail) {
+      this.logger.warn(`[BOOKING_CONFIRMED] No customerEmail — bookingId=${asString(payload['bookingId'])} tenant=${tenantId} — skipping`);
+      return;
+    }
+    try {
+      const notifId = await this.emailQueue.enqueue({
+        tenantId,
+        recipientEmail: customerEmail,
+        templateSlug:   'booking_confirmed_email',
+        name:           `Booking confirmed — ${asString(payload['reference']) || asString(payload['bookingId'])}`,
+        variables:      buildBookingConfirmedVars(payload),
+      });
+      this.logger.log(`[BOOKING_CONFIRMED] Email queued — notificationId=${notifId} to=${customerEmail}`);
+    } catch (err: unknown) {
+      this.logger.error(`[BOOKING_CONFIRMED] Failed to enqueue — bookingId=${asString(payload['bookingId'])}: ${toMessage(err)}`);
+    }
   }
 
-  /**
-   * onPaymentSucceeded
-   *
-   * Triggered after a payment is captured by the gateway.
-   *
-   * Expected payload fields:
-   *   paymentId, bookingId?, customerEmail?, amountMinor, currency,
-   *   gatewayPaymentId?, reference?
-   */
+  @OnEvent(EventRegistry.BOOKING_CANCELLED, { async: true })
+  async onBookingCancelled(envelope: EventEnvelope): Promise<void> {
+    const { tenantId, payload } = envelope;
+    const customerEmail = asString(payload['customerEmail']);
+    if (!customerEmail) {
+      this.logger.warn(`[BOOKING_CANCELLED] No customerEmail — bookingId=${asString(payload['bookingId'])} tenant=${tenantId} — skipping`);
+      return;
+    }
+    try {
+      const notifId = await this.emailQueue.enqueue({
+        tenantId,
+        recipientEmail: customerEmail,
+        templateSlug:   'booking_cancelled_email',
+        name:           `Booking cancelled — ${asString(payload['reference']) || asString(payload['bookingId'])}`,
+        variables:      buildBookingCancelledVars(payload),
+      });
+      this.logger.log(`[BOOKING_CANCELLED] Email queued — notificationId=${notifId} to=${customerEmail}`);
+    } catch (err: unknown) {
+      this.logger.error(`[BOOKING_CANCELLED] Failed to enqueue — bookingId=${asString(payload['bookingId'])}: ${toMessage(err)}`);
+    }
+  }
+
   @OnEvent(EventRegistry.PAYMENT_SUCCEEDED, { async: true })
   async onPaymentSucceeded(envelope: EventEnvelope): Promise<void> {
-    const { tenantId, id, correlationId, payload } = envelope;
-
-    this.logger.log(
-      `[PAYMENT_SUCCEEDED] tenant=${tenantId} ` +
-      `paymentId=${String(payload['paymentId'] ?? 'unknown')} ` +
-      `amount=${String(payload['amountMinor'] ?? '?')} ${String(payload['currency'] ?? '')} ` +
-      `envelopeId=${id} correlationId=${correlationId ?? 'none'} ` +
-      `— receipt email pending Sprint 2`,
-    );
-
-    // Sprint 2: await this.emailQueue.enqueue('payment_receipt', tenantId, payload);
+    const { tenantId, payload } = envelope;
+    const customerEmail = asString(payload['customerEmail']);
+    if (!customerEmail) {
+      this.logger.warn(`[PAYMENT_SUCCEEDED] No customerEmail — paymentId=${asString(payload['paymentId'])} tenant=${tenantId} — skipping`);
+      return;
+    }
+    try {
+      const notifId = await this.emailQueue.enqueue({
+        tenantId,
+        recipientEmail: customerEmail,
+        templateSlug:   'payment_received_email',
+        name:           `Payment received — ${asString(payload['reference']) || asString(payload['paymentId'])}`,
+        variables:      buildPaymentReceivedVars(payload),
+      });
+      this.logger.log(`[PAYMENT_SUCCEEDED] Email queued — notificationId=${notifId} to=${customerEmail}`);
+    } catch (err: unknown) {
+      this.logger.error(`[PAYMENT_SUCCEEDED] Failed to enqueue — paymentId=${asString(payload['paymentId'])}: ${toMessage(err)}`);
+    }
   }
 
-  /**
-   * onPaymentFailed
-   *
-   * Triggered after a payment fails at the gateway level.
-   *
-   * Expected payload fields:
-   *   paymentId, bookingId?, customerEmail?, reason?
-   */
   @OnEvent(EventRegistry.PAYMENT_FAILED, { async: true })
   async onPaymentFailed(envelope: EventEnvelope): Promise<void> {
-    const { tenantId, id, correlationId, payload } = envelope;
+    const { tenantId, payload } = envelope;
+    this.logger.log(`[PAYMENT_FAILED] tenant=${tenantId} paymentId=${asString(payload['paymentId'])} — no email template for failure yet`);
+  }
+}
 
-    this.logger.log(
-      `[PAYMENT_FAILED] tenant=${tenantId} ` +
-      `paymentId=${String(payload['paymentId'] ?? 'unknown')} ` +
-      `reason=${String(payload['reason'] ?? 'unknown')} ` +
-      `envelopeId=${id} correlationId=${correlationId ?? 'none'} ` +
-      `— failure notification pending Sprint 2`,
-    );
+// ── Variable builders (exported for testing) ──────────────────────────────────
 
-    // Sprint 2: await this.emailQueue.enqueue('payment_failed', tenantId, payload);
+export function buildBookingConfirmedVars(payload: Record<string, unknown>): Record<string, unknown> {
+  const amountMinor = asNumber(payload['finalPriceMinor']);
+  const currency    = asString(payload['currency']) || 'GBP';
+  return {
+    customer: { name: asString(payload['customerName']) || 'Valued customer' },
+    booking:  {
+      reference:    asString(payload['reference'])    || asString(payload['bookingId']),
+      startsAt:     asString(payload['startsAt'])     || '',
+      durationMins: asString(payload['durationMins']) || '',
+      totalPrice:   amountMinor != null ? formatPrice(amountMinor, currency) : '',
+    },
+    venue:  { name: asString(payload['venueName'])         || '' },
+    court:  { name: asString(payload['courtName'])         || '' },
+    tenant: {
+      name:         asString(payload['tenantName'])         || '',
+      supportEmail: asString(payload['tenantSupportEmail']) || '',
+    },
+  };
+}
+
+export function buildBookingCancelledVars(payload: Record<string, unknown>): Record<string, unknown> {
+  return {
+    customer: { name: asString(payload['customerName']) || 'Valued customer' },
+    booking:  {
+      reference: asString(payload['reference']) || asString(payload['bookingId']),
+      reason:    asString(payload['reason'])    || 'Not specified',
+    },
+    venue:  { name: asString(payload['venueName'])  || '' },
+    tenant: { name: asString(payload['tenantName']) || '' },
+  };
+}
+
+export function buildPaymentReceivedVars(payload: Record<string, unknown>): Record<string, unknown> {
+  const amountMinor = asNumber(payload['amountMinor']);
+  const currency    = asString(payload['currency']) || 'GBP';
+  return {
+    customer: { name: asString(payload['customerName']) || 'Valued customer' },
+    booking:  { reference: asString(payload['reference']) || asString(payload['bookingId']) },
+    payment:  {
+      id:     asString(payload['paymentId']) || '',
+      amount: amountMinor != null ? formatPrice(amountMinor, currency) : '',
+      date:   new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    },
+    tenant: { name: asString(payload['tenantName']) || '' },
+  };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function asString(v: unknown): string { return v != null && v !== '' ? String(v) : ''; }
+function asNumber(v: unknown): number | null { const n = Number(v); return isFinite(n) ? n : null; }
+function toMessage(err: unknown): string { return err instanceof Error ? err.message : String(err); }
+
+export function formatPrice(amountMinor: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: 2 }).format(amountMinor / 100);
+  } catch {
+    return `${(amountMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
   }
 }

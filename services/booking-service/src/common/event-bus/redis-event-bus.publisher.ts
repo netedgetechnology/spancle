@@ -152,6 +152,33 @@ export class RedisEventBusPublisher implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+
+  /**
+   * publishBookingCancelled()
+   *
+   * Bridges the in-process BOOKING_CANCELLED event to Redis.
+   * Called by a @OnEvent(BookingEvents.CANCELLED) listener in the orchestrator.
+   * customerEmail is resolved before calling (lookup from DB by bookingId).
+   */
+  async publishBookingCancelled(params: {
+    tenantId:       string;
+    bookingId:      string;
+    actorId?:       string;
+    customerEmail?: string;
+    customerName?:  string;
+    reference?:     string;
+    reason?:        string;
+    correlationId?: string;
+  }): Promise<void> {
+    const { correlationId, tenantId, ...rest } = params;
+    await this.publish(
+      EventRegistry.BOOKING_CANCELLED,
+      tenantId,
+      rest as Record<string, unknown>,
+      correlationId,
+    );
+  }
+
   /**
    * publishPaymentFailed()
    *

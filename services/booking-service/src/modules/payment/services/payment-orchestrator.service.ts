@@ -15,6 +15,7 @@ import {
   PaymentEvents,
   type PaymentCapturedPayload,
 } from '../../finance/events/payment.events';
+import { BookingEvents, type BookingEventPayload } from '../../booking/events/booking.events';
 import { randomUUID }      from 'node:crypto';
 
 /**
@@ -273,6 +274,57 @@ export class PaymentOrchestratorService {
         `onPaymentCaptured: BookingService.confirm failed for bookingId=${bookingId}: ${msg}`,
       );
     }
+  }
+
+
+  // ── Fix: bridge BOOKING_CANCELLED to Redis ───────────────────────────────
+
+  /**
+   * onBookingCancelled()
+   *
+   * Listens to the in-process BOOKING_CANCELLED event and publishes it to
+   * the Redis event bus so communication-service can send cancellation emails.
+   *
+   * BookingService.cancel() is NOT modified — this is a pure additive bridge.
+   * customerEmail is enriched here by a direct DB query on booking_payments
+   * (already available via this.ds) to avoid importing BookingService.
+   */
+  @OnEvent(BookingEvents.CANCELLED, { async: true })
+  async onBookingCancelled(payload: BookingEventPayload): Promise<void> {
+    const { tenantId, bookingId, actorId } = payload;
+
+    // Resolve customerEmail from bookings table
+    const rows = await this.ds.query<{
+      customer_email: string;
+      customer_name:  string;
+      reference:      string;
+    }[]>(
+      `SELECT customer_email, customer_name, reference
+       FROM bookings
+       WHERE id = $1 AND tenant_id = $2 AND is_deleted = FALSE
+       LIMIT 1`,
+      [bookingId, tenantId],
+    );
+
+    const customerEmail = rows[0]?.customer_email;
+    const customerName  = rows[0]?.customer_name;
+    const reference     = rows[0]?.reference;
+
+    if (!customerEmail) {
+      this.logger.warn(
+        `onBookingCancelled: no customerEmail found for bookingId=${bookingId} — skipping Redis publish`,
+      );
+      return;
+    }
+
+    await this.publisher.publishBookingCancelled({
+      tenantId,
+      bookingId,
+      actorId: actorId ?? undefined,
+      customerEmail,
+      customerName,
+      reference,
+    });
   }
 
   // ── handlePaymentSuccess() ────────────────────────────────────────────────
