@@ -31,6 +31,8 @@ import { fetchCourts, courtKeys }    from '@/lib/api/court.api';
 import { fetchDaySlots, slotKeys }   from '@/lib/api/slot.api';
 import { createBooking, bookingKeys } from '@/lib/api/booking.api';
 import { issueGuestSession, createGuestBooking } from '@/lib/api/guest.api';
+import { initiatePayment, initiateGuestPayment, type InitiatePaymentResult } from '@/lib/api/payment.api';
+import { PaymentStep, type GuestConfirmParams } from '@/components/payment/payment-step';
 import type { Venue, Court, Slot, CreateBookingPayload } from '@/types/booking.types';
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ const MEMBER_STEPS = [
   { id: 2, label: 'Court'   },
   { id: 3, label: 'Date'    },
   { id: 4, label: 'Slots'   },
+  { id: 5, label: 'Payment' },
 ];
 
 const GUEST_STEPS = [
@@ -48,6 +51,7 @@ const GUEST_STEPS = [
   { id: 3, label: 'Date'    },
   { id: 4, label: 'Slots'   },
   { id: 5, label: 'Details' },
+  { id: 6, label: 'Payment' },
 ];
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -69,6 +73,10 @@ export default function BookPage(): React.ReactElement {
   const [submitError,  setSubmitError]  = useState<string | null>(null);
   const [guestFields,  setGuestFields]  = useState<GuestCustomerFields>({ name: '', email: '', phone: '' });
   const [guestErrors,  setGuestErrors]  = useState<Partial<Record<keyof GuestCustomerFields, string>>>({});
+  // Payment state — set after booking creation, triggers payment step
+  const [paymentResult, setPaymentResult] = useState<InitiatePaymentResult | null>(null);
+  const [guestConfirmParams, setGuestConfirmParams] = useState<GuestConfirmParams | null>(null);
+  const [bookingForPayment, setBookingForPayment] = useState<{ id: string; ref: string; amountMinor: number; currency: string; branchId: string } | null>(null);
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -112,9 +120,32 @@ export default function BookPage(): React.ReactElement {
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   const memberMutation = useMutation({
-    mutationFn: (payload: CreateBookingPayload) => createBooking(payload),
-    onSuccess:  (booking) => router.push(`/book/confirmation?id=${booking.id}`),
-    onError:    (err: unknown) => setSubmitError((err as { message?: string })?.message ?? 'Booking failed'),
+    mutationFn: async (payload: CreateBookingPayload) => {
+      const booking = await createBooking(payload);
+      // Initiate payment immediately after booking — no navigation yet
+      const payment = await initiatePayment({
+        bookingId:   booking.id,
+        branchId:    payload.branchId,
+        amountMinor: booking.finalPriceMinor ?? 0,
+        currency:    booking.currency ?? 'GBP',
+        customerEmail: payload.customer.email,
+        customerId:    payload.customer.userId,
+      });
+      return { booking, payment };
+    },
+    onSuccess: ({ booking, payment }) => {
+      setBookingForPayment({
+        id:          booking.id,
+        ref:         booking.reference,
+        amountMinor: booking.finalPriceMinor ?? 0,
+        currency:    booking.currency ?? 'GBP',
+        branchId,
+      });
+      setPaymentResult(payment);
+      // Member payment step is step 5
+      setStep(5);
+    },
+    onError: (err: unknown) => setSubmitError((err as { message?: string })?.message ?? 'Booking failed'),
   });
 
   const guestMutation = useMutation({
@@ -132,15 +163,42 @@ export default function BookPage(): React.ReactElement {
         },
       });
     },
-    onSuccess: (result) => {
-      const params = new URLSearchParams({
-        id:    result.booking.id,
-        ref:   result.booking.reference,
-        guest: '1',
-        ...(result.guestLookupToken ? { token: result.guestLookupToken } : {}),
-        ...(result.qr?.qrContent    ? { qr:    result.qr.qrContent     } : {}),
-      });
-      router.push(`/book/confirmation?${params.toString()}`);
+    onSuccess: async (result) => {
+      try {
+        const payment = await initiateGuestPayment({
+          bookingId:     result.booking.id,
+          branchId,
+          amountMinor:   result.booking.finalPriceMinor ?? 0,
+          currency:      result.booking.currency ?? 'GBP',
+          customerEmail: guestFields.email.toLowerCase().trim(),
+        });
+        setBookingForPayment({
+          id:          result.booking.id,
+          ref:         result.booking.reference,
+          amountMinor: result.booking.finalPriceMinor ?? 0,
+          currency:    result.booking.currency ?? 'GBP',
+          branchId,
+        });
+        setGuestConfirmParams({
+          ref:   result.booking.reference,
+          token: result.guestLookupToken,
+          qr:    result.qr?.qrContent,
+          email: guestFields.email.toLowerCase().trim(),
+        });
+        setPaymentResult(payment);
+        // Guest payment step is step 6
+        setStep(6);
+      } catch {
+        // If payment initiation fails, fall back to confirmation page
+        const params = new URLSearchParams({
+          id:    result.booking.id,
+          ref:   result.booking.reference,
+          guest: '1',
+          ...(result.guestLookupToken ? { token: result.guestLookupToken } : {}),
+          ...(result.qr?.qrContent    ? { qr:    result.qr.qrContent }     : {}),
+        });
+        router.push(`/book/confirmation?${params.toString()}`);
+      }
     },
     onError: (err: unknown) => setSubmitError((err as { message?: string })?.message ?? 'Booking failed'),
   });
@@ -167,7 +225,8 @@ export default function BookPage(): React.ReactElement {
 
   const isSubmitting = memberMutation.isPending || guestMutation.isPending;
 
-  // Final step for member is 4; for guest is 5
+  // Slot selection is where the booking is submitted (step 4 for member, step 4 for guest)
+  // Step 5 (member) and step 6 (guest) are the payment step rendered by PaymentStep
   const isFinalStep = step === steps[steps.length - 1]!.id;
 
   const goBack = () => {
@@ -265,6 +324,7 @@ export default function BookPage(): React.ReactElement {
                   className="mt-4 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                   Continue to your details →
                 </button>
+                {/* Member final step: slots → submit → payment */}
               )}
             </WizardPanel>
           )}
@@ -291,8 +351,48 @@ export default function BookPage(): React.ReactElement {
             </WizardPanel>
           )}
 
+
+          {/* Payment step — member (step 5) and guest (step 6) */}
+          {paymentResult && bookingForPayment && paymentResult.clientSecret && (
+            <PaymentStep
+              clientSecret={paymentResult.clientSecret}
+              bookingId={bookingForPayment.id}
+              bookingRef={bookingForPayment.ref}
+              amountMinor={bookingForPayment.amountMinor}
+              currency={bookingForPayment.currency}
+              isGuest={isGuest}
+              guestParams={guestConfirmParams ?? undefined}
+              onBack={() => {
+                // Back from payment: stay on current booking, reset payment state
+                // The booking already exists; do NOT re-create it
+                setPaymentResult(null);
+                setBookingForPayment(null);
+                setGuestConfirmParams(null);
+                setStep(isGuest ? 5 : 4);
+              }}
+            />
+          )}
+
+          {/* Payment initiation without clientSecret (idempotent retry or Razorpay) */}
+          {paymentResult && bookingForPayment && !paymentResult.clientSecret && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+              <p className="text-sm font-semibold text-amber-900">Payment pending</p>
+              <p className="text-xs text-amber-700 mt-1">
+                A payment is already in progress for this booking.
+                Reference: <span className="font-mono">{bookingForPayment.ref}</span>
+              </p>
+              <button type="button" onClick={() => router.push(
+                isGuest
+                  ? `/book/confirmation?id=${bookingForPayment.id}&ref=${bookingForPayment.ref}&guest=1`
+                  : `/book/confirmation?id=${bookingForPayment.id}`
+              )} className="mt-3 text-xs font-medium text-amber-800 underline">
+                View booking status →
+              </button>
+            </div>
+          )}
+
           {/* Back button */}
-          {step > 1 && (
+          {step > 1 && !paymentResult && (
             <button type="button" onClick={goBack}
               className="mt-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors focus:outline-none focus:underline">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
@@ -304,7 +404,7 @@ export default function BookPage(): React.ReactElement {
         </div>
 
         {/* Right column — Summary (shown at final step for member; at step 5 for guest) */}
-        {((step === 4 && !isGuest) || (step === 5 && isGuest)) && (
+        {((step === 4 && !isGuest) || (step === 5 && isGuest)) && !paymentResult && (
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
             <BookingSummaryCard
               venue={selectedVenue} court={selectedCourt} date={date}

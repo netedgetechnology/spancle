@@ -29,11 +29,15 @@ import { formatDate, formatTime, formatPrice, BOOKING_STATUS_CONFIG } from '@/ty
 
 export default function BookingConfirmationPage(): React.ReactElement {
   const searchParams = useSearchParams();
-  const id           = searchParams.get('id')    ?? '';
-  const isGuest      = searchParams.get('guest') === '1';
-  const ref          = searchParams.get('ref')   ?? '';
-  const qrContent    = searchParams.get('qr')    ?? undefined;
-  const lookupToken  = searchParams.get('token') ?? undefined;
+  const id            = searchParams.get('id')            ?? '';
+  const isGuest       = searchParams.get('guest') === '1';
+  const ref           = searchParams.get('ref')             ?? '';
+  const qrContent     = searchParams.get('qr')              ?? undefined;
+  const lookupToken   = searchParams.get('token')           ?? undefined;
+  // stripe_return=1 is set in return_url after 3DS redirect
+  const stripeReturn  = searchParams.get('stripe_return')   === '1';
+  const paymentIntent = searchParams.get('payment_intent')  ?? undefined;
+  const piStatus      = searchParams.get('payment_intent_client_secret') ? searchParams.get('redirect_status') : undefined;
 
   // Member flow: require auth and fetch booking
   const { isLoading: authLoading } = !isGuest ? useRequireAuth() : { isLoading: false };
@@ -69,6 +73,21 @@ export default function BookingConfirmationPage(): React.ReactElement {
       <div className="flex flex-col items-center gap-3 py-24 text-center">
         <p className="text-sm text-red-500">Could not load booking details.</p>
         <Link href="/bookings" className="text-sm font-medium text-blue-600 hover:underline">View my bookings</Link>
+      </div>
+    );
+  }
+
+  // ── Post-3DS stripe_return handling ─────────────────────────────────────
+  // Stripe redirects back to this URL after 3DS authentication completes.
+  // The payment_intent and redirect_status params are appended by Stripe.
+  if (stripeReturn && piStatus === 'failed') {
+    return (
+      <div className="max-w-lg mx-auto py-16 text-center">
+        <p className="text-lg font-semibold text-red-600 mb-2">Payment failed</p>
+        <p className="text-sm text-gray-500 mb-6">The payment could not be completed. Your booking is still held.</p>
+        <Link href="/book" className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+          Try again
+        </Link>
       </div>
     );
   }
