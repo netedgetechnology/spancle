@@ -52,7 +52,6 @@ const CMS_CARDS = [
       </Link>
     ),
   },
-,
   {
     title:       'Media Library',
     description: 'Browse, register and manage images, videos and documents.',
