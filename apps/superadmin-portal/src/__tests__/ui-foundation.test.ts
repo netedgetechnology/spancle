@@ -9,8 +9,8 @@
 
 // ── Design token imports ──────────────────────────────────────────────────────
 
-import { colors, typography, spacing, tw } from '../packages/ui-kit/src/tokens/design-tokens';
-import type { NavItem } from '../packages/ui-kit/src/tokens/design-tokens';
+import { colors, typography, spacing, tw } from '@spancle/ui-kit';
+import type { NavItem } from '@spancle/ui-kit';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -68,8 +68,8 @@ const ROLE_HIERARCHY: Record<string, number> = {
   authenticated: 0, tenant_staff: 1, tenant_admin: 2, super_admin: 3,
 };
 console.log('\nPermission guard hierarchy:');
-assert(ROLE_HIERARCHY.super_admin > ROLE_HIERARCHY.tenant_admin, 'super_admin > tenant_admin');
-assert(ROLE_HIERARCHY.tenant_admin > ROLE_HIERARCHY.tenant_staff, 'tenant_admin > tenant_staff');
-assert(ROLE_HIERARCHY.tenant_staff > ROLE_HIERARCHY.authenticated, 'tenant_staff > authenticated');
+assert((ROLE_HIERARCHY['super_admin'] ?? -1) > (ROLE_HIERARCHY['tenant_admin'] ?? -1), 'super_admin > tenant_admin');
+assert((ROLE_HIERARCHY['tenant_admin'] ?? -1) > (ROLE_HIERARCHY['tenant_staff'] ?? -1), 'tenant_admin > tenant_staff');
+assert((ROLE_HIERARCHY['tenant_staff'] ?? -1) > (ROLE_HIERARCHY['authenticated'] ?? -1), 'tenant_staff > authenticated');
 
 console.log('\n✅  All Phase 8.0 UI Foundation checks passed.\n');

@@ -1,6 +1,5 @@
 'use client';
 
-import { useSession }  from 'next-auth/react';
 import { UserMenu }    from './user-menu';
 import { useAuth }     from '@/hooks/auth.hooks';
 
