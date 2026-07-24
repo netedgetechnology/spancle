@@ -23,7 +23,7 @@ function sessionToUser(session: ReturnType<typeof useSession>['data']): AuthUser
     email:    (u['email']    as string) ?? '',
     name:     (u['name']     as string) ?? null,
     role:     (u['role']     as string) ?? null,
-    tenantId: ((session as Record<string, unknown>)['tenantId'] as string) ?? null,
+    tenantId: ((session as unknown as Record<string, unknown>)['tenantId'] as string) ?? null,
     image:    (u['image']    as string) ?? null,
   };
 }
@@ -35,7 +35,7 @@ export function useAuth(): AuthState {
     status,
     isLoading:       status === 'loading',
     isAuthenticated: status === 'authenticated',
-    accessToken:     (session as Record<string, unknown> | null)?.['accessToken'] as string | undefined,
+    accessToken:     (session as unknown as Record<string, unknown> | null)?.['accessToken'] as string | undefined,
   };
 }
 

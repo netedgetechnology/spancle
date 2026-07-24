@@ -62,10 +62,11 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token['accessToken']  = (user as Record<string, unknown>)['accessToken'];
-        token['refreshToken'] = (user as Record<string, unknown>)['refreshToken'];
-        token['tenantId']     = (user as Record<string, unknown>)['tenantId'];
-        token['role']         = (user as Record<string, unknown>)['role'];
+        const u = user as unknown as Record<string, unknown>;
+        token['accessToken']  = u['accessToken']  as string | undefined;
+        token['refreshToken'] = u['refreshToken'] as string | undefined;
+        token['tenantId']     = u['tenantId']     as string | undefined;
+        token['role']         = u['role']         as string | undefined;
       }
       return token;
     },

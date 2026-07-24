@@ -62,7 +62,7 @@ export default function SuperAdminDashboardPage(): React.ReactElement {
   }
 
   const userRole =
-    (session as Record<string, unknown> | null)?.role as string | undefined ??
+    (session as unknown as Record<string, unknown> | null)?.role as string | undefined ??
     (session?.user as Record<string, string> | undefined)?.role;
 
   if (sessionStatus === 'authenticated' && userRole !== 'SUPER_ADMIN') {

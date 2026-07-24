@@ -14,7 +14,8 @@ function createServiceClient(baseURL: string): AxiosInstance {
   // Request interceptor
   client.interceptors.request.use(
     async (config) => {
-      const req = await apiClient.interceptors.request.handlers[0]?.fulfilled?.(config);
+      const reqHandlers = apiClient.interceptors.request.handlers;
+      const req = reqHandlers ? await reqHandlers[0]?.fulfilled?.(config) : undefined;
       return req ?? config;
     },
     (error) => Promise.reject(error),
@@ -24,7 +25,8 @@ function createServiceClient(baseURL: string): AxiosInstance {
   client.interceptors.response.use(
     (response) => response,
     async (error) => {
-      const handler = apiClient.interceptors.response.handlers[0]?.rejected;
+      const resHandlers = apiClient.interceptors.response.handlers;
+      const handler = resHandlers ? resHandlers[0]?.rejected : undefined;
       return handler ? handler(error) : Promise.reject(error);
     },
   );
