@@ -22,7 +22,6 @@ const dataSource = new DataSource({
     TemplateEntity,
   ],
   migrations:         [AddTemplateFields1722000001000, AddNotificationDeliveryFields1722000002000, SeedBookingCancelledTemplate1722000003000],
-  migrationsDir:      'src/migrations',
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,
   logging:            ['error', 'migration'],
