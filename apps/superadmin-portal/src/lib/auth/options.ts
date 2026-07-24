@@ -5,14 +5,6 @@ const PLATFORM_TENANT_ID = process.env['PLATFORM_TENANT_ID'] ?? process.env['NEX
 const IDENTITY_API       = process.env['IDENTITY_SERVICE_URL'] ?? 'http://127.0.0.1:4001';
 const NEXTAUTH_SECRET    = process.env['NEXTAUTH_SECRET'] ?? '';
 
-if (!NEXTAUTH_SECRET) {
-  throw new Error('NEXTAUTH_SECRET is required for superadmin portal');
-}
-
-if (!PLATFORM_TENANT_ID) {
-  throw new Error('PLATFORM_TENANT_ID is required for superadmin portal');
-}
-
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -95,5 +87,5 @@ export const authOptions: NextAuthOptions = {
     maxAge:   8 * 60 * 60,
   },
 
-  secret: NEXTAUTH_SECRET,
+  secret: NEXTAUTH_SECRET || (() => { throw new Error('NEXTAUTH_SECRET is not set'); })(),
 };

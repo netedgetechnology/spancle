@@ -4,10 +4,6 @@ import type { NextAuthOptions } from 'next-auth';
 const IDENTITY_API    = process.env['IDENTITY_SERVICE_URL'] ?? 'http://127.0.0.1:4001';
 const NEXTAUTH_SECRET = process.env['NEXTAUTH_SECRET'] ?? '';
 
-if (!NEXTAUTH_SECRET) {
-  throw new Error('NEXTAUTH_SECRET is required for tenant portal');
-}
-
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -90,5 +86,5 @@ export const authOptions: NextAuthOptions = {
     maxAge:   8 * 60 * 60,   // 8 hours — matches superadmin
   },
 
-  secret: NEXTAUTH_SECRET,
+  secret: NEXTAUTH_SECRET || (() => { throw new Error('NEXTAUTH_SECRET is not set'); })(),
 };
