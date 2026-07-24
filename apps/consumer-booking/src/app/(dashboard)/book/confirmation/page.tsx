@@ -18,25 +18,21 @@
 import { useSearchParams } from 'next/navigation';
 import Link                from 'next/link';
 import { useQuery }        from '@tanstack/react-query';
-import { useSession }      from 'next-auth/react';
-import { cn }              from '@/lib/utils/cn';
 import { useRequireAuth }             from '@/hooks/use-require-auth';
 import { fetchBooking, bookingKeys }  from '@/lib/api/booking.api';
 import { BookingPricingBreakdown }    from '@/components/pricing/pricing-breakdown';
 import { BookingStatusBadge }         from '@/components/booking/booking-status-badge';
 import { QrDisplay }                  from '@/components/qr/qr-display';
-import { formatDate, formatTime, formatPrice, BOOKING_STATUS_CONFIG } from '@/types/booking.types';
+import { formatDate, formatTime } from '@/types/booking.types';
 
 export default function BookingConfirmationPage(): React.ReactElement {
   const searchParams = useSearchParams();
   const id            = searchParams.get('id')            ?? '';
   const isGuest       = searchParams.get('guest') === '1';
   const ref           = searchParams.get('ref')             ?? '';
-  const qrContent     = searchParams.get('qr')              ?? undefined;
   const lookupToken   = searchParams.get('token')           ?? undefined;
   // stripe_return=1 is set in return_url after 3DS redirect
   const stripeReturn  = searchParams.get('stripe_return')   === '1';
-  const paymentIntent = searchParams.get('payment_intent')  ?? undefined;
   const piStatus      = searchParams.get('payment_intent_client_secret') ? searchParams.get('redirect_status') : undefined;
 
   // Member flow: require auth and fetch booking
@@ -45,8 +41,7 @@ export default function BookingConfirmationPage(): React.ReactElement {
     queryKey: bookingKeys.detail(id),
     queryFn:  () => fetchBooking(id),
     enabled:  !!id && !isGuest,
-    retry:    2,
-  });
+    retry:    2 });
 
   if (!id) {
     return (
@@ -127,7 +122,6 @@ export default function BookingConfirmationPage(): React.ReactElement {
                 bookingRef={ref || id}
                 bookingStatus="pending_payment"
                 startsAt={new Date(Date.now() + 86_400_000).toISOString()}
-                qrContent={qrContent}
               />
             )}
           </div>
@@ -165,8 +159,6 @@ export default function BookingConfirmationPage(): React.ReactElement {
   }
 
   // ── Member view (booking fetched via auth) ────────────────────────────────
-
-  const cfg = BOOKING_STATUS_CONFIG[booking!.status];
 
   return (
     <div className="max-w-lg mx-auto">

@@ -40,7 +40,7 @@ export default function ConsumerHomePage(): React.ReactElement {
   });
 
   // Recent (last 5 total — for "recent" section)
-  const { data: recent = [], isLoading: recentLoading } = useQuery({
+  const { data: recent = [] } = useQuery({
     queryKey: bookingKeys.list({ userId, limit: 5 }),
     queryFn:  () => fetchMyBookings({ userId, limit: 5 }),
     enabled:  !!userId,

@@ -18,7 +18,7 @@
 import { useState }                    from 'react';
 import { useParams }                   from 'next/navigation';
 import Link                            from 'next/link';
-import { useQuery, useQueryClient }    from '@tanstack/react-query';
+import { useQuery }                    from '@tanstack/react-query';
 import { cn }                          from '@/lib/utils/cn';
 import { useRequireAuth }              from '@/hooks/use-require-auth';
 import { BookingStatusBadge }          from '@/components/booking/booking-status-badge';
@@ -28,10 +28,8 @@ import { fetchBooking, bookingKeys }   from '@/lib/api/booking.api';
 import { QrDisplay }                   from '@/components/qr/qr-display';
 import { BookingPricingBreakdown }     from '@/components/pricing/pricing-breakdown';
 import {
-  formatDate, formatTime, formatPrice,
-  BOOKING_STATUS_CONFIG,
-  type Booking,
-} from '@/types/booking.types';
+  formatDate, formatTime,
+  BOOKING_STATUS_CONFIG } from '@/types/booking.types';
 
 export default function BookingDetailPage(): React.ReactElement {
   const { id }                       = useParams<{ id: string }>();
@@ -42,8 +40,7 @@ export default function BookingDetailPage(): React.ReactElement {
     queryKey: bookingKeys.detail(id),
     queryFn:  () => fetchBooking(id),
     enabled:  !!id && !authLoading,
-    retry:    1,
-  });
+    retry:    1 });
 
   if (authLoading || isLoading) {
     return (
@@ -70,7 +67,6 @@ export default function BookingDetailPage(): React.ReactElement {
   const cfg          = BOOKING_STATUS_CONFIG[booking.status];
   const cancellable  = cfg.cancellable;
   const reschedulable = cfg.reschedulable;
-  const balance      = (booking.finalPriceMinor ?? 0) - booking.amountPaidMinor;
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-5">

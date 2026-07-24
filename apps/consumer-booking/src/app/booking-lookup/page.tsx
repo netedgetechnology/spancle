@@ -22,7 +22,6 @@ import type { BookingStatus } from '@/types/booking.types';
 export default function BookingLookupPage(): React.ReactElement {
   const searchParams = useSearchParams();
   const token    = searchParams.get('token') ?? '';
-  const qrParam  = searchParams.get('qr')    ?? undefined;
 
   const { data, isLoading, error } = useQuery({
     queryKey: guestLookupKeys.byToken(token),
@@ -116,7 +115,6 @@ export default function BookingLookupPage(): React.ReactElement {
               bookingRef={data.reference}
               bookingStatus={data.status as BookingStatus}
               startsAt={data.startsAt}
-              qrContent={qrParam}
             />
           </div>
         </div>

@@ -29,11 +29,11 @@ import type { GuestCustomerFields }  from '@/components/booking/guest-customer-f
 import { fetchVenues, venueKeys }    from '@/lib/api/venue.api';
 import { fetchCourts, courtKeys }    from '@/lib/api/court.api';
 import { fetchDaySlots, slotKeys }   from '@/lib/api/slot.api';
-import { createBooking, bookingKeys } from '@/lib/api/booking.api';
+import { createBooking } from '@/lib/api/booking.api';
 import { issueGuestSession, createGuestBooking } from '@/lib/api/guest.api';
 import { initiatePayment, initiateGuestPayment, type InitiatePaymentResult } from '@/lib/api/payment.api';
 import { PaymentStep, type GuestConfirmParams } from '@/components/payment/payment-step';
-import type { Venue, Court, Slot, CreateBookingPayload } from '@/types/booking.types';
+import type { Slot, CreateBookingPayload } from '@/types/booking.types';
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
 
@@ -222,10 +222,6 @@ export default function BookPage(): React.ReactElement {
   };
 
   const isSubmitting = memberMutation.isPending || guestMutation.isPending;
-
-  // Slot selection is where the booking is submitted (step 4 for member, step 4 for guest)
-  // Step 5 (member) and step 6 (guest) are the payment step rendered by PaymentStep
-  const isFinalStep = step === steps[steps.length - 1]!.id;
 
   const goBack = () => {
     if (step > 1) {

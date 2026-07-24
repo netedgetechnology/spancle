@@ -14,7 +14,7 @@ import { useSession }            from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 
 export function useRequireAuth(): { isLoading: boolean; isAuthenticated: boolean } {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router   = useRouter();
   const pathname = usePathname();
 

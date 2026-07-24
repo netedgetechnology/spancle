@@ -24,7 +24,7 @@ import { fetchCourt, courtKeys }        from '@/lib/api/court.api';
 import { fetchVenue, venueKeys }        from '@/lib/api/venue.api';
 import { SlotPricingBreakdown }            from '@/components/pricing/pricing-breakdown';
 import {
-  formatDate, formatTime,
+  formatDate, formatTime, totalDuration,
   BOOKING_STATUS_CONFIG,
   type Slot,
 } from '@/types/booking.types';
