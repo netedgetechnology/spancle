@@ -87,5 +87,5 @@ export const authOptions: NextAuthOptions = {
     maxAge:   8 * 60 * 60,
   },
 
-  secret: NEXTAUTH_SECRET || (() => { throw new Error('NEXTAUTH_SECRET is not set'); })(),
+  secret: NEXTAUTH_SECRET || undefined,
 };
