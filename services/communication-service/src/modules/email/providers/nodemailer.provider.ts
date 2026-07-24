@@ -89,6 +89,22 @@ export class NodemailerProvider extends EmailProvider implements OnModuleInit {
     }
   }
 
+  // ── Public verify ────────────────────────────────────────────────────────
+
+  /**
+   * verify() — tests the SMTP connection.
+   * Returns true when SMTP is configured and reachable.
+   * Returns false when SMTP is not configured (not an error — just unconfigured).
+   * Throws when SMTP is configured but unreachable.
+   *
+   * Used by HealthController.checkSmtp().
+   */
+  async verify(): Promise<boolean> {
+    if (!this.configured || !this.transporter) return false;
+    await this.transporter.verify();
+    return true;
+  }
+
   // ── Core send ─────────────────────────────────────────────────────────────
 
   /**

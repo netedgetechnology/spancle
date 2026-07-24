@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
   const port = config.get<number>('PORT', 3007);
 
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', { exclude: ['health', 'health/ready', 'metrics/queue'] });
 
   app.useGlobalPipes(
     new ValidationPipe({

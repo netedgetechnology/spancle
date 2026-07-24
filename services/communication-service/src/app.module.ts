@@ -10,6 +10,7 @@ import { EmailModule }        from './modules/email/email.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { MessageModule } from './modules/message/message.module';
 import { TemplateModule } from './modules/template/template.module';
+import { HealthModule }   from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { TemplateModule } from './modules/template/template.module';
     EventBusModule,
     EmailModule,
     NotificationModule, MessageModule, TemplateModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

@@ -1,4 +1,5 @@
-import { Logger, Inject }                  from '@nestjs/common';
+import { Inject }                            from '@nestjs/common';
+import { CorrelationLogger }                from '../../../common/logging/correlation-logger';
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 /** Minimal Job shape from BullMQ/Bull — avoids direct 'bull' peer dep import. */
 interface EmailJob {
@@ -42,7 +43,7 @@ import {
  */
 @Processor(EMAIL_QUEUE)
 export class EmailQueueConsumer {
-  private readonly logger = new Logger(EmailQueueConsumer.name);
+  private readonly log = new CorrelationLogger(EmailQueueConsumer.name);
 
   constructor(
     private readonly notificationRepo: NotificationRepository,
@@ -55,10 +56,7 @@ export class EmailQueueConsumer {
   async handleSendEmail(job: EmailJob): Promise<void> {
     const { notificationId, tenantId, recipientEmail, templateSlug, locale, variables } = job.data;
 
-    this.logger.debug(
-      `Processing email job — jobId=${job.id} notificationId=${notificationId} ` +
-      `template=${templateSlug} locale=${locale} to=${recipientEmail}`,
-    );
+    this.log.debug('Processing email job', { notificationId, queueJobId: String(job.id), tenantId, templateSlug, recipientEmail });
 
     // 1. Mark as processing
     await this.notificationRepo.markProcessing(notificationId);
@@ -71,7 +69,7 @@ export class EmailQueueConsumer {
 
     if (!rendered) {
       const msg = `Template not found — slug=${templateSlug} locale=${locale} tenant=${tenantId}`;
-      this.logger.error(msg);
+      this.log.error(msg, undefined, { notificationId, queueJobId: String(job.id), tenantId, templateSlug });
       await this.notificationRepo.markFailed(notificationId, msg);
       // Do NOT rethrow — a missing template is a permanent failure, not retryable
       return;
@@ -88,10 +86,7 @@ export class EmailQueueConsumer {
     // 4a. Success
     if (result.success) {
       await this.notificationRepo.markDelivered(notificationId, result.messageId ?? null);
-      this.logger.log(
-        `Email delivered — notificationId=${notificationId} ` +
-        `messageId=${result.messageId ?? 'none'} to=${recipientEmail}`,
-      );
+      this.log.info(`Email delivered — messageId=${result.messageId ?? 'none'}`, { notificationId, queueJobId: String(job.id), tenantId, templateSlug, recipientEmail });
       return;
     }
 
@@ -99,10 +94,7 @@ export class EmailQueueConsumer {
     const error = result.error ?? 'Unknown delivery error';
     await this.notificationRepo.markAttemptFailed(notificationId, error);
 
-    this.logger.warn(
-      `Email delivery attempt failed (attempt ${job.attemptsMade + 1}) — ` +
-      `notificationId=${notificationId} error=${error}`,
-    );
+    this.log.warn(`Email delivery attempt failed (attempt ${job.attemptsMade + 1}) — ${error}`, { notificationId, queueJobId: String(job.id), tenantId, templateSlug, recipientEmail });
 
     throw new Error(error);   // BullMQ catches this and re-queues if attempts remain
   }
@@ -114,11 +106,7 @@ export class EmailQueueConsumer {
   @OnQueueFailed()
   async onFailed(job: EmailJob, err: Error): Promise<void> {
     const { notificationId } = job.data;
-    this.logger.error(
-      `Email job permanently failed — jobId=${job.id} ` +
-      `notificationId=${notificationId} attempts=${job.attemptsMade} ` +
-      `error=${err.message}`,
-    );
+    this.log.error(`Email job permanently failed — attempts=${job.attemptsMade}`, err, { notificationId, queueJobId: String(job.id) });
     await this.notificationRepo.markFailed(notificationId, err.message);
   }
 }
