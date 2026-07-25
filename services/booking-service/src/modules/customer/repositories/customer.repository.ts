@@ -22,6 +22,9 @@ export interface CustomerProfile {
     noShows:  number;
     totalSpendMinor: number;
     currency: string | null;
+    membershipBookings:   number;
+    totalDiscountMinor:   number;
+    totalWalletUsedMinor: number;
   };
   recentBookings: Array<{
     id:        string;
@@ -165,6 +168,7 @@ export class CustomerRepository {
         total: string; active: string; completed: string;
         cancelled: string; no_shows: string;
         total_spend: string; currency: string | null;
+        membership_bookings: string; total_discount: string; total_wallet: string;
       }]>(`
         SELECT
           COUNT(*)                                                             AS total,
@@ -173,7 +177,10 @@ export class CustomerRepository {
           COUNT(*) FILTER (WHERE status IN ('cancelled','refunded'))          AS cancelled,
           COUNT(*) FILTER (WHERE status = 'no_show')                         AS no_shows,
           COALESCE(SUM(amount_paid_minor), 0)                                AS total_spend,
-          MAX(currency)                                                       AS currency
+          MAX(currency)                                                       AS currency,
+          COUNT(*) FILTER (WHERE membership_id IS NOT NULL)                  AS membership_bookings,
+          COALESCE(SUM(discount_minor), 0)                                   AS total_discount,
+          COALESCE(SUM(wallet_amount_minor), 0)                              AS total_wallet
         FROM bookings
         WHERE tenant_id = $1
           AND customer_id = $2
@@ -210,13 +217,16 @@ export class CustomerRepository {
       customer,
       familyMembers,
       bookingStats: {
-        total:           Number(stats.total),
-        active:          Number(stats.active),
-        completed:       Number(stats.completed),
-        cancelled:       Number(stats.cancelled),
-        noShows:         Number(stats.no_shows),
-        totalSpendMinor: Number(stats.total_spend),
-        currency:        stats.currency,
+        total:             Number(stats.total),
+        active:            Number(stats.active),
+        completed:         Number(stats.completed),
+        cancelled:         Number(stats.cancelled),
+        noShows:           Number(stats.no_shows),
+        totalSpendMinor:   Number(stats.total_spend),
+        currency:          stats.currency,
+        membershipBookings: Number(stats.membership_bookings),
+        totalDiscountMinor: Number(stats.total_discount),
+        totalWalletUsedMinor: Number(stats.total_wallet),
       },
       recentBookings: recentBookings.map((r) => ({
         id:              r.id,

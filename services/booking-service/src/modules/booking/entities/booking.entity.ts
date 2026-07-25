@@ -186,6 +186,28 @@ export class BookingEntity {
   @Column({ name: 'customer_id', type: 'uuid', nullable: true })
   customerId!: string | null;
 
+  // ── Membership / entitlement tracking ─────────────────────────────────────
+
+  /** FK to MembershipEntity when an entitlement was consumed for this booking. */
+  @Column({ name: 'membership_id', type: 'uuid', nullable: true })
+  membershipId!: string | null;
+
+  /** Benefit type consumed (e.g. 'court_credit'). null = no entitlement used. */
+  @Column({ name: 'entitlement_type', type: 'varchar', length: 80, nullable: true })
+  entitlementType!: string | null;
+
+  /** FK to the MembershipTransactionEntity row recording the entitlement debit. */
+  @Column({ name: 'entitlement_txn_id', type: 'uuid', nullable: true })
+  entitlementTxnId!: string | null;
+
+  /** Discount applied via membership pricing rules (minor units). */
+  @Column({ name: 'discount_minor', type: 'int', nullable: false, default: 0 })
+  discountMinor!: number;
+
+  /** Amount paid from customer wallet (minor units). */
+  @Column({ name: 'wallet_amount_minor', type: 'int', nullable: false, default: 0 })
+  walletAmountMinor!: number;
+
   /** Customer full name — present for both member and guest bookings */
   @Column({ name: 'customer_name', type: 'varchar', length: 255, nullable: false })
   customerName!: string;

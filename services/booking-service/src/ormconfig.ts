@@ -21,6 +21,7 @@ import { BookingRulesEntity }   from './modules/booking-rules/entities/booking-r
 import { CustomerEntity }        from './modules/customer/entities/customer.entity';
 import { CreateBookingRules1722100000000 }            from './migrations/1722100000000-CreateBookingRules';
 import { CreateCustomerAndLinkBookings1722200000000 } from './migrations/1722200000000-CreateCustomerAndLinkBookings';
+import { AddBookingMembershipColumns1722300000000 }      from './migrations/1722300000000-AddBookingMembershipColumns';
 
 const dataSource = new DataSource({
   type:               'postgres',
@@ -41,7 +42,7 @@ const dataSource = new DataSource({
     BookingRulesEntity,
     CustomerEntity,
   ],
-  migrations:         [CreateBookingRules1722100000000, CreateCustomerAndLinkBookings1722200000000],
+  migrations:         [CreateBookingRules1722100000000, CreateCustomerAndLinkBookings1722200000000, AddBookingMembershipColumns1722300000000],
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,
   logging:            ['error', 'migration'],

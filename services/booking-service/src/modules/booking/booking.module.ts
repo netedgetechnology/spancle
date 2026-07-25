@@ -32,6 +32,8 @@ import { forwardRef }               from '@nestjs/common';
 import { QrModule }                 from '../qr/qr.module';
 import { BookingRulesModule }       from '../booking-rules/booking-rules.module';
 import { CustomerModule }          from '../customer/customer.module';
+import { MembershipModule }        from '../membership/membership.module';
+import { MembershipIntegrationService } from './services/membership-integration.service';
 
 @Module({
   imports: [
@@ -48,6 +50,7 @@ import { CustomerModule }          from '../customer/customer.module';
     forwardRef(() => QrModule),   // consumer QR endpoint — breaks BookingModule↔QrModule cycle
     BookingRulesModule,              // provides BookingRulesService for rule enforcement
     CustomerModule,                  // provides CustomerService for customer resolution
+    MembershipModule,                // provides MembershipService + EntitlementService
   ],
   controllers: [BookingController],
   providers: [
@@ -57,6 +60,7 @@ import { CustomerModule }          from '../customer/customer.module';
     BookingLogRepository,
     BookingValidationService,
     BookingAuthorizationService,
+    MembershipIntegrationService,
     BookingService,
     BookingSchedulerService,
   ],

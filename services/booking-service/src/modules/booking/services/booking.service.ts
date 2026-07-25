@@ -28,6 +28,7 @@ import { BookingEntity, type BookingStatus } from '../entities/booking.entity';
 import { SlotRepository }  from '../../slot/repositories/slot.repository';
 import { BookingRulesService } from '../../booking-rules/services/booking-rules.service';
 import { CustomerService }    from '../../customer/services/customer.service';
+import { MembershipIntegrationService } from './membership-integration.service';
 import type { CreateBookingDto }    from '../dto/create-booking.dto';
 import type { BookingQueryDto }     from '../dto/booking-query.dto';
 import type {
@@ -77,6 +78,7 @@ export class BookingService {
     private readonly configService:        ConfigService,
     private readonly bookingRulesService:  BookingRulesService,
     private readonly customerService:      CustomerService,
+    private readonly membershipIntegration: MembershipIntegrationService,
   ) {}
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -107,10 +109,22 @@ export class BookingService {
       totalMins,
       actorId,
     });
-    const totalPrice  = slots.every((s) => s.effectivePriceMinor !== null)
+    const rawTotalPrice = slots.every((s) => s.effectivePriceMinor !== null)
       ? slots.reduce((s, sl) => s + (sl.effectivePriceMinor ?? 0), 0)
       : null;
     const currency    = slots[0]!.currency;
+
+    // ── Membership validation and pricing ──────────────────────────────────
+    const membershipResult = await this.membershipIntegration.validateAndComputePrice({
+      dto,
+      tenantId,
+      slotPriceMinor: rawTotalPrice,
+      courtId:        dto.courtId,
+      branchId:       dto.branchId,
+      sportId:        dto.sportId ?? null,
+    });
+    const totalPrice   = membershipResult.adjustedPriceMinor ?? rawTotalPrice;
+    const discountMinor = membershipResult.discountMinor;
     const reference   = BookingUtils.generateReference();
 
     const booking = await this.dataSource.transaction(async (manager) => {
@@ -158,6 +172,9 @@ export class BookingService {
           customerNotes:    dto.customerNotes     ?? null,
           internalNotes:    dto.internalNotes     ?? null,
           metadata:         dto.metadata          ?? null,
+          membershipId:     membershipResult.context?.membershipId    ?? null,
+          entitlementType:  membershipResult.shouldConsumeCredit ? 'court_credit' : null,
+          discountMinor,
           createdById:      actorId,
           updatedById:      actorId,
         }),
@@ -369,6 +386,15 @@ export class BookingService {
       previousStatus: booking.status, newStatus: 'confirmed',
     });
 
+    // Consume membership entitlement if a credit was reserved
+    const txnId = await this.membershipIntegration.consumeEntitlement({ booking, tenantId, actorId });
+    if (txnId) {
+      await this.dataSource.query(
+        'UPDATE bookings SET entitlement_txn_id = $1 WHERE id = $2 AND tenant_id = $3',
+        [txnId, id, tenantId],
+      );
+    }
+
     await this.emitStatusChange(tenantId, id, actorId, booking.status, 'confirmed');
     await this.eventEmitter.emitAsync(BookingEvents.CONFIRMED, {
       tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
@@ -417,6 +443,9 @@ export class BookingService {
 
       return b;
     });
+
+    // Restore entitlement + wallet on cancellation (non-fatal)
+    await this.membershipIntegration.restoreEntitlement({ booking, tenantId, actorId });
 
     await this.logRepository.insert({
       tenantId, bookingId: id, action: 'cancelled',
