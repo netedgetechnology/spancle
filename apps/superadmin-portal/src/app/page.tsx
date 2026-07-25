@@ -20,7 +20,7 @@ export default async function AdminRootPage(): Promise<never> {
   const session = await getServerSession(authOptions);
 
   if (session && (session.user as { role?: string })?.role === 'SUPER_ADMIN') {
-    redirect('/tenants');
+    redirect('/dashboard');
   }
 
   redirect('/login');
