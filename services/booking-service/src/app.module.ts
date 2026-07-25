@@ -11,6 +11,7 @@ import { TenantGuard, RbacGuard } from './modules/booking/guards/booking.guard';
 import { GuestModule }         from './modules/guest/guest.module';
 import { BookingRulesModule }  from './modules/booking-rules/booking-rules.module';
 import { CustomerModule }      from './modules/customer/customer.module';
+import { WaitlistModule }      from './modules/waitlist/waitlist.module';
 import { PaymentModule }       from './modules/payment/payment.module';
 import { EventBusModule }      from './common/event-bus/event-bus.module';
 import { BookingModule }    from './modules/booking/booking.module';
@@ -70,6 +71,7 @@ import { FinanceModule }    from './modules/finance/finance.module';
     GuestModule,
     BookingRulesModule,
     CustomerModule,
+    WaitlistModule,
     PaymentModule,
   ],
   providers: [
