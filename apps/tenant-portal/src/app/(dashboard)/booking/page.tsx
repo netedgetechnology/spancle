@@ -14,6 +14,7 @@ import { fetchCalendarSlots, slotKeys }      from '@/lib/slot.api';
 import { rateCardKeys }                       from '@/lib/rate-card.api';
 import type { Slot }                         from '@/types/slot.types';
 import type { RateCard }                     from '@/lib/rate-card.api';
+import { RouteDebugPanel } from '@/components/debug/route-debug-panel'; // TEMP_DEBUG
 
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }
 
@@ -117,6 +118,7 @@ export default function BookingDashboardPage(): React.ReactElement {
   const branchName = branches.find((b) => b.id === branchId)?.name ?? '';
 
   return (
+    <>
     <div className="flex flex-col gap-3" style={{ height: 'calc(100vh - 6rem)' }}>
       {/* Page header */}
       <div className="flex-shrink-0 flex items-center justify-between gap-2">
@@ -185,5 +187,7 @@ export default function BookingDashboardPage(): React.ReactElement {
         onClose={() => setDrawerBookingId(null)}
       />
     </div>
+    <RouteDebugPanel routeSegment="booking" />
+    </>
   );
 }

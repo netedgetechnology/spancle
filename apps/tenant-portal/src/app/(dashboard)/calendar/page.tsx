@@ -15,6 +15,7 @@ import {
   type CalendarFilters,
   type Slot,
 } from '@/types/slot.types';
+import { RouteDebugPanel } from '@/components/debug/route-debug-panel'; // TEMP_DEBUG
 
 export default function CalendarPage(): React.ReactElement {
   const [filters, setFilters]             = useState<CalendarFilters>(DEFAULT_FILTERS);
@@ -53,6 +54,7 @@ export default function CalendarPage(): React.ReactElement {
   };
 
   return (
+    <>
     <div className="flex flex-col gap-5 relative">
       {showBookingModal && (
         <BookingModal
@@ -123,5 +125,7 @@ export default function CalendarPage(): React.ReactElement {
         </div>
       )}
     </div>
+    <RouteDebugPanel routeSegment="calendar" />
+    </>
   );
 }

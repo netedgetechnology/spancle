@@ -24,6 +24,11 @@ const RESERVED_SLUGS = new Set([
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname, hostname } = request.nextUrl;
 
+  // TEMP_DEBUG
+  if (!pathname.startsWith('/_next') && !pathname.startsWith('/favicon')) {
+    console.log(`[MW] ${request.method} ${pathname} | host=${hostname}`);
+  }
+
   // Pass-through for static assets and NextAuth internal routes
   if (
     pathname.startsWith('/_next') ||
@@ -42,11 +47,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const customDomain = request.headers.get('x-custom-domain');
 
   if (!tenantSlug && !customDomain) {
+    console.log(`[MW] no tenantSlug and no customDomain → /no-tenant`);
     return NextResponse.redirect(new URL('/no-tenant', request.url));
   }
 
   // Reject reserved infrastructure slugs
   if (tenantSlug && RESERVED_SLUGS.has(tenantSlug.toLowerCase())) {
+    console.log(`[MW] RESERVED slug=${tenantSlug} → /no-tenant`);
     return NextResponse.redirect(new URL('/no-tenant', request.url));
   }
 
@@ -64,6 +71,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Require session for all other routes
   const token = await getToken({ req: request, secret: process.env['NEXTAUTH_SECRET'] });
 
+  console.log(`[MW] tenantSlug=${tenantSlug ?? 'null'} token=${token ? 'PRESENT' : 'MISSING'} pathname=${pathname}`);
+
   if (!token) {
     const url = new URL('/login', request.url);
     url.searchParams.set('callbackUrl', pathname);
@@ -75,6 +84,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL('/unauthorized', request.url));
   }
 
+  console.log(`[MW] PASS-THROUGH tenantSlug=${tenantSlug} pathname=${pathname}`);
   const response = NextResponse.next();
   response.headers.set('x-tenant-id', token['tenantId'] as string);
   if (tenantSlug) response.headers.set('x-tenant-slug', tenantSlug);

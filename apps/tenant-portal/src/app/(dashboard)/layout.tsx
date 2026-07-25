@@ -20,6 +20,8 @@ const NAV_ITEMS = [
 ];
 
 export default function DashboardRouteLayout({ children }: DashboardRouteLayoutProps): React.ReactElement {
+  // TEMP_DEBUG
+  console.log('[LAYOUT] DashboardRouteLayout rendered (server)');
   return (
     <DashboardLayout navItems={NAV_ITEMS} pageTitle="Dashboard">
       {children}
