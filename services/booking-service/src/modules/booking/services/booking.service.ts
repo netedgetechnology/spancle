@@ -27,6 +27,7 @@ import type {
 import { BookingEntity, type BookingStatus } from '../entities/booking.entity';
 import { SlotRepository }  from '../../slot/repositories/slot.repository';
 import { BookingRulesService } from '../../booking-rules/services/booking-rules.service';
+import { CustomerService }    from '../../customer/services/customer.service';
 import type { CreateBookingDto }    from '../dto/create-booking.dto';
 import type { BookingQueryDto }     from '../dto/booking-query.dto';
 import type {
@@ -75,6 +76,7 @@ export class BookingService {
     private readonly dataSource:           DataSource,
     private readonly configService:        ConfigService,
     private readonly bookingRulesService:  BookingRulesService,
+    private readonly customerService:      CustomerService,
   ) {}
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -176,6 +178,28 @@ export class BookingService {
       }
 
       return b;
+    });
+
+    // Resolve or auto-create customer record (non-fatal — never blocks booking)
+    void this.customerService.resolveOrCreateForBooking({
+      tenantId,
+      userId:   dto.customer.userId  ?? null,
+      email:    dto.customer.email,
+      name:     dto.customer.name,
+      phone:    dto.customer.phone   ?? null,
+      isMember: dto.customer.isMember ?? false,
+      isGuest:  !dto.customer.userId,
+    }).then((customerId) => {
+      if (customerId) {
+        void this.dataSource.query(
+          'UPDATE bookings SET customer_id = $1 WHERE id = $2 AND tenant_id = $3',
+          [customerId, booking.id, tenantId],
+        );
+      }
+    }).catch((err: unknown) => {
+      this.logger.warn(`Customer resolution failed for booking ${booking.id}: ${
+        err instanceof Error ? err.message : String(err)
+      }`);
     });
 
     await this.logRepository.insert({

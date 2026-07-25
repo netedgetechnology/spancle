@@ -179,6 +179,13 @@ export class BookingEntity {
   @Column({ name: 'user_id', type: 'uuid', nullable: true })
   userId!: string | null;
 
+  /**
+   * FK to CustomerEntity — set on booking creation.
+   * null on legacy bookings created before the customer domain was introduced.
+   */
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true })
+  customerId!: string | null;
+
   /** Customer full name — present for both member and guest bookings */
   @Column({ name: 'customer_name', type: 'varchar', length: 255, nullable: false })
   customerName!: string;
