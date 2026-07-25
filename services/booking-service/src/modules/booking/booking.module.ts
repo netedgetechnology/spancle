@@ -30,6 +30,7 @@ import { PricingModule }            from '../pricing/pricing.module';
 // NestJS forwardRef() breaks the cycle.
 import { forwardRef }               from '@nestjs/common';
 import { QrModule }                 from '../qr/qr.module';
+import { BookingRulesModule }       from '../booking-rules/booking-rules.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { QrModule }                 from '../qr/qr.module';
     CourtModule,
     VenueModule,
     forwardRef(() => QrModule),   // consumer QR endpoint — breaks BookingModule↔QrModule cycle
+    BookingRulesModule,              // provides BookingRulesService for rule enforcement
   ],
   controllers: [BookingController],
   providers: [

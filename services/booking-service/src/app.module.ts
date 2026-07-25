@@ -9,6 +9,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 
 import { TenantGuard, RbacGuard } from './modules/booking/guards/booking.guard';
 import { GuestModule }         from './modules/guest/guest.module';
+import { BookingRulesModule }  from './modules/booking-rules/booking-rules.module';
 import { PaymentModule }       from './modules/payment/payment.module';
 import { EventBusModule }      from './common/event-bus/event-bus.module';
 import { BookingModule }    from './modules/booking/booking.module';
@@ -66,6 +67,7 @@ import { FinanceModule }    from './modules/finance/finance.module';
     BookingModule, SlotModule, VenueModule, CourtModule, QrModule, MembershipModule,
     EventBusModule,
     GuestModule,
+    BookingRulesModule,
     PaymentModule,
   ],
   providers: [

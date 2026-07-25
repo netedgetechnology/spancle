@@ -17,6 +17,8 @@ import { HolidayEntity }        from './modules/slot/entities/holiday.entity';
 import { VenueEntity }          from './modules/venue/entities/venue.entity';
 import { QrTokenEntity }        from './modules/qr/entities/qr-token.entity';
 import { QrScanLogEntity }      from './modules/qr/entities/qr-scan-log.entity';
+import { BookingRulesEntity }   from './modules/booking-rules/entities/booking-rules.entity';
+import { CreateBookingRules1722100000000 } from './migrations/1722100000000-CreateBookingRules';
 
 const dataSource = new DataSource({
   type:               'postgres',
@@ -34,8 +36,9 @@ const dataSource = new DataSource({
     VenueEntity,
     QrTokenEntity,
     QrScanLogEntity,
+    BookingRulesEntity,
   ],
-  migrations:         ['dist/migrations/*.js'],
+  migrations:         [CreateBookingRules1722100000000],
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,
   logging:            ['error', 'migration'],

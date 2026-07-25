@@ -26,6 +26,7 @@ import type {
 } from '../events/booking.events';
 import { BookingEntity, type BookingStatus } from '../entities/booking.entity';
 import { SlotRepository }  from '../../slot/repositories/slot.repository';
+import { BookingRulesService } from '../../booking-rules/services/booking-rules.service';
 import type { CreateBookingDto }    from '../dto/create-booking.dto';
 import type { BookingQueryDto }     from '../dto/booking-query.dto';
 import type {
@@ -73,6 +74,7 @@ export class BookingService {
     private readonly eventEmitter:         EventEmitter2,
     private readonly dataSource:           DataSource,
     private readonly configService:        ConfigService,
+    private readonly bookingRulesService:  BookingRulesService,
   ) {}
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -91,6 +93,18 @@ export class BookingService {
 
     const sortedSlots = [...slots].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
     const startsAt    = sortedSlots[0]!.startAt;
+    const _endsAt     = sortedSlots[sortedSlots.length - 1]!.endAt;
+    const _totalMins  = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
+
+    // Enforce booking rules (advance window, notice, duration, limits, members-only)
+    await this.bookingRulesService.enforceCreateRules({
+      dto,
+      tenantId,
+      startsAt,
+      endsAt:    _endsAt,
+      totalMins: _totalMins,
+      actorId,
+    });
     const endsAt      = sortedSlots[sortedSlots.length - 1]!.endAt;
     const totalMins   = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
     const totalPrice  = slots.every((s) => s.effectivePriceMinor !== null)
@@ -406,6 +420,10 @@ export class BookingService {
     tenantId: string,
     actorId:  string,
   ): Promise<BookingEntity> {
+    const bookingForRules = await this.bookingRepository.findByIdOrFail(id, tenantId);
+    await this.bookingRulesService.enforceRescheduleRules({
+      booking: bookingForRules, dto, tenantId, actorId,
+    });
     const booking = await this.findOne(id, tenantId);
     this.validationService.assertReschedulable(booking);
 
