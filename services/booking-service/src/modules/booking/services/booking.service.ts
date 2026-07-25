@@ -93,20 +93,18 @@ export class BookingService {
 
     const sortedSlots = [...slots].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
     const startsAt    = sortedSlots[0]!.startAt;
-    const _endsAt     = sortedSlots[sortedSlots.length - 1]!.endAt;
-    const _totalMins  = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
+    const endsAt      = sortedSlots[sortedSlots.length - 1]!.endAt;
+    const totalMins   = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
 
     // Enforce booking rules (advance window, notice, duration, limits, members-only)
     await this.bookingRulesService.enforceCreateRules({
       dto,
       tenantId,
       startsAt,
-      endsAt:    _endsAt,
-      totalMins: _totalMins,
+      endsAt,
+      totalMins,
       actorId,
     });
-    const endsAt      = sortedSlots[sortedSlots.length - 1]!.endAt;
-    const totalMins   = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
     const totalPrice  = slots.every((s) => s.effectivePriceMinor !== null)
       ? slots.reduce((s, sl) => s + (sl.effectivePriceMinor ?? 0), 0)
       : null;
@@ -358,12 +356,16 @@ export class BookingService {
   // ── Cancel ─────────────────────────────────────────────────────────────────
 
   async cancel(
-    id:       string,
-    dto:      CancelBookingDto,
-    tenantId: string,
-    actorId:  string,
+    id:        string,
+    dto:       CancelBookingDto,
+    tenantId:  string,
+    actorId:   string,
+    actorRole  = 'PLAYER',
   ): Promise<BookingEntity> {
     const booking = await this.findOne(id, tenantId);
+    await this.bookingRulesService.enforceCancellationRules({
+      booking, dto, tenantId, actorRole,
+    });
     this.validationService.assertCancellable(booking);
 
     const updated = await this.dataSource.transaction(async (manager) => {

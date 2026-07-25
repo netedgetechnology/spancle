@@ -179,7 +179,7 @@ export class BookingController {
   ) {
     const booking = await this.bookingService.findOne(id, tenant.tenantId);
     this.authzService.assertOwnerOrStaff(booking, actor, 'cancellation');
-    return this.bookingService.cancel(id, dto, tenant.tenantId, actor.actorId);
+    return this.bookingService.cancel(id, dto, tenant.tenantId, actor.actorId, actor.role);
   }
 
   @Patch(':id/reschedule')
