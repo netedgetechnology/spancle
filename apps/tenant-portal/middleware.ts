@@ -16,7 +16,7 @@ import { getToken } from 'next-auth/jwt';
  */
 
 const RESERVED_SLUGS = new Set([
-  'www', 'manage', 'admin', 'api', 'booking', 'book',
+  'www', 'manage', 'admin', 'api',
   'mail', 'ftp', 'smtp', 'ns1', 'ns2', 'staging', 'dev',
   'cdn', 'static', 'assets', 'status', 'help', 'support',
 ]);
