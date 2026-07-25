@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 // Cross-module imports (no circular dependency)
 import { PlanModule }      from '../plan/plan.module';
+import { PackageModule }   from '../package/package.module';
 import { PlatformModule }  from '../../platform/platform.module';
 
 // Entities
@@ -62,6 +63,10 @@ import { GATEWAY_REGISTRY }                  from './interfaces/gateway-registry
 // Guards
 import { SuperAdminGuard }                   from '../admin/guards/super-admin.guard';
 
+// Cross-module class tokens (for @Inject('PlanService') / @Inject('PackageService') in DefaultPolicyResolver)
+import { PlanService }    from '../plan/services/plan.service';
+import { PackageService } from '../package/services/package.service';
+
 const ENTITIES = [
   CommercialRuleEntity,
   CommercialRuleVersionEntity,
@@ -108,6 +113,7 @@ const REPOSITORIES = [
   imports: [
     TypeOrmModule.forFeature(ENTITIES),
     PlanModule,               // provides PlanService for tenant→package resolution
+    PackageModule,            // provides PackageService for package resolution
     PlatformModule,           // provides PLATFORM_CONTRACT_PUBLISHER
   ],
   controllers: [CommercialDecisionController],
@@ -117,9 +123,11 @@ const REPOSITORIES = [
     { provide: RULE_RESOLVER,        useClass: DefaultRuleResolver },
     { provide: ENTITLEMENT_RESOLVER, useClass: DefaultEntitlementResolver },
     { provide: POLICY_RESOLVER,      useClass: DefaultPolicyResolver },
-    // String-token aliases for cross-module injection into DefaultPolicyResolver
-    { provide: 'PlanService',    useExisting: 'PlanService' },
-    { provide: 'PackageService', useExisting: 'PackageService' },
+    // String-token aliases so DefaultPolicyResolver can @Inject('PlanService') / @Inject('PackageService')
+    // without importing the class directly (avoids cross-module coupling).
+    // useExisting references the class token exported by PlanModule / PackageModule.
+    { provide: 'PlanService',    useExisting: PlanService },
+    { provide: 'PackageService', useExisting: PackageService },
     CommercialDecisionService,
     SuperAdminGuard,
   ],
