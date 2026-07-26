@@ -25,11 +25,9 @@ import { InvoiceEntity }           from '../entities/invoice.entity';
 import { PaymentEntity }           from '../entities/payment.entity';
 import { PaymentAllocationEntity } from '../entities/payment.entity';
 import { InvoiceTaxEntity }        from '../entities/invoice-line.entity';
-import {
-  PaymentGatewayAdapter,
-  StripeAdapter,
-  RazorpayAdapter,
-} from '../gateway/payment-gateway.adapter';
+import { PaymentGatewayAdapter } from '../gateway/payment-gateway.adapter';
+import { StripeAdapter }          from '../gateway/stripe.adapter';
+import { RazorpayAdapter }        from '../gateway/razorpay.adapter';
 import type {
   PrepareRefundDto,
   CompleteRefundDto,
@@ -138,11 +136,13 @@ export class RefundService {
     private readonly doubleEntryService: DoubleEntryService,
     private readonly periodService:      AccountingPeriodService,
     private readonly eventEmitter:       EventEmitter2,
+    private readonly stripeAdapter:    StripeAdapter,
+    private readonly razorpayAdapter:  RazorpayAdapter,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {
     this.adapters = new Map<string, PaymentGatewayAdapter>([
-      ['stripe',   new StripeAdapter()],
-      ['razorpay', new RazorpayAdapter()],
+      ['stripe',   this.stripeAdapter],
+      ['razorpay', this.razorpayAdapter],
     ]);
   }
 

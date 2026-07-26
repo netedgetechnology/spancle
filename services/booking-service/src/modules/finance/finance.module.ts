@@ -46,6 +46,7 @@ import { FinanceBookingRefundJobAdminController }    from './controllers/finance
 
 import { BookingFinanceListener }        from './listeners/booking-finance.listener';
 import { StripeAdapter }                 from './gateway/stripe.adapter';
+import { RazorpayAdapter }               from './gateway/razorpay.adapter';
 import { PAYMENT_GATEWAY_ADAPTERS }      from './gateway/payment-gateway.adapter';
 
 @Module({
@@ -90,7 +91,6 @@ import { PAYMENT_GATEWAY_ADAPTERS }      from './gateway/payment-gateway.adapter
     RefundRepository,
     PaymentCorrelationRepository,
     FinanceBookingRefundJobRepository,
-    StripeAdapter,
     AccountingPeriodService,
     DoubleEntryService,
     TaxResolver,
@@ -103,10 +103,11 @@ import { PAYMENT_GATEWAY_ADAPTERS }      from './gateway/payment-gateway.adapter
     FinanceBookingRefundJobService,
     BookingFinanceListener,
     StripeAdapter,
+    RazorpayAdapter,
     {
       provide:  PAYMENT_GATEWAY_ADAPTERS,
-      useFactory: (stripe: StripeAdapter) => [stripe],
-      inject:   [StripeAdapter],
+      useFactory: (stripe: StripeAdapter, razorpay: RazorpayAdapter) => [stripe, razorpay],
+      inject:   [StripeAdapter, RazorpayAdapter],
     },
   ],
   exports: [
@@ -130,6 +131,7 @@ import { PAYMENT_GATEWAY_ADAPTERS }      from './gateway/payment-gateway.adapter
     PaymentCorrelationRepository,
     FinanceBookingRefundJobRepository,
     StripeAdapter,
+    RazorpayAdapter,
   ],
 })
 export class FinanceModule {}
