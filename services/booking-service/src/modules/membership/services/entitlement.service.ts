@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 }        from '@nestjs/event-emitter';
 import { InjectDataSource }     from '@nestjs/typeorm';
-import { DataSource }           from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import { EntitlementRepository } from '../repositories/entitlement.repository';
 import { MembershipRepository }  from '../repositories/membership.repository';
 import {
@@ -330,6 +330,112 @@ export class EntitlementService {
     );
   }
 
+  /**
+   * refundWithManager()
+   *
+   * H-1 FIX: Manager-aware variant of refund() that participates in the
+   * caller's existing EntityManager transaction instead of opening its own.
+   *
+   * Called by MembershipIntegrationService.restoreEntitlementWithManager()
+   * which is in turn called from BookingService.cancel() inside the booking
+   * cancel transaction — ensuring booking status, slot release, and
+   * entitlement restoration are all covered by a single atomic transaction.
+   *
+   * Idempotency: checks for an existing 'refund' ledger row with the same
+   * originalTransactionId before inserting. A second call with the same
+   * parameters (e.g. cancel() retry) is a no-op that returns the current
+   * balance without double-crediting.
+   *
+   * The membership row lookup (findByIdOrFail) is done outside the
+   * transaction manager via the DataSource, which is a read-only lookup
+   * on a non-time-sensitive row; it does not need to be inside the
+   * transaction for correctness.
+   *
+   * @param manager          The EntityManager from the caller's transaction
+   * @param membershipId     FK to memberships
+   * @param dto              Refund parameters (same shape as refund())
+   * @param tenantId         Tenant isolation
+   * @param actorId          Who triggered the cancellation
+   * @param memberUserId     Pre-resolved userId from the membership row
+   *                         (avoids a second DB lookup inside the manager)
+   */
+  async refundWithManager(
+    manager:      EntityManager,
+    membershipId: string,
+    dto:          RefundEntitlementDto,
+    tenantId:     string,
+    actorId:      string,
+    memberUserId: string | null,
+  ): Promise<void> {
+    // Idempotency guard: if a refund row already references the original
+    // consume transaction, this is a retry — skip to avoid double-credit.
+    if (dto.originalTransactionId && dto.originalTransactionId.length > 0) {
+      const existing = await manager.query<Array<{ id: string }>>(
+        `SELECT id FROM membership_transactions
+         WHERE tenant_id        = $1
+           AND reference_id     = $2
+           AND reference_type   = 'transaction'
+           AND transaction_type = 'refund'
+         LIMIT 1`,
+        [tenantId, dto.originalTransactionId],
+      );
+      if (existing.length > 0) {
+        this.logger.warn(
+          `refundWithManager() idempotency hit — originalTxnId=${dto.originalTransactionId} ` +
+          `membershipId=${membershipId} — skipping duplicate refund`,
+        );
+        return;
+      }
+    }
+
+    const locked = await this.entitlementRepository.lockBalance(
+      membershipId, dto.benefitType, tenantId, manager,
+    );
+    if (!locked) {
+      // Balance row not found — membership may have been purged after cancel.
+      // Log and skip rather than aborting the entire cancellation transaction.
+      this.logger.warn(
+        `refundWithManager: entitlement balance for benefit="${dto.benefitType}" ` +
+        `membershipId=${membershipId} not found — skipping restore`,
+      );
+      return;
+    }
+
+    const balanceBefore = locked.balance;
+    const balanceAfter  = locked.balance + dto.quantity;
+
+    await manager.update(EntitlementBalanceEntity, { id: locked.id }, {
+      balance: balanceAfter,
+    });
+
+    await this.entitlementRepository.insertTransaction({
+      tenantId,
+      membershipId,
+      userId:          memberUserId ?? actorId,
+      transactionType: 'refund',
+      benefitType:     dto.benefitType,
+      quantityDelta:   +dto.quantity,
+      balanceBefore,
+      balanceAfter,
+      referenceId:     dto.originalTransactionId ?? null,
+      referenceType:   'transaction',
+      actorId,
+      note:            dto.note ?? null,
+    }, manager);
+
+    await this.entitlementRepository.insertAuditLog({
+      tenantId, membershipId,
+      action:         'entitlement_refunded',
+      actorId,        actorType: 'user',
+      previousStatus: null, newStatus: null,
+      note: `${dto.benefitType}: +${dto.quantity} refund (${balanceBefore} → ${balanceAfter}) [atomic cancel]`,
+    }, manager);
+
+    this.logger.log(
+      `refundWithManager: entitlement restored — membershipId=${membershipId} ` +
+      `benefit=${dto.benefitType} balance ${balanceBefore} → ${balanceAfter}`,
+    );
+  }
   // ── Adjust (admin) ────────────────────────────────────────────────────────
 
   /**

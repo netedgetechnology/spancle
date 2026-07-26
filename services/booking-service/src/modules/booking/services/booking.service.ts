@@ -442,33 +442,54 @@ export class BookingService {
     this.validationService.assertCancellable(booking);
 
     const updated = await this.dataSource.transaction(async (manager) => {
-      const b = await this.bookingRepository.updateById(id, tenantId, {
-        status:             'cancelled',
-        cancelledAt:        new Date(),
-        cancelledById:      dto.cancelledById ?? actorId,
-        cancellationReason: dto.reason,
-        updatedById:        actorId,
-      });
+      const SlotEntity = (await import('../../slot/entities/slot.entity')).SlotEntity;
 
-      // Release all slots back to available
+      // H-1 FIX: all three writes — booking status, slot release, and
+      // entitlement/wallet restore — execute on the SAME EntityManager so they
+      // commit or roll back atomically.
+      //
+      // Previously: bookingRepository.updateById() used its own repo connection
+      // (outside the transaction) and restoreEntitlement() opened a SECOND
+      // transaction. A failure between these two left a cancelled booking with
+      // no slot release, or a released booking with no credit restored.
+
+      // 1. Update booking status via manager (same transaction)
+      await manager.update(
+        BookingEntity,
+        { id, tenantId },
+        {
+          status:             'cancelled',
+          cancelledAt:        new Date(),
+          cancelledById:      dto.cancelledById ?? actorId,
+          cancellationReason: dto.reason,
+          updatedById:        actorId,
+          updatedAt:          new Date(),
+        },
+      );
+
+      // 2. Release all slots back to available (same transaction)
       for (const slotId of booking.slotIds) {
         await manager.update(
-          (await import('../../slot/entities/slot.entity')).SlotEntity,
+          SlotEntity,
           { id: slotId, tenantId },
           {
-            status:       'available',
-            bookingId:    null,
+            status:        'available',
+            bookingId:     null,
             reservedUntil: null,
-            updatedAt:    new Date(),
+            updatedAt:     new Date(),
           },
         );
       }
 
-      return b;
-    });
+      // 3. Restore membership entitlement + wallet (same transaction)
+      // throws if the refund fails so the whole transaction rolls back —
+      // preventing a booking from being cancelled without the credit restored.
+      await this.membershipIntegration.restoreEntitlementWithManager(
+        manager, booking, tenantId, actorId,
+      );
 
-    // Restore entitlement + wallet on cancellation (non-fatal)
-    await this.membershipIntegration.restoreEntitlement({ booking, tenantId, actorId });
+      return manager.findOneOrFail(BookingEntity, { where: { id, tenantId } });
+    });
 
     await this.logRepository.insert({
       tenantId, bookingId: id, action: 'cancelled',

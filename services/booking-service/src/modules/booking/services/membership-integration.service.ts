@@ -4,7 +4,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource }       from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import { MembershipService }    from '../../membership/services/membership.service';
 import { EntitlementService }   from '../../membership/services/entitlement.service';
 import type { BookingEntity }   from '../../booking/entities/booking.entity';
@@ -238,6 +238,86 @@ export class MembershipIntegrationService {
         amountMinor:  booking.walletAmountMinor,
         bookingRef:   booking.reference,
       });
+    }
+  }
+
+  /**
+   * restoreEntitlementWithManager()
+   *
+   * H-1 FIX: Atomically restores the membership entitlement AND wallet credit
+   * within the caller's EntityManager transaction.
+   *
+   * Called by BookingService.cancel() inside its cancellation transaction so
+   * that booking status, slot release, entitlement restore, and wallet refund
+   * all commit or roll back together.
+   *
+   * Delegates to EntitlementService.refundWithManager() which includes its own
+   * idempotency check — a cancel() retry will not double-credit the balance.
+   *
+   * @param manager  The EntityManager from BookingService.cancel()'s transaction
+   * @param booking  The booking being cancelled (must be fully populated)
+   * @param tenantId Tenant isolation
+   * @param actorId  Who triggered the cancellation (for the audit ledger)
+   */
+  async restoreEntitlementWithManager(
+    manager:  EntityManager,
+    booking:  import('../../booking/entities/booking.entity').BookingEntity,
+    tenantId: string,
+    actorId:  string,
+  ): Promise<void> {
+    // ── 1. Entitlement credit restore ────────────────────────────────────────
+    if (booking.membershipId && booking.entitlementType && booking.entitlementTxnId) {
+      // Resolve the membership userId outside the manager (read-only, non-critical)
+      let memberUserId: string | null = null;
+      try {
+        const mem = await this.membershipService.findOne(booking.membershipId, tenantId);
+        memberUserId = mem?.userId ?? null;
+      } catch {
+        // Non-fatal: userId will fall back to actorId inside refundWithManager
+      }
+
+      try {
+        await this.entitlementService.refundWithManager(
+          manager,
+          booking.membershipId,
+          {
+            benefitType:           booking.entitlementType,
+            quantity:              1,
+            originalTransactionId: booking.entitlementTxnId,
+            note: `Booking ${booking.reference} cancelled — entitlement restored [atomic]`,
+          },
+          tenantId,
+          actorId,
+          memberUserId,
+        );
+      } catch (err: unknown) {
+        // refundWithManager logs warnings for missing balance rows but normally
+        // does not throw. If it does throw (unexpected), propagate so the
+        // cancellation transaction rolls back entirely — preventing the booking
+        // from being cancelled without the credit being restored.
+        this.logger.error(
+          `restoreEntitlementWithManager: entitlement restore failed for ` +
+          `booking=${booking.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        throw err;
+      }
+    }
+
+    // ── 2. Wallet refund ─────────────────────────────────────────────────────
+    // Uses manager.query() so the wallet update is inside the same transaction.
+    if (booking.walletAmountMinor > 0 && booking.customerId) {
+      await manager.query(
+        `UPDATE customers
+           SET wallet_balance_minor = wallet_balance_minor + $1,
+               updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3`,
+        [booking.walletAmountMinor, booking.customerId, tenantId],
+      );
+      this.logger.log(
+        `restoreEntitlementWithManager: wallet refunded — ` +
+        `customer=${booking.customerId} amount=${booking.walletAmountMinor} ` +
+        `booking=${booking.reference}`,
+      );
     }
   }
 
