@@ -183,6 +183,14 @@ export class BookingService {
       );
 
       // Mark all slots as reserved, link booking ID
+      // H-2 FIX: use the same configurable TTL as booking.expiresAt (set in reserve())
+      // rather than the previous hardcoded 30-minute value. Both timers now align:
+      // booking.expiresAt fires at TTL minutes and releases slots that are still
+      // marked 'reserved' with reservedUntil at the same instant.
+      const slotTtlMins = this.configService.get<number>(
+        'BOOKING_RESERVATION_TTL_MINS',
+        DEFAULT_RESERVATION_TTL_MINS,
+      );
       for (const slot of slots) {
         await manager.update(
           (await import('../../slot/entities/slot.entity')).SlotEntity,
@@ -190,7 +198,7 @@ export class BookingService {
           {
             status:       'reserved',
             bookingId:    b.id,
-            reservedUntil: new Date(Date.now() + 30 * 60_000),
+            reservedUntil: new Date(Date.now() + slotTtlMins * 60_000),
             updatedAt:    new Date(),
           },
         );
@@ -631,7 +639,14 @@ export class BookingService {
     const booking = await this.findOne(id, tenantId);
     this.validationService.assertCheckInAllowed(booking);
 
+    // M-2 FIX: transition status to 'checked_in' so that:
+    //   - ALLOWED_TRANSITIONS (confirmed → checked_in → in_progress/completed) is honoured
+    //   - Status-based analytics correctly count check-ins
+    //   - The no-show scheduler (which queries status='confirmed' AND checkedInAt IS NULL)
+    //     still correctly excludes checked-in bookings because both conditions are checked;
+    //     updating the status provides a belt-and-suspenders guarantee.
     const updated = await this.bookingRepository.updateById(id, tenantId, {
+      status:      'checked_in',
       checkedInAt: new Date(),
       updatedById: actorId,
     });

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -59,6 +60,32 @@ async function bootstrap(): Promise<void> {
     origin:      corsOrigins ? corsOrigins.split(',') : 'http://localhost:3000',
     credentials: true,
   });
+
+  // OpenAPI / Swagger documentation
+  // Available at /api/docs in non-production environments.
+  // Set SWAGGER_ENABLED=true to enable in production.
+  if (config.get('NODE_ENV') !== 'production' || config.get('SWAGGER_ENABLED') === 'true') {
+    const doc = new DocumentBuilder()
+      .setTitle('Spancle Booking API')
+      .setDescription(
+        'Booking service — courts, slots, reservations, payments, membership entitlements, ' +
+        'waitlist, and guest checkout.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT')
+      .addApiKey({ type: 'apiKey', in: 'header', name: 'x-tenant-id' }, 'TenantId')
+      .addServer('/api/v1')
+      .build();
+
+    const document = SwaggerModule.createDocument(app, doc);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    });
+
+    const host = `http://localhost:${port}`;
+    app.get(ConfigService).get('NODE_ENV') !== 'test' &&
+      console.log(`OpenAPI docs: ${host}/api/docs`);
+  }
 
   await app.listen(port);
 }

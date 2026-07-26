@@ -184,13 +184,16 @@ export class BookingController {
 
   @Patch(':id/reschedule')
   @HttpCode(HttpStatus.OK)
-  @Roles('TENANT_ADMIN', 'TENANT_MANAGER')
-  reschedule(
+  @Roles('TENANT_ADMIN', 'TENANT_MANAGER', 'PLAYER')
+  async reschedule(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RescheduleDto,
     @TenantCtx() tenant: TenantContext,
     @BookingActor() actor: BookingActorContext,
   ) {
+    // PLAYER may only reschedule their own booking (same ownership model as cancel)
+    const booking = await this.bookingService.findOne(id, tenant.tenantId);
+    this.authzService.assertOwnerOrStaff(booking, actor, 'reschedule');
     return this.bookingService.reschedule(id, dto, tenant.tenantId, actor.actorId);
   }
 

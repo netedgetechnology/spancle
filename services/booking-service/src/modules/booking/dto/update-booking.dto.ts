@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize, ArrayMinSize,
   IsEnum, IsInt, IsNotEmpty, IsOptional, IsString,
   IsUUID, Max, MaxLength, Min,
 } from 'class-validator';
@@ -33,8 +34,10 @@ export class CancelBookingDto {
 }
 
 export class RescheduleBookingDto {
-  /** New slot IDs — must be available and non-overlapping */
+  /** New slot IDs — must be available and non-overlapping. Min 1, max 8 slots. */
   @IsUUID('4', { each: true })
+  @ArrayMinSize(1, { message: 'At least one new slot ID is required' })
+  @ArrayMaxSize(8, { message: 'Cannot reschedule to more than 8 slots at once' })
   newSlotIds!: string[];
 
   @IsString() @IsOptional() @MaxLength(500)

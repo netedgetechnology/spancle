@@ -4,6 +4,7 @@ import { InjectDataSource }    from '@nestjs/typeorm';
 import { DataSource }          from 'typeorm';
 import { ConfigService }       from '@nestjs/config';
 import { BookingService }      from './booking.service';
+import { SlotService }         from '../../slot/services/slot.service';
 
 /**
  * BookingSchedulerService — drives all time-based booking transitions.
@@ -30,6 +31,7 @@ export class BookingSchedulerService {
 
   constructor(
     private readonly bookingService: BookingService,
+    private readonly slotService:    SlotService,
     private readonly config:         ConfigService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
@@ -105,6 +107,29 @@ export class BookingSchedulerService {
       }
     } catch (err) {
       this.logger.error(`[cron:no_show] Sweep failed — ${(err as Error).message}`);
+    }
+  }
+
+  // ── Stale slot reservation expiry — every 5 minutes ──────────────────────
+  //
+  // H-2 FIX: SlotService.expireStaleReservations() releases slot rows where
+  // reservedUntil < now() but the booking-level expiry may have already
+  // freed the booking record. This sweeper cleans up any orphaned slot
+  // reservations that slipped through the booking-level expiry (e.g. due
+  // to a race between the two timers or a booking record deleted directly).
+  // Also handles the 30→TTL alignment gap closed in booking.service.ts.
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async expireStaleSlotReservations(): Promise<void> {
+    try {
+      for (const tenantId of await this.activeTenants()) {
+        const count = await this.slotService.expireStaleReservations(tenantId);
+        if (count) {
+          this.logger.log(`[cron:slot_expiry] tenant=${tenantId} released=${count}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`[cron:slot_expiry] Sweep failed — ${(err as Error).message}`);
     }
   }
 
