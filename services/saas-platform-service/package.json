@@ -5,7 +5,7 @@
   "description": "Spancle Sports OS \u2014 Tenant provisioning, subscription and plan management",
   "license": "UNLICENSED",
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main",
     "lint": "eslint src --ext .ts --max-warnings=0",

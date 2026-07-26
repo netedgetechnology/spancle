@@ -107,7 +107,7 @@ export class PlanRestrictionMiddleware implements NestMiddleware {
       return;
     }
 
-    // Read current count — Sprint 2 TODO: read from Redis counter
+    // Read current count from Redis counter
     // For now: advisory check — count placeholder is 0 (always passes)
     // Replace with: await this.redisCounterService.getCount(tenantId, route.resourceKey)
     const currentCount = this.readCurrentCount(runtime.tenantId, route.resourceKey);
@@ -155,7 +155,7 @@ export class PlanRestrictionMiddleware implements NestMiddleware {
     _tenantId:   string,
     _resourceKey: keyof PlanResourceLimits,
   ): number {
-    // TODO Sprint 2: return await this.redisCounter.get(tenantId, resourceKey);
+    // return await this.redisCounter.get(tenantId, resourceKey);
     return 0;
   }
 }

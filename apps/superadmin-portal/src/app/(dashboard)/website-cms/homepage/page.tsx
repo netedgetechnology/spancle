@@ -91,13 +91,9 @@ export default function HomepageSectionsPage(): React.ReactElement {
 
   // TEMP DEBUG — remove after diagnosing missing sections request
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] pagesData:', pagesData);
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] homepagePage:', homepagePage);
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] firstPage', pagesData?.data?.[0]);
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] homepagePage', homepagePage);
 
   const { data: sections, isLoading: sectionsLoading, error: sectionsError, refetch } = useQuery({
     queryKey: homepageSectionKeys.list(homepagePage?.id ?? ''),
@@ -106,9 +102,7 @@ export default function HomepageSectionsPage(): React.ReactElement {
   });
 
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] sections', sections);
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] sectionsError', sectionsError);
 
   const isLoading = pagesLoading || (!!homepagePage && sectionsLoading);
   const error      = pagesError || sectionsError;

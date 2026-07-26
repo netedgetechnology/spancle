@@ -20,6 +20,7 @@ const _1722100000000_CreateBookingRules_1 = require("./migrations/1722100000000-
 const _1722200000000_CreateCustomerAndLinkBookings_1 = require("./migrations/1722200000000-CreateCustomerAndLinkBookings");
 const _1722300000000_AddBookingMembershipColumns_1 = require("./migrations/1722300000000-AddBookingMembershipColumns");
 const _1722400000000_CreateWaitlist_1 = require("./migrations/1722400000000-CreateWaitlist");
+const _1722500000000_AddPerformanceIndexes_1 = require("./migrations/1722500000000-AddPerformanceIndexes");
 const waitlist_entry_entity_1 = require("./modules/waitlist/entities/waitlist-entry.entity");
 const dataSource = new typeorm_1.DataSource({
     type: 'postgres',
@@ -41,7 +42,7 @@ const dataSource = new typeorm_1.DataSource({
         customer_entity_1.CustomerEntity,
         waitlist_entry_entity_1.WaitlistEntryEntity,
     ],
-    migrations: [_1722100000000_CreateBookingRules_1.CreateBookingRules1722100000000, _1722200000000_CreateCustomerAndLinkBookings_1.CreateCustomerAndLinkBookings1722200000000, _1722300000000_AddBookingMembershipColumns_1.AddBookingMembershipColumns1722300000000, _1722400000000_CreateWaitlist_1.CreateWaitlist1722400000000],
+    migrations: [_1722100000000_CreateBookingRules_1.CreateBookingRules1722100000000, _1722200000000_CreateCustomerAndLinkBookings_1.CreateCustomerAndLinkBookings1722200000000, _1722300000000_AddBookingMembershipColumns_1.AddBookingMembershipColumns1722300000000, _1722400000000_CreateWaitlist_1.CreateWaitlist1722400000000, _1722500000000_AddPerformanceIndexes_1.AddPerformanceIndexes1722500000000],
     migrationsTableName: 'typeorm_migrations',
     synchronize: false,
     logging: ['error', 'migration'],

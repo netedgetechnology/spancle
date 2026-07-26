@@ -44,14 +44,12 @@ function cmsHeaders() {
 /** Lists all sections (draft + published + archived) for the homepage editor. */
 export async function fetchHomepageSections(pageId: string): Promise<HomepageSection[]> {
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] fetchHomepageSections pageId', pageId);
 
   const res = await apiClient.get(`/api/v1/cms/homepage/pages/${pageId}/sections`, {
     headers: cmsHeaders(),
   });
 
   // eslint-disable-next-line no-console
-  console.log('[homepage-debug] sections response', res.data);
 
   return res.data;
 }

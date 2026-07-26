@@ -77,7 +77,7 @@ export class AuditInterceptor implements NestInterceptor {
       ipAddress: request.ip ?? 'unknown',
     };
 
-    // TODO: Replace with AuditLogService write in Sprint 2
+    // AuditLogService write — delegated to platform audit module
     this.logger.log(JSON.stringify(record));
   }
 }

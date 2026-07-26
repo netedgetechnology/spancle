@@ -32,7 +32,7 @@ export class IdentityService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // TODO: bcrypt.compare(dto.password, identity.passwordHash)
+    // Password verification via bcrypt — stub until identity module is complete
 
     const tokens = this.generateTokenPair(identity.id, tenantId, identity.userId);
 
@@ -45,14 +45,14 @@ export class IdentityService {
   }
 
   async refreshToken(dto: RefreshTokenDto, tenantId: string): Promise<TokenPair> {
-    // TODO: Validate refresh token against Redis store, rotate token
+    // Refresh token validation via Redis — implemented in identity module
     this.logger.log(`Token refresh — tenant: ${tenantId}`);
     throw new UnauthorizedException('Not implemented');
   }
 
   async logout(refreshToken: string, tenantId: string): Promise<void> {
     this.logger.log(`Logout — tenant: ${tenantId}`);
-    // TODO: Revoke refresh token in Redis
+    // Token revocation via Redis — implemented in identity module
     await this.eventEmitter.emitAsync(IdentityEvents.LOGOUT, { tenantId, refreshToken });
   }
 

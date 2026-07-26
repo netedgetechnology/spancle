@@ -23,6 +23,7 @@ import { CreateBookingRules1722100000000 }            from './migrations/1722100
 import { CreateCustomerAndLinkBookings1722200000000 } from './migrations/1722200000000-CreateCustomerAndLinkBookings';
 import { AddBookingMembershipColumns1722300000000 }      from './migrations/1722300000000-AddBookingMembershipColumns';
 import { CreateWaitlist1722400000000 }                    from './migrations/1722400000000-CreateWaitlist';
+import { AddPerformanceIndexes1722500000000 }             from './migrations/1722500000000-AddPerformanceIndexes';
 import { WaitlistEntryEntity }                           from './modules/waitlist/entities/waitlist-entry.entity';
 
 const dataSource = new DataSource({
@@ -45,7 +46,7 @@ const dataSource = new DataSource({
     CustomerEntity,
     WaitlistEntryEntity,
   ],
-  migrations:         [CreateBookingRules1722100000000, CreateCustomerAndLinkBookings1722200000000, AddBookingMembershipColumns1722300000000, CreateWaitlist1722400000000],
+  migrations:         [CreateBookingRules1722100000000, CreateCustomerAndLinkBookings1722200000000, AddBookingMembershipColumns1722300000000, CreateWaitlist1722400000000, AddPerformanceIndexes1722500000000],
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,
   logging:            ['error', 'migration'],

@@ -204,6 +204,9 @@ exports.BookingEntity = BookingEntity = __decorate([
     (0, typeorm_1.Index)(['tenantId', 'userId']),
     (0, typeorm_1.Index)(['tenantId', 'createdAt']),
     (0, typeorm_1.Index)(['tenantId', 'reference'], { unique: true }),
-    (0, typeorm_1.Index)(['tenantId', 'isDeleted'])
+    (0, typeorm_1.Index)(['tenantId', 'isDeleted']),
+    (0, typeorm_1.Index)(['tenantId', 'status', 'startsAt']),
+    (0, typeorm_1.Index)(['tenantId', 'startsAt']),
+    (0, typeorm_1.Index)(['tenantId', 'userId', 'startsAt'])
 ], BookingEntity);
 //# sourceMappingURL=booking.entity.js.map

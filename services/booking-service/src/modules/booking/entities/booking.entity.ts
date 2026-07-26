@@ -107,6 +107,9 @@ export type BookingChannel = 'online' | 'admin' | 'walk_in' | 'api';
 @Index(['tenantId', 'createdAt'])
 @Index(['tenantId', 'reference'], { unique: true })
 @Index(['tenantId', 'isDeleted'])
+@Index(['tenantId', 'status', 'startsAt'])   // reminder scheduler
+@Index(['tenantId', 'startsAt'])             // calendar/upcoming queries
+@Index(['tenantId', 'userId', 'startsAt'])   // consumer portal 'my bookings'
 export class BookingEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

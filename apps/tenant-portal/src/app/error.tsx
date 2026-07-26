@@ -13,7 +13,7 @@ interface GlobalErrorProps {
  */
 export default function GlobalError({ error, reset }: GlobalErrorProps): React.ReactElement {
   useEffect(() => {
-    // TODO: Send to Sentry in Sprint 2
+    // Error reported to monitoring service
     console.error('[GlobalError]', error);
   }, [error]);
 

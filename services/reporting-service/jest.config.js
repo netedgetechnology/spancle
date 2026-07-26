@@ -4,6 +4,7 @@ module.exports = {
   testRegex: '.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': ['ts-jest', {
+      diagnostics: false,
       tsconfig: {
         module: 'commonjs', moduleResolution: 'node', target: 'ES2021',
         experimentalDecorators: true, emitDecoratorMetadata: true,
