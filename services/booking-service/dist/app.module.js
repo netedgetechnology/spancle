@@ -17,6 +17,11 @@ const throttler_1 = require("@nestjs/throttler");
 const schedule_1 = require("@nestjs/schedule");
 const booking_guard_1 = require("./modules/booking/guards/booking.guard");
 const guest_module_1 = require("./modules/guest/guest.module");
+const booking_rules_module_1 = require("./modules/booking-rules/booking-rules.module");
+const customer_module_1 = require("./modules/customer/customer.module");
+const waitlist_module_1 = require("./modules/waitlist/waitlist.module");
+const payment_module_1 = require("./modules/payment/payment.module");
+const event_bus_module_1 = require("./common/event-bus/event-bus.module");
 const booking_module_1 = require("./modules/booking/booking.module");
 const slot_module_1 = require("./modules/slot/slot.module");
 const venue_module_1 = require("./modules/venue/venue.module");
@@ -67,7 +72,12 @@ exports.AppModule = AppModule = __decorate([
                 }),
             }),
             booking_module_1.BookingModule, slot_module_1.SlotModule, venue_module_1.VenueModule, court_module_1.CourtModule, qr_module_1.QrModule, membership_module_1.MembershipModule,
+            event_bus_module_1.EventBusModule,
             guest_module_1.GuestModule,
+            booking_rules_module_1.BookingRulesModule,
+            customer_module_1.CustomerModule,
+            waitlist_module_1.WaitlistModule,
+            payment_module_1.PaymentModule,
         ],
         providers: [
             { provide: core_1.APP_GUARD, useClass: throttler_1.ThrottlerGuard },

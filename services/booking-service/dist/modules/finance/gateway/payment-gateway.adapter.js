@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RazorpayAdapter = exports.StripeAdapter = exports.PaymentGatewayAdapter = void 0;
+exports.RazorpayAdapter = exports.StripeAdapter = exports.PaymentGatewayAdapter = exports.PAYMENT_GATEWAY_ADAPTERS = void 0;
+exports.PAYMENT_GATEWAY_ADAPTERS = 'PAYMENT_GATEWAY_ADAPTERS';
 class PaymentGatewayAdapter {
 }
 exports.PaymentGatewayAdapter = PaymentGatewayAdapter;

@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LinkGuestBookingsDto = exports.GuestLookupDto = exports.GuestCreateBookingDto = exports.GuestCustomerDto = exports.GuestSessionDto = void 0;
+exports.GuestInitiatePaymentDto = exports.LinkGuestBookingsDto = exports.GuestLookupDto = exports.GuestCreateBookingDto = exports.GuestCustomerDto = exports.GuestSessionDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 class GuestSessionDto {
@@ -102,4 +102,20 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value?.toLowerCase().trim()),
     __metadata("design:type", String)
 ], LinkGuestBookingsDto.prototype, "customerEmail", void 0);
+class GuestInitiatePaymentDto {
+}
+exports.GuestInitiatePaymentDto = GuestInitiatePaymentDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], GuestInitiatePaymentDto.prototype, "guestPaymentToken", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    __metadata("design:type", String)
+], GuestInitiatePaymentDto.prototype, "bookingId", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    __metadata("design:type", String)
+], GuestInitiatePaymentDto.prototype, "branchId", void 0);
 //# sourceMappingURL=guest.dto.js.map

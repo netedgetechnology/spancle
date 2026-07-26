@@ -10,6 +10,7 @@ exports.CommercialEngineModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const plan_module_1 = require("../plan/plan.module");
+const package_module_1 = require("../package/package.module");
 const platform_module_1 = require("../../platform/platform.module");
 const commercial_rule_entity_1 = require("./entities/commercial-rule.entity");
 const commercial_rule_version_entity_1 = require("./entities/commercial-rule-version.entity");
@@ -28,6 +29,8 @@ const entitlement_resolver_interfaces_1 = require("./interfaces/entitlement-reso
 const rule_resolver_interfaces_1 = require("./interfaces/rule-resolver.interfaces");
 const gateway_registry_interfaces_1 = require("./interfaces/gateway-registry.interfaces");
 const super_admin_guard_1 = require("../admin/guards/super-admin.guard");
+const plan_service_1 = require("../plan/services/plan.service");
+const package_service_1 = require("../package/services/package.service");
 const ENTITIES = [
     commercial_rule_entity_1.CommercialRuleEntity,
     commercial_rule_version_entity_1.CommercialRuleVersionEntity,
@@ -66,6 +69,7 @@ exports.CommercialEngineModule = CommercialEngineModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature(ENTITIES),
             plan_module_1.PlanModule,
+            package_module_1.PackageModule,
             platform_module_1.PlatformModule,
         ],
         controllers: [commercial_decision_controller_1.CommercialDecisionController],
@@ -75,8 +79,8 @@ exports.CommercialEngineModule = CommercialEngineModule = __decorate([
             { provide: rule_resolver_interfaces_1.RULE_RESOLVER, useClass: default_rule_resolver_1.DefaultRuleResolver },
             { provide: entitlement_resolver_interfaces_1.ENTITLEMENT_RESOLVER, useClass: default_entitlement_resolver_1.DefaultEntitlementResolver },
             { provide: policy_resolver_interfaces_1.POLICY_RESOLVER, useClass: default_policy_resolver_1.DefaultPolicyResolver },
-            { provide: 'PlanService', useExisting: 'PlanService' },
-            { provide: 'PackageService', useExisting: 'PackageService' },
+            { provide: 'PlanService', useExisting: plan_service_1.PlanService },
+            { provide: 'PackageService', useExisting: package_service_1.PackageService },
             commercial_decision_service_1.CommercialDecisionService,
             super_admin_guard_1.SuperAdminGuard,
         ],

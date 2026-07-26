@@ -14,6 +14,13 @@ const holiday_entity_1 = require("./modules/slot/entities/holiday.entity");
 const venue_entity_1 = require("./modules/venue/entities/venue.entity");
 const qr_token_entity_1 = require("./modules/qr/entities/qr-token.entity");
 const qr_scan_log_entity_1 = require("./modules/qr/entities/qr-scan-log.entity");
+const booking_rules_entity_1 = require("./modules/booking-rules/entities/booking-rules.entity");
+const customer_entity_1 = require("./modules/customer/entities/customer.entity");
+const _1722100000000_CreateBookingRules_1 = require("./migrations/1722100000000-CreateBookingRules");
+const _1722200000000_CreateCustomerAndLinkBookings_1 = require("./migrations/1722200000000-CreateCustomerAndLinkBookings");
+const _1722300000000_AddBookingMembershipColumns_1 = require("./migrations/1722300000000-AddBookingMembershipColumns");
+const _1722400000000_CreateWaitlist_1 = require("./migrations/1722400000000-CreateWaitlist");
+const waitlist_entry_entity_1 = require("./modules/waitlist/entities/waitlist-entry.entity");
 const dataSource = new typeorm_1.DataSource({
     type: 'postgres',
     url: process.env['DATABASE_URL'],
@@ -30,8 +37,11 @@ const dataSource = new typeorm_1.DataSource({
         venue_entity_1.VenueEntity,
         qr_token_entity_1.QrTokenEntity,
         qr_scan_log_entity_1.QrScanLogEntity,
+        booking_rules_entity_1.BookingRulesEntity,
+        customer_entity_1.CustomerEntity,
+        waitlist_entry_entity_1.WaitlistEntryEntity,
     ],
-    migrations: ['dist/migrations/*.js'],
+    migrations: [_1722100000000_CreateBookingRules_1.CreateBookingRules1722100000000, _1722200000000_CreateCustomerAndLinkBookings_1.CreateCustomerAndLinkBookings1722200000000, _1722300000000_AddBookingMembershipColumns_1.AddBookingMembershipColumns1722300000000, _1722400000000_CreateWaitlist_1.CreateWaitlist1722400000000],
     migrationsTableName: 'typeorm_migrations',
     synchronize: false,
     logging: ['error', 'migration'],

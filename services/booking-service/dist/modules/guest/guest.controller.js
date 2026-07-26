@@ -21,18 +21,20 @@ const tenant_decorator_1 = require("../../common/decorators/tenant.decorator");
 const booking_guard_1 = require("../booking/guards/booking.guard");
 const audit_interceptor_1 = require("../../common/interceptors/audit.interceptor");
 const guest_session_service_1 = require("./guest-session.service");
+const payment_orchestrator_service_1 = require("../payment/services/payment-orchestrator.service");
 const guest_booking_linking_service_1 = require("./guest-booking-linking.service");
 const booking_service_1 = require("../booking/services/booking.service");
 const booking_authorization_service_1 = require("../booking/services/booking-authorization.service");
 const qr_generation_service_1 = require("../qr/services/qr-generation.service");
 const guest_dto_1 = require("./dto/guest.dto");
 let GuestController = class GuestController {
-    constructor(guestSessionService, linkingService, bookingService, authzService, qrGenerationService) {
+    constructor(guestSessionService, linkingService, bookingService, authzService, qrGenerationService, paymentOrchestrator) {
         this.guestSessionService = guestSessionService;
         this.linkingService = linkingService;
         this.bookingService = bookingService;
         this.authzService = authzService;
         this.qrGenerationService = qrGenerationService;
+        this.paymentOrchestrator = paymentOrchestrator;
     }
     issueGuestSession(_dto, tenant, req) {
         const clientIp = req.headers['x-forwarded-for']
@@ -72,10 +74,18 @@ let GuestController = class GuestController {
             customerEmail: dto.customer.email,
             tenantId: tenant.tenantId,
         });
+        const guestPaymentToken = this.guestSessionService.issueGuestPaymentToken({
+            bookingId: booking.id,
+            customerEmail: dto.customer.email,
+            tenantId: tenant.tenantId,
+            amountMinor: booking.finalPriceMinor ?? 0,
+            currency: booking.currency ?? 'GBP',
+        });
         return {
             booking,
             qr,
             guestLookupToken,
+            guestPaymentToken,
         };
     }
     async guestLookup(token, tenant) {
@@ -93,6 +103,34 @@ let GuestController = class GuestController {
             courtId: booking.courtId,
             customerName: booking.customerName,
         };
+    }
+    async initiateGuestPayment(dto, tenant, req) {
+        const claims = this.guestSessionService.validateGuestPaymentToken(dto.guestPaymentToken, tenant.tenantId);
+        if (claims.bid !== dto.bookingId) {
+            throw new common_1.UnauthorizedException('Guest payment token does not match booking');
+        }
+        const booking = await this.bookingService.findOne(dto.bookingId, tenant.tenantId);
+        if (booking.customerEmail.toLowerCase() !== claims.em) {
+            new common_1.Logger('GuestController').warn(`Guest payment email mismatch — token em masked booking masked tenant=${tenant.tenantId}`);
+            throw new common_1.UnauthorizedException('Guest payment token does not match booking');
+        }
+        if ((booking.finalPriceMinor ?? 0) !== claims.amt ||
+            (booking.currency ?? 'GBP').toLowerCase() !== claims.cur) {
+            throw new common_1.UnauthorizedException('Guest payment token amount mismatch');
+        }
+        const ip = req.headers['x-forwarded-for']
+            ?? req.socket.remoteAddress
+            ?? undefined;
+        return this.paymentOrchestrator.initiateForBooking({
+            tenantId: tenant.tenantId,
+            bookingId: booking.id,
+            branchId: dto.branchId,
+            amountMinor: claims.amt,
+            currency: claims.cur.toUpperCase(),
+            customerEmail: claims.em,
+            actorId: `guest:${claims.jti}`,
+            ipAddress: ip,
+        });
     }
     linkGuestBookings(dto, tenant, actor) {
         if (!actor.userId)
@@ -141,6 +179,18 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], GuestController.prototype, "guestLookup", null);
 __decorate([
+    (0, common_1.Post)('payments/initiate'),
+    (0, roles_decorator_1.Public)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, tenant_decorator_1.TenantCtx)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [guest_dto_1.GuestInitiatePaymentDto, Object, Object]),
+    __metadata("design:returntype", Promise)
+], GuestController.prototype, "initiateGuestPayment", null);
+__decorate([
     (0, common_1.Post)('link-bookings'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, roles_decorator_1.Roles)('PLAYER'),
@@ -159,6 +209,7 @@ exports.GuestController = GuestController = __decorate([
         guest_booking_linking_service_1.GuestBookingLinkingService,
         booking_service_1.BookingService,
         booking_authorization_service_1.BookingAuthorizationService,
-        qr_generation_service_1.QrGenerationService])
+        qr_generation_service_1.QrGenerationService,
+        payment_orchestrator_service_1.PaymentOrchestratorService])
 ], GuestController);
 //# sourceMappingURL=guest.controller.js.map

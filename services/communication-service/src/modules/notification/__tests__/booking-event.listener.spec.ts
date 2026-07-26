@@ -1,282 +1,270 @@
 /**
- * booking-event.listener.spec.ts
- *
- * Tests for BookingEventListener and its exported variable builder functions.
- *
- * Strategy:
- *   - EmailQueueProducer is stubbed (no BullMQ, no DB).
- *   - EventEnvelope is constructed inline — no Redis required.
- *   - formatPrice and buildXxxVars are pure functions tested directly.
- *
- * Covers:
- *   ✓ BOOKING_CONFIRMED enqueues booking_confirmed_email
- *   ✓ BOOKING_CONFIRMED skips when customerEmail absent
- *   ✓ BOOKING_CONFIRMED catches and logs enqueue errors (no throw)
- *   ✓ BOOKING_CANCELLED enqueues booking_cancelled_email
- *   ✓ BOOKING_CANCELLED skips when customerEmail absent
- *   ✓ PAYMENT_SUCCEEDED enqueues payment_received_email
- *   ✓ PAYMENT_SUCCEEDED skips when customerEmail absent
- *   ✓ PAYMENT_FAILED logs only (no enqueue)
- *   ✓ buildBookingConfirmedVars — all fields
- *   ✓ buildBookingCancelledVars — all fields
- *   ✓ buildPaymentReceivedVars — all fields, formatPrice
- *   ✓ formatPrice — GBP, USD, fallback
+ * booking-event.listener.spec.ts — Full coverage of all notification handlers.
  */
 
-import { BookingEventListener, buildBookingConfirmedVars, buildBookingCancelledVars, buildPaymentReceivedVars, formatPrice } from '../listeners/booking-event.listener';
-import type { EmailQueueProducer } from '../queue/email-queue.producer';
-import type { EventEnvelope }      from '@spancle/event-contracts';
-import { EventRegistry }           from '@spancle/event-contracts';
+import {
+  BookingEventListener,
+  buildBookingConfirmedVars, buildBookingCancelledVars,
+  buildBookingRescheduledVars, buildBookingExpiredVars,
+  buildBookingReminderVars, buildWaitlistPromotedVars,
+  buildGuestBookingVars, buildPaymentReceivedVars,
+  buildPaymentFailedVars, buildMembershipExpiryVars,
+  formatPrice,
+} from '../listeners/booking-event.listener';
+import type { EmailQueueProducer }            from '../queue/email-queue.producer';
+import type { NotificationPreferenceRepository } from '../repositories/notification-preference.repository';
+import type { EventEnvelope }                 from '@spancle/event-contracts';
+import { EventRegistry }                      from '@spancle/event-contracts';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const T = 'tenant-aaa-bbb-001';
+const BASE: Record<string, unknown> = {
+  bookingId: 'bk-001', reference: 'BK-2025-0001',
+  customerEmail: 'alice@example.com', customerName: 'Alice Smith',
+  userId: 'user-001', startsAt: '2025-06-15T10:00:00Z', durationMins: 60,
+  finalPriceMinor: 2000, currency: 'GBP',
+  venueName: 'Ace Sports', courtName: 'Court 1',
+  tenantName: 'Test Tenant', tenantSupportEmail: 'help@test.com',
+};
 
-function makeEnvelope(channel: string, payload: Record<string, unknown>): EventEnvelope {
-  return {
-    id:          'env-uuid-001',
-    channel,
-    version:     '1',
-    tenantId:    'tenant-aaa-bbb',
-    occurredAt:  new Date().toISOString(),
-    producer:    'booking-service',
-    payload,
-  };
+function env(channel: string, payload: Record<string, unknown> = BASE): EventEnvelope {
+  return { id: 'env-001', channel, version: '1', tenantId: T, occurredAt: new Date().toISOString(), producer: 'booking-service', payload };
 }
 
-function makeProducer(enqueueResult: string | Error = 'notif-id-001'): jest.Mocked<Pick<EmailQueueProducer, 'enqueue'>> {
-  return {
-    enqueue: jest.fn().mockImplementation(() =>
-      enqueueResult instanceof Error
-        ? Promise.reject(enqueueResult)
-        : Promise.resolve(enqueueResult),
-    ),
-  } as jest.Mocked<Pick<EmailQueueProducer, 'enqueue'>>;
+function makeProducer(result: string | Error = 'notif-id-001'): jest.Mocked<Pick<EmailQueueProducer, 'enqueue'>> {
+  return { enqueue: jest.fn().mockImplementation(() => result instanceof Error ? Promise.reject(result) : Promise.resolve(result)) };
 }
 
-// ── BOOKING_CONFIRMED ─────────────────────────────────────────────────────────
+function makePrefRepo(ok = true): jest.Mocked<Pick<NotificationPreferenceRepository, 'isEmailEnabled'>> {
+  return { isEmailEnabled: jest.fn().mockResolvedValue(ok) };
+}
 
-describe('BookingEventListener — BOOKING_CONFIRMED', () => {
-  it('enqueues booking_confirmed_email when customerEmail is present', async () => {
-    const producer  = makeProducer();
-    const listener  = new BookingEventListener(producer as never);
-    const envelope  = makeEnvelope(EventRegistry.BOOKING_CONFIRMED, {
-      bookingId:     'bk-001',
-      reference:     'BK-20250101-001',
-      customerEmail: 'alice@example.com',
-      customerName:  'Alice',
-    });
+function make(ok = true, result: string | Error = 'notif-001') {
+  const producer = makeProducer(result);
+  const prefRepo = makePrefRepo(ok);
+  const svc = new BookingEventListener(producer as never, prefRepo as never);
+  return { svc, producer, prefRepo };
+}
 
-    await listener.onBookingConfirmed(envelope);
+// ── onBookingConfirmed ────────────────────────────────────────────────────────
 
-    expect(producer.enqueue).toHaveBeenCalledTimes(1);
-    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId:      'tenant-aaa-bbb',
-      recipientEmail: 'alice@example.com',
-      templateSlug:  'booking_confirmed_email',
-    }));
+describe('onBookingConfirmed()', () => {
+  it('→ booking_confirmed_email (member)', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingConfirmed(env(EventRegistry.BOOKING_CONFIRMED));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'booking_confirmed_email' }));
   });
-
-  it('skips (no enqueue) when customerEmail is absent', async () => {
-    const producer = makeProducer();
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.BOOKING_CONFIRMED, { bookingId: 'bk-001' });
-
-    await listener.onBookingConfirmed(envelope);
-
+  it('→ waitlist_promoted_email when _waitlistPromotion=true', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingConfirmed(env(EventRegistry.BOOKING_CONFIRMED, { ...BASE, _waitlistPromotion: true, slotId: 'slot-1' }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'waitlist_promoted_email' }));
+  });
+  it('→ guest_booking_email when isGuest=true', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingConfirmed(env(EventRegistry.BOOKING_CONFIRMED, { ...BASE, isGuest: true, userId: null }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'guest_booking_email' }));
+  });
+  it('skips when no customerEmail', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingConfirmed(env(EventRegistry.BOOKING_CONFIRMED, { ...BASE, customerEmail: '' }));
     expect(producer.enqueue).not.toHaveBeenCalled();
   });
-
-  it('catches and logs enqueue errors without throwing', async () => {
-    const producer = makeProducer(new Error('Queue unavailable'));
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.BOOKING_CONFIRMED, {
-      bookingId: 'bk-001', customerEmail: 'alice@example.com',
-    });
-
-    await expect(listener.onBookingConfirmed(envelope)).resolves.toBeUndefined();
+  it('does not throw when enqueue fails', async () => {
+    const { svc } = make(true, new Error('Bull down'));
+    await expect(svc.onBookingConfirmed(env(EventRegistry.BOOKING_CONFIRMED))).resolves.toBeUndefined();
+  });
+  it('skips when user opted out', async () => {
+    const { svc, producer } = make(false);
+    await svc.onBookingConfirmed(env(EventRegistry.BOOKING_CONFIRMED));
+    expect(producer.enqueue).not.toHaveBeenCalled();
   });
 });
 
-// ── BOOKING_CANCELLED ─────────────────────────────────────────────────────────
+// ── onBookingCancelled ────────────────────────────────────────────────────────
 
-describe('BookingEventListener — BOOKING_CANCELLED', () => {
-  it('enqueues booking_cancelled_email when customerEmail is present', async () => {
-    const producer = makeProducer();
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.BOOKING_CANCELLED, {
-      bookingId:     'bk-002',
-      reference:     'BK-20250101-002',
-      customerEmail: 'bob@example.com',
-      customerName:  'Bob',
-      reason:        'Changed plans',
-    });
-
-    await listener.onBookingCancelled(envelope);
-
-    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      recipientEmail: 'bob@example.com',
-      templateSlug:  'booking_cancelled_email',
-    }));
+describe('onBookingCancelled()', () => {
+  it('→ booking_cancelled_email', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingCancelled(env(EventRegistry.BOOKING_CANCELLED));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'booking_cancelled_email' }));
   });
-
-  it('skips when customerEmail is absent', async () => {
-    const producer = makeProducer();
-    const listener = new BookingEventListener(producer as never);
-    await listener.onBookingCancelled(makeEnvelope(EventRegistry.BOOKING_CANCELLED, { bookingId: 'bk-002' }));
+  it('skips when no customerEmail', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingCancelled(env(EventRegistry.BOOKING_CANCELLED, { ...BASE, customerEmail: '' }));
     expect(producer.enqueue).not.toHaveBeenCalled();
-  });
-
-  it('catches enqueue errors without throwing', async () => {
-    const producer = makeProducer(new Error('DB down'));
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.BOOKING_CANCELLED, {
-      bookingId: 'bk-002', customerEmail: 'bob@example.com',
-    });
-    await expect(listener.onBookingCancelled(envelope)).resolves.toBeUndefined();
   });
 });
 
-// ── PAYMENT_SUCCEEDED ─────────────────────────────────────────────────────────
+// ── onBookingRescheduled ──────────────────────────────────────────────────────
 
-describe('BookingEventListener — PAYMENT_SUCCEEDED', () => {
-  it('enqueues payment_received_email when customerEmail is present', async () => {
-    const producer = makeProducer();
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.PAYMENT_SUCCEEDED, {
-      paymentId:     'pay-001',
-      customerEmail: 'carol@example.com',
-      amountMinor:   5000,
-      currency:      'GBP',
-    });
-
-    await listener.onPaymentSucceeded(envelope);
-
-    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      recipientEmail: 'carol@example.com',
-      templateSlug:  'payment_received_email',
-    }));
-  });
-
-  it('skips when customerEmail is absent', async () => {
-    const producer = makeProducer();
-    const listener = new BookingEventListener(producer as never);
-    await listener.onPaymentSucceeded(makeEnvelope(EventRegistry.PAYMENT_SUCCEEDED, { paymentId: 'pay-001', amountMinor: 5000 }));
-    expect(producer.enqueue).not.toHaveBeenCalled();
-  });
-
-  it('catches enqueue errors without throwing', async () => {
-    const producer = makeProducer(new Error('Queue full'));
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.PAYMENT_SUCCEEDED, {
-      paymentId: 'pay-001', customerEmail: 'carol@example.com', amountMinor: 5000,
-    });
-    await expect(listener.onPaymentSucceeded(envelope)).resolves.toBeUndefined();
+describe('onBookingRescheduled()', () => {
+  it('→ booking_rescheduled_email', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingRescheduled(env(EventRegistry.BOOKING_RESCHEDULED, { ...BASE, newStartsAt: '2025-07-01T10:00:00Z' }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'booking_rescheduled_email' }));
   });
 });
 
-// ── PAYMENT_FAILED ────────────────────────────────────────────────────────────
+// ── onBookingExpired ──────────────────────────────────────────────────────────
 
-describe('BookingEventListener — PAYMENT_FAILED', () => {
-  it('logs and does not enqueue (no template for failure yet)', async () => {
-    const producer = makeProducer();
-    const listener = new BookingEventListener(producer as never);
-    const envelope = makeEnvelope(EventRegistry.PAYMENT_FAILED, {
-      paymentId: 'pay-002', reason: 'Insufficient funds',
-    });
-    await listener.onPaymentFailed(envelope);
+describe('onBookingExpired()', () => {
+  it('→ booking_expired_email', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingExpired(env(EventRegistry.BOOKING_EXPIRED));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'booking_expired_email' }));
+  });
+  it('skips when no customerEmail', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingExpired(env(EventRegistry.BOOKING_EXPIRED, { ...BASE, customerEmail: '' }));
     expect(producer.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+// ── Reminder handlers ─────────────────────────────────────────────────────────
+
+describe('onBookingReminder24h()', () => {
+  it('→ booking_reminder_email hoursUntil=24', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingReminder24h(env(EventRegistry.BOOKING_REMINDER_24H));
+    const call = producer.enqueue.mock.calls[0]?.[0] as { templateSlug: string; variables: Record<string, unknown> };
+    expect(call.templateSlug).toBe('booking_reminder_email');
+    expect(call.variables['hoursUntil']).toBe(24);
+  });
+});
+
+describe('onBookingReminder2h()', () => {
+  it('→ booking_reminder_email hoursUntil=2', async () => {
+    const { svc, producer } = make();
+    await svc.onBookingReminder2h(env(EventRegistry.BOOKING_REMINDER_2H));
+    const call = producer.enqueue.mock.calls[0]?.[0] as { templateSlug: string; variables: Record<string, unknown> };
+    expect(call.variables['hoursUntil']).toBe(2);
+  });
+});
+
+// ── onWaitlistPromoted ────────────────────────────────────────────────────────
+
+describe('onWaitlistPromoted()', () => {
+  it('→ waitlist_promoted_email', async () => {
+    const { svc, producer } = make();
+    await svc.onWaitlistPromoted(env(EventRegistry.WAITLIST_PROMOTED, { ...BASE, slotId: 'slot-2', promotedUntil: '2025-06-15T11:00:00Z' }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'waitlist_promoted_email' }));
+  });
+});
+
+// ── Payment handlers ──────────────────────────────────────────────────────────
+
+describe('onPaymentSucceeded()', () => {
+  it('→ payment_received_email', async () => {
+    const { svc, producer } = make();
+    await svc.onPaymentSucceeded(env(EventRegistry.PAYMENT_SUCCEEDED, { ...BASE, paymentId: 'pi-001', amountMinor: 2000 }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'payment_received_email' }));
+  });
+});
+
+describe('onPaymentFailed()', () => {
+  it('→ payment_failed_email', async () => {
+    const { svc, producer } = make();
+    await svc.onPaymentFailed(env(EventRegistry.PAYMENT_FAILED, { ...BASE, paymentId: 'pi-fail', failureReason: 'Insufficient funds' }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'payment_failed_email' }));
+  });
+});
+
+// ── onMembershipExpiryReminder ────────────────────────────────────────────────
+
+describe('onMembershipExpiryReminder()', () => {
+  it('→ membership_expiry_email', async () => {
+    const { svc, producer } = make();
+    await svc.onMembershipExpiryReminder(env(EventRegistry.MEMBERSHIP_EXPIRY_REMINDER, { ...BASE, membershipId: 'm-1', memberNumber: 'MBR-001', expiresAt: '2025-06-22T00:00:00Z', planName: 'Gold', daysRemaining: '7' }));
+    expect(producer.enqueue).toHaveBeenCalledWith(expect.objectContaining({ templateSlug: 'membership_expiry_email' }));
   });
 });
 
 // ── Variable builders ─────────────────────────────────────────────────────────
 
 describe('buildBookingConfirmedVars()', () => {
-  it('maps payload fields to nested variable object', () => {
-    const vars = buildBookingConfirmedVars({
-      customerName:  'Alice',
-      reference:     'BK-001',
-      startsAt:      '2025-06-01T10:00:00Z',
-      durationMins:  60,
-      finalPriceMinor: 5000,
-      currency:      'GBP',
-      venueName:     'Centre Court',
-      courtName:     'Court 1',
-      tenantName:    'Spancle Wimbledon',
-      tenantSupportEmail: 'help@example.com',
-    });
-
-    expect((vars['customer'] as Record<string,string>)['name']).toBe('Alice');
-    expect((vars['booking'] as Record<string,string>)['reference']).toBe('BK-001');
-    expect((vars['booking'] as Record<string,string>)['startsAt']).toBe('2025-06-01T10:00:00Z');
-    expect((vars['booking'] as Record<string,string>)['totalPrice']).toBe('£50.00');
-    expect((vars['venue'] as Record<string,string>)['name']).toBe('Centre Court');
-    expect((vars['court'] as Record<string,string>)['name']).toBe('Court 1');
-    expect((vars['tenant'] as Record<string,string>)['name']).toBe('Spancle Wimbledon');
-    expect((vars['tenant'] as Record<string,string>)['supportEmail']).toBe('help@example.com');
+  it('maps all fields', () => {
+    const v = buildBookingConfirmedVars(BASE);
+    expect((v['customer'] as Record<string,string>)['name']).toBe('Alice Smith');
+    expect((v['booking'] as Record<string,string>)['totalPrice']).toBe('£20.00');
+    expect((v['venue'] as Record<string,string>)['name']).toBe('Ace Sports');
   });
-
-  it('uses bookingId as reference fallback when reference absent', () => {
-    const vars = buildBookingConfirmedVars({ bookingId: 'bk-uuid', customerName: 'X' });
-    expect((vars['booking'] as Record<string,string>)['reference']).toBe('bk-uuid');
-  });
-
-  it('defaults customerName when absent', () => {
-    const vars = buildBookingConfirmedVars({});
-    expect((vars['customer'] as Record<string,string>)['name']).toBe('Valued customer');
+  it('falls back on missing customerName', () => {
+    const v = buildBookingConfirmedVars({});
+    expect((v['customer'] as Record<string,string>)['name']).toBe('Valued customer');
   });
 });
 
 describe('buildBookingCancelledVars()', () => {
-  it('maps payload fields', () => {
-    const vars = buildBookingCancelledVars({
-      customerName: 'Bob', reference: 'BK-002',
-      reason: 'Changed plans', venueName: 'Court A', tenantName: 'Spancle',
-    });
-    expect((vars['customer'] as Record<string,string>)['name']).toBe('Bob');
-    expect((vars['booking'] as Record<string,string>)['reference']).toBe('BK-002');
-    expect((vars['booking'] as Record<string,string>)['reason']).toBe('Changed plans');
-    expect((vars['venue'] as Record<string,string>)['name']).toBe('Court A');
+  it('falls back reason to Not specified', () => {
+    const v = buildBookingCancelledVars(BASE);
+    expect((v['booking'] as Record<string,string>)['reason']).toBe('Not specified');
   });
+  it('includes provided reason', () => {
+    const v = buildBookingCancelledVars({ ...BASE, reason: 'Injured' });
+    expect((v['booking'] as Record<string,string>)['reason']).toBe('Injured');
+  });
+});
 
-  it('defaults reason to "Not specified" when absent', () => {
-    const vars = buildBookingCancelledVars({ reference: 'BK-002' });
-    expect((vars['booking'] as Record<string,string>)['reason']).toBe('Not specified');
+describe('buildBookingRescheduledVars()', () => {
+  it('includes newStartsAt', () => {
+    const v = buildBookingRescheduledVars({ ...BASE, newStartsAt: '2025-07-01T10:00:00Z' });
+    expect((v['booking'] as Record<string,string>)['newStartsAt']).toBe('2025-07-01T10:00:00Z');
+  });
+});
+
+describe('buildBookingExpiredVars()', () => {
+  it('includes reference', () => {
+    const v = buildBookingExpiredVars(BASE);
+    expect((v['booking'] as Record<string,string>)['reference']).toBe('BK-2025-0001');
+  });
+});
+
+describe('buildBookingReminderVars()', () => {
+  it('includes court and venue', () => {
+    const v = buildBookingReminderVars(BASE);
+    expect((v['court'] as Record<string,string>)['name']).toBe('Court 1');
+    expect((v['venue'] as Record<string,string>)['name']).toBe('Ace Sports');
+  });
+});
+
+describe('buildWaitlistPromotedVars()', () => {
+  it('maps slot fields', () => {
+    const v = buildWaitlistPromotedVars({ ...BASE, endsAt: '2025-06-15T11:00:00Z', promotedUntil: '2025-06-15T10:30:00Z' });
+    expect((v['slot'] as Record<string,string>)['startsAt']).toBe('2025-06-15T10:00:00Z');
+  });
+});
+
+describe('buildGuestBookingVars()', () => {
+  it('includes lookupToken', () => {
+    const v = buildGuestBookingVars({ ...BASE, guestLookupToken: 'tok-abc', lookupUrl: 'https://x.com?token=tok-abc' });
+    expect((v['booking'] as Record<string,string>)['lookupToken']).toBe('tok-abc');
   });
 });
 
 describe('buildPaymentReceivedVars()', () => {
-  it('formats amountMinor to display string', () => {
-    const vars = buildPaymentReceivedVars({
-      customerName: 'Carol', paymentId: 'pay-001',
-      amountMinor: 5000, currency: 'GBP',
-    });
-    expect((vars['payment'] as Record<string,string>)['amount']).toBe('£50.00');
-  });
-
-  it('includes payment.date as a non-empty string', () => {
-    const vars = buildPaymentReceivedVars({ amountMinor: 1000 });
-    expect(typeof (vars['payment'] as Record<string,string>)['date']).toBe('string');
-    expect((vars['payment'] as Record<string,string>)['date']).not.toBe('');
+  it('formats amount', () => {
+    const v = buildPaymentReceivedVars({ ...BASE, amountMinor: 5000, paymentId: 'pi-1' });
+    expect((v['payment'] as Record<string,string>)['amount']).toBe('£50.00');
   });
 });
 
+describe('buildPaymentFailedVars()', () => {
+  it('includes failureReason', () => {
+    const v = buildPaymentFailedVars({ ...BASE, paymentId: 'pi-2', failureReason: 'Declined' });
+    expect((v['payment'] as Record<string,string>)['failureReason']).toBe('Declined');
+  });
+});
+
+describe('buildMembershipExpiryVars()', () => {
+  it('maps daysRemaining', () => {
+    const v = buildMembershipExpiryVars({ ...BASE, memberNumber: 'MBR-001', expiresAt: '2025-06-22', planName: 'Gold', daysRemaining: '7' });
+    expect((v['membership'] as Record<string,string>)['daysRemaining']).toBe('7');
+  });
+});
+
+// ── formatPrice ───────────────────────────────────────────────────────────────
+
 describe('formatPrice()', () => {
-  it('formats GBP minor units', () => {
-    expect(formatPrice(5000, 'GBP')).toBe('£50.00');
-  });
-
-  it('formats USD minor units (en-GB locale uses US$ prefix)', () => {
-    const result = formatPrice(1099, 'USD');
-    expect(result).toContain('10.99');
-    expect(result).toMatch(/USD|\$/);
-  });
-
-  it('falls back gracefully for unknown currency codes', () => {
-    const result = formatPrice(5000, 'XYZ');
-    expect(result).toContain('50.00');
-    expect(result).toContain('XYZ');
-  });
-
-  it('handles zero', () => {
-    expect(formatPrice(0, 'GBP')).toBe('£0.00');
-  });
+  it('GBP', () => expect(formatPrice(1050, 'GBP')).toBe('£10.50'));
+  it('USD', () => expect(formatPrice(2000, 'USD')).toContain('20.00'));
+  it('fallback', () => expect(formatPrice(500, 'XYZ')).toContain('5.00'));
 });

@@ -26,6 +26,10 @@ const venue_module_1 = require("../venue/venue.module");
 const pricing_module_1 = require("../pricing/pricing.module");
 const common_2 = require("@nestjs/common");
 const qr_module_1 = require("../qr/qr.module");
+const booking_rules_module_1 = require("../booking-rules/booking-rules.module");
+const customer_module_1 = require("../customer/customer.module");
+const membership_module_1 = require("../membership/membership.module");
+const membership_integration_service_1 = require("./services/membership-integration.service");
 let BookingModule = class BookingModule {
 };
 exports.BookingModule = BookingModule;
@@ -43,6 +47,9 @@ exports.BookingModule = BookingModule = __decorate([
             court_module_1.CourtModule,
             venue_module_1.VenueModule,
             (0, common_2.forwardRef)(() => qr_module_1.QrModule),
+            booking_rules_module_1.BookingRulesModule,
+            customer_module_1.CustomerModule,
+            membership_module_1.MembershipModule,
         ],
         controllers: [booking_controller_1.BookingController],
         providers: [
@@ -52,6 +59,7 @@ exports.BookingModule = BookingModule = __decorate([
             booking_support_repository_1.BookingLogRepository,
             booking_validation_service_1.BookingValidationService,
             booking_authorization_service_1.BookingAuthorizationService,
+            membership_integration_service_1.MembershipIntegrationService,
             booking_service_1.BookingService,
             booking_scheduler_service_1.BookingSchedulerService,
         ],

@@ -151,6 +151,58 @@ let GuestSessionService = GuestSessionService_1 = class GuestSessionService {
             throw new common_1.UnauthorizedException('Invalid lookup token');
         return { bookingId: p.bid, customerEmail: p.em };
     }
+    issueGuestPaymentToken(params) {
+        const payload = {
+            purpose: 'guest_payment',
+            bid: params.bookingId,
+            em: params.customerEmail.toLowerCase().trim(),
+            tid: params.tenantId,
+            amt: params.amountMinor,
+            cur: params.currency.toLowerCase(),
+            exp: Date.now() + 30 * 60 * 1000,
+            jti: crypto.randomUUID(),
+        };
+        const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+        const hmac = this.sign(`gpt1.${b64}`);
+        return `gpt1.${b64}.${hmac}`;
+    }
+    validateGuestPaymentToken(token, tenantId) {
+        const parts = token.split('.');
+        if (parts.length !== 3 || parts[0] !== 'gpt1') {
+            throw new common_1.UnauthorizedException('Invalid guest payment token');
+        }
+        const [version, b64, provided] = parts;
+        const expected = this.sign(`${version}.${b64}`);
+        let eq;
+        try {
+            eq = crypto.timingSafeEqual(Buffer.from(provided, 'base64url'), Buffer.from(expected, 'base64url'));
+        }
+        catch {
+            eq = false;
+        }
+        if (!eq) {
+            this.logger.warn('Guest payment token HMAC mismatch — possible tampering');
+            throw new common_1.UnauthorizedException('Invalid guest payment token');
+        }
+        let payload;
+        try {
+            payload = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
+        }
+        catch {
+            throw new common_1.UnauthorizedException('Invalid guest payment token');
+        }
+        if (Date.now() > payload.exp) {
+            throw new common_1.UnauthorizedException('Guest payment token expired');
+        }
+        if (payload.tid !== tenantId) {
+            this.logger.warn(`Guest payment token tenant mismatch — token=${payload.tid} request=${tenantId}`);
+            throw new common_1.UnauthorizedException('Invalid guest payment token');
+        }
+        if (payload.purpose !== 'guest_payment') {
+            throw new common_1.UnauthorizedException('Invalid guest payment token');
+        }
+        return payload;
+    }
     sign(data) {
         return crypto
             .createHmac('sha256', this.secret)

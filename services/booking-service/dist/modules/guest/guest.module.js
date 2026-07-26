@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GuestModule = void 0;
 const common_1 = require("@nestjs/common");
+const payment_module_1 = require("../payment/payment.module");
 const guest_session_service_1 = require("./guest-session.service");
 const guest_booking_linking_service_1 = require("./guest-booking-linking.service");
 const guest_controller_1 = require("./guest.controller");
@@ -21,6 +22,7 @@ exports.GuestModule = GuestModule = __decorate([
         imports: [
             (0, common_1.forwardRef)(() => booking_module_1.BookingModule),
             (0, common_1.forwardRef)(() => qr_module_1.QrModule),
+            (0, common_1.forwardRef)(() => payment_module_1.PaymentModule),
         ],
         controllers: [guest_controller_1.GuestController],
         providers: [guest_session_service_1.GuestSessionService, guest_booking_linking_service_1.GuestBookingLinkingService],

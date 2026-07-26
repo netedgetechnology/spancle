@@ -35,6 +35,12 @@ exports.EventRegistry = {
     BOOKING_CANCELLED: 'spancle.booking.cancelled',
     BOOKING_COMPLETED: 'spancle.booking.completed',
     BOOKING_NO_SHOW: 'spancle.booking.no_show',
+    BOOKING_RESCHEDULED: 'spancle.booking.rescheduled',
+    BOOKING_EXPIRED: 'spancle.booking.expired',
+    BOOKING_REMINDER_24H: 'spancle.booking.reminder_24h',
+    BOOKING_REMINDER_2H: 'spancle.booking.reminder_2h',
+    WAITLIST_PROMOTED: 'spancle.waitlist.promoted',
+    MEMBERSHIP_EXPIRY_REMINDER: 'spancle.membership.expiry_reminder',
     // ── Finance ───────────────────────────────────────────────────────────────
     INVOICE_CREATED: 'spancle.invoice.created',
     INVOICE_PAID: 'spancle.invoice.paid',

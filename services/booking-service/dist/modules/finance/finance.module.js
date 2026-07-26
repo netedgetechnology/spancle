@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FinanceModule = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const accounting_period_entity_1 = require("./entities/accounting-period.entity");
 const chart_of_account_entity_1 = require("./entities/chart-of-account.entity");
@@ -48,12 +49,15 @@ const refund_admin_controller_1 = require("./controllers/refund-admin.controller
 const payment_correlation_admin_controller_1 = require("./controllers/payment-correlation-admin.controller");
 const finance_booking_refund_job_admin_controller_1 = require("./controllers/finance-booking-refund-job-admin.controller");
 const booking_finance_listener_1 = require("./listeners/booking-finance.listener");
+const stripe_adapter_1 = require("./gateway/stripe.adapter");
+const payment_gateway_adapter_1 = require("./gateway/payment-gateway.adapter");
 let FinanceModule = class FinanceModule {
 };
 exports.FinanceModule = FinanceModule;
 exports.FinanceModule = FinanceModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            config_1.ConfigModule,
             typeorm_1.TypeOrmModule.forFeature([
                 accounting_period_entity_1.AccountingPeriodEntity,
                 chart_of_account_entity_1.ChartOfAccountEntity,
@@ -93,6 +97,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             refund_repository_1.RefundRepository,
             payment_correlation_repository_1.PaymentCorrelationRepository,
             finance_booking_refund_job_repository_1.FinanceBookingRefundJobRepository,
+            stripe_adapter_1.StripeAdapter,
             accounting_period_service_1.AccountingPeriodService,
             double_entry_service_1.DoubleEntryService,
             tax_resolver_service_1.TaxResolver,
@@ -104,6 +109,12 @@ exports.FinanceModule = FinanceModule = __decorate([
             payment_correlation_service_1.PaymentCorrelationService,
             finance_booking_refund_job_service_1.FinanceBookingRefundJobService,
             booking_finance_listener_1.BookingFinanceListener,
+            stripe_adapter_1.StripeAdapter,
+            {
+                provide: payment_gateway_adapter_1.PAYMENT_GATEWAY_ADAPTERS,
+                useFactory: (stripe) => [stripe],
+                inject: [stripe_adapter_1.StripeAdapter],
+            },
         ],
         exports: [
             accounting_period_service_1.AccountingPeriodService,
@@ -125,6 +136,7 @@ exports.FinanceModule = FinanceModule = __decorate([
             refund_repository_1.RefundRepository,
             payment_correlation_repository_1.PaymentCorrelationRepository,
             finance_booking_refund_job_repository_1.FinanceBookingRefundJobRepository,
+            stripe_adapter_1.StripeAdapter,
         ],
     })
 ], FinanceModule);

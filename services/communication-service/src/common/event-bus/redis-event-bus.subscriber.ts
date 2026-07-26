@@ -44,8 +44,14 @@ export class RedisEventBusSubscriber implements OnModuleInit, OnModuleDestroy {
   private readonly CHANNELS = [
     EventRegistry.BOOKING_CONFIRMED,
     EventRegistry.BOOKING_CANCELLED,
+    EventRegistry.BOOKING_RESCHEDULED,
+    EventRegistry.BOOKING_EXPIRED,
+    EventRegistry.BOOKING_REMINDER_24H,
+    EventRegistry.BOOKING_REMINDER_2H,
+    EventRegistry.WAITLIST_PROMOTED,
     EventRegistry.PAYMENT_SUCCEEDED,
     EventRegistry.PAYMENT_FAILED,
+    EventRegistry.MEMBERSHIP_EXPIRY_REMINDER,
   ] as const;
 
   constructor(

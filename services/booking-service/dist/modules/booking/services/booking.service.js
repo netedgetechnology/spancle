@@ -59,6 +59,9 @@ const slot_events_1 = require("../../slot/events/slot.events");
 const pricing_rule_repository_1 = require("../../slot/repositories/pricing-rule.repository");
 const booking_entity_1 = require("../entities/booking.entity");
 const slot_repository_1 = require("../../slot/repositories/slot.repository");
+const booking_rules_service_1 = require("../../booking-rules/services/booking-rules.service");
+const customer_service_1 = require("../../customer/services/customer.service");
+const membership_integration_service_1 = require("./membership-integration.service");
 const booking_refund_entity_1 = require("../entities/booking-refund.entity");
 const booking_payment_entity_1 = require("../entities/booking-payment.entity");
 const booking_refund_payment_allocation_entity_1 = require("../entities/booking-refund-payment-allocation.entity");
@@ -77,7 +80,7 @@ const ALLOWED_TRANSITIONS = {
     expired: [],
 };
 let BookingService = BookingService_1 = class BookingService {
-    constructor(bookingRepository, logRepository, paymentRepository, refundRepository, validationService, slotRepository, pricingRuleRepository, eventEmitter, dataSource, configService) {
+    constructor(bookingRepository, logRepository, paymentRepository, refundRepository, validationService, slotRepository, pricingRuleRepository, eventEmitter, dataSource, configService, bookingRulesService, customerService, membershipIntegration) {
         this.bookingRepository = bookingRepository;
         this.logRepository = logRepository;
         this.paymentRepository = paymentRepository;
@@ -88,6 +91,9 @@ let BookingService = BookingService_1 = class BookingService {
         this.eventEmitter = eventEmitter;
         this.dataSource = dataSource;
         this.configService = configService;
+        this.bookingRulesService = bookingRulesService;
+        this.customerService = customerService;
+        this.membershipIntegration = membershipIntegration;
         this.logger = new common_1.Logger(BookingService_1.name);
     }
     async create(dto, tenantId, actorId) {
@@ -97,10 +103,28 @@ let BookingService = BookingService_1 = class BookingService {
         const startsAt = sortedSlots[0].startAt;
         const endsAt = sortedSlots[sortedSlots.length - 1].endAt;
         const totalMins = sortedSlots.reduce((s, sl) => s + sl.durationMins, 0);
-        const totalPrice = slots.every((s) => s.effectivePriceMinor !== null)
+        await this.bookingRulesService.enforceCreateRules({
+            dto,
+            tenantId,
+            startsAt,
+            endsAt,
+            totalMins,
+            actorId,
+        });
+        const rawTotalPrice = slots.every((s) => s.effectivePriceMinor !== null)
             ? slots.reduce((s, sl) => s + (sl.effectivePriceMinor ?? 0), 0)
             : null;
         const currency = slots[0].currency;
+        const membershipResult = await this.membershipIntegration.validateAndComputePrice({
+            dto,
+            tenantId,
+            slotPriceMinor: rawTotalPrice,
+            courtId: dto.courtId,
+            branchId: dto.branchId,
+            sportId: dto.sportId ?? null,
+        });
+        const totalPrice = membershipResult.adjustedPriceMinor ?? rawTotalPrice;
+        const discountMinor = membershipResult.discountMinor;
         const reference = booking_utils_1.BookingUtils.generateReference();
         const booking = await this.dataSource.transaction(async (manager) => {
             await this.slotRepository.lockAndVerifyAvailable(dto.slotIds, tenantId, manager);
@@ -140,6 +164,9 @@ let BookingService = BookingService_1 = class BookingService {
                 customerNotes: dto.customerNotes ?? null,
                 internalNotes: dto.internalNotes ?? null,
                 metadata: dto.metadata ?? null,
+                membershipId: membershipResult.context?.membershipId ?? null,
+                entitlementType: membershipResult.shouldConsumeCredit ? 'court_credit' : null,
+                discountMinor,
                 createdById: actorId,
                 updatedById: actorId,
             }));
@@ -152,6 +179,21 @@ let BookingService = BookingService_1 = class BookingService {
                 });
             }
             return b;
+        });
+        void this.customerService.resolveOrCreateForBooking({
+            tenantId,
+            userId: dto.customer.userId ?? null,
+            email: dto.customer.email,
+            name: dto.customer.name,
+            phone: dto.customer.phone ?? null,
+            isMember: dto.customer.isMember ?? false,
+            isGuest: !dto.customer.userId,
+        }).then((customerId) => {
+            if (customerId) {
+                void this.dataSource.query('UPDATE bookings SET customer_id = $1 WHERE id = $2 AND tenant_id = $3', [customerId, booking.id, tenantId]);
+            }
+        }).catch((err) => {
+            this.logger.warn(`Customer resolution failed for booking ${booking.id}: ${err instanceof Error ? err.message : String(err)}`);
         });
         await this.logRepository.insert({
             tenantId,
@@ -264,14 +306,21 @@ let BookingService = BookingService_1 = class BookingService {
             actorId, actorType: 'user',
             previousStatus: booking.status, newStatus: 'confirmed',
         });
+        const txnId = await this.membershipIntegration.consumeEntitlement({ booking, tenantId, actorId });
+        if (txnId) {
+            await this.dataSource.query('UPDATE bookings SET entitlement_txn_id = $1 WHERE id = $2 AND tenant_id = $3', [txnId, id, tenantId]);
+        }
         await this.emitStatusChange(tenantId, id, actorId, booking.status, 'confirmed');
         await this.eventEmitter.emitAsync(booking_events_1.BookingEvents.CONFIRMED, {
             tenantId, bookingId: id, actorId, timestamp: new Date().toISOString(),
         });
         return updated;
     }
-    async cancel(id, dto, tenantId, actorId) {
+    async cancel(id, dto, tenantId, actorId, actorRole = 'PLAYER') {
         const booking = await this.findOne(id, tenantId);
+        await this.bookingRulesService.enforceCancellationRules({
+            booking, dto, tenantId, actorRole,
+        });
         this.validationService.assertCancellable(booking);
         const updated = await this.dataSource.transaction(async (manager) => {
             const b = await this.bookingRepository.updateById(id, tenantId, {
@@ -291,6 +340,7 @@ let BookingService = BookingService_1 = class BookingService {
             }
             return b;
         });
+        await this.membershipIntegration.restoreEntitlement({ booking, tenantId, actorId });
         await this.logRepository.insert({
             tenantId, bookingId: id, action: 'cancelled',
             actorId, actorType: 'user',
@@ -309,6 +359,10 @@ let BookingService = BookingService_1 = class BookingService {
         return updated;
     }
     async reschedule(id, dto, tenantId, actorId) {
+        const bookingForRules = await this.bookingRepository.findByIdOrFail(id, tenantId);
+        await this.bookingRulesService.enforceRescheduleRules({
+            booking: bookingForRules, dto, tenantId, actorId,
+        });
         const booking = await this.findOne(id, tenantId);
         this.validationService.assertReschedulable(booking);
         const newSlots = await this.validationService.validateSlotsForReschedule(dto.newSlotIds, booking.slotIds, tenantId, booking.courtId, id);
@@ -868,6 +922,9 @@ exports.BookingService = BookingService = BookingService_1 = __decorate([
         pricing_rule_repository_1.PricingRuleRepository,
         event_emitter_1.EventEmitter2,
         typeorm_1.DataSource,
-        config_1.ConfigService])
+        config_1.ConfigService,
+        booking_rules_service_1.BookingRulesService,
+        customer_service_1.CustomerService,
+        membership_integration_service_1.MembershipIntegrationService])
 ], BookingService);
 //# sourceMappingURL=booking.service.js.map

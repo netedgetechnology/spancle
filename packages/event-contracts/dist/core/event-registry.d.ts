@@ -28,6 +28,12 @@ export declare const EventRegistry: {
     readonly BOOKING_CANCELLED: "spancle.booking.cancelled";
     readonly BOOKING_COMPLETED: "spancle.booking.completed";
     readonly BOOKING_NO_SHOW: "spancle.booking.no_show";
+    readonly BOOKING_RESCHEDULED: "spancle.booking.rescheduled";
+    readonly BOOKING_EXPIRED: "spancle.booking.expired";
+    readonly BOOKING_REMINDER_24H: "spancle.booking.reminder_24h";
+    readonly BOOKING_REMINDER_2H: "spancle.booking.reminder_2h";
+    readonly WAITLIST_PROMOTED: "spancle.waitlist.promoted";
+    readonly MEMBERSHIP_EXPIRY_REMINDER: "spancle.membership.expiry_reminder";
     readonly INVOICE_CREATED: "spancle.invoice.created";
     readonly INVOICE_PAID: "spancle.invoice.paid";
     readonly INVOICE_OVERDUE: "spancle.invoice.overdue";

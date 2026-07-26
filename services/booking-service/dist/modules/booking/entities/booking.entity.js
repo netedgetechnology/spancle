@@ -48,6 +48,30 @@ __decorate([
     __metadata("design:type", Object)
 ], BookingEntity.prototype, "userId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'customer_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], BookingEntity.prototype, "customerId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'membership_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], BookingEntity.prototype, "membershipId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'entitlement_type', type: 'varchar', length: 80, nullable: true }),
+    __metadata("design:type", Object)
+], BookingEntity.prototype, "entitlementType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'entitlement_txn_id', type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], BookingEntity.prototype, "entitlementTxnId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'discount_minor', type: 'int', nullable: false, default: 0 }),
+    __metadata("design:type", Number)
+], BookingEntity.prototype, "discountMinor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'wallet_amount_minor', type: 'int', nullable: false, default: 0 }),
+    __metadata("design:type", Number)
+], BookingEntity.prototype, "walletAmountMinor", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'customer_name', type: 'varchar', length: 255, nullable: false }),
     __metadata("design:type", String)
 ], BookingEntity.prototype, "customerName", void 0);

@@ -59,7 +59,7 @@ function assertTransitionAllowed(from, to) {
     }
 }
 let PaymentService = PaymentService_1 = class PaymentService {
-    constructor(paymentRepository, invoiceRepository, doubleEntryService, periodService, eventEmitter, dataSource) {
+    constructor(paymentRepository, invoiceRepository, doubleEntryService, periodService, eventEmitter, dataSource, adapters) {
         this.paymentRepository = paymentRepository;
         this.invoiceRepository = invoiceRepository;
         this.doubleEntryService = doubleEntryService;
@@ -67,10 +67,7 @@ let PaymentService = PaymentService_1 = class PaymentService {
         this.eventEmitter = eventEmitter;
         this.dataSource = dataSource;
         this.logger = new common_1.Logger(PaymentService_1.name);
-        this.adapters = new Map([
-            ['stripe', new payment_gateway_adapter_1.StripeAdapter()],
-            ['razorpay', new payment_gateway_adapter_1.RazorpayAdapter()],
-        ]);
+        this.adapters = new Map(adapters.map((a) => [a.gatewayName, a]));
     }
     adapter(gateway) {
         return this.adapters.get(gateway) ?? null;
@@ -422,11 +419,12 @@ exports.PaymentService = PaymentService;
 exports.PaymentService = PaymentService = PaymentService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(5, (0, typeorm_1.InjectDataSource)()),
+    __param(6, (0, common_1.Inject)(payment_gateway_adapter_1.PAYMENT_GATEWAY_ADAPTERS)),
     __metadata("design:paramtypes", [payment_repository_1.PaymentRepository,
         invoice_repository_1.InvoiceRepository,
         double_entry_service_1.DoubleEntryService,
         accounting_period_service_1.AccountingPeriodService,
         event_emitter_1.EventEmitter2,
-        typeorm_2.DataSource])
+        typeorm_2.DataSource, Array])
 ], PaymentService);
 //# sourceMappingURL=payment.service.js.map

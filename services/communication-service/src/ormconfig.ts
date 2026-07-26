@@ -6,6 +6,8 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { MessageEntity } from './modules/message/entities/message.entity';
+import { NotificationPreferenceEntity } from './modules/notification/entities/notification-preference.entity';
+import { AddNotificationPreferencesAndTemplates1722000004000 } from './migrations/1722000004000-AddNotificationPreferencesAndTemplates';
 import { NotificationEntity } from './modules/notification/entities/notification.entity';
 import { TemplateEntity } from './modules/template/entities/template.entity';
 
@@ -19,9 +21,10 @@ const dataSource = new DataSource({
   entities:           [
     MessageEntity,
     NotificationEntity,
+    NotificationPreferenceEntity,
     TemplateEntity,
   ],
-  migrations:         [AddTemplateFields1722000001000, AddNotificationDeliveryFields1722000002000, SeedBookingCancelledTemplate1722000003000],
+  migrations:         [AddTemplateFields1722000001000, AddNotificationDeliveryFields1722000002000, SeedBookingCancelledTemplate1722000003000, AddNotificationPreferencesAndTemplates1722000004000],
   migrationsTableName: 'typeorm_migrations',
   synchronize:        false,
   logging:            ['error', 'migration'],
