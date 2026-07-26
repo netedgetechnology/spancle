@@ -140,7 +140,7 @@ function makeSvc(
   ds     = makeDs(),
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new WaitlistService(wRepo as never, sRepo as never, emit as never, config as never, ds as never);
+  return new WaitlistService(wRepo as never, sRepo as never, emit as never, config as never, ds as never, { publishWaitlistPromoted: jest.fn().mockResolvedValue(undefined) } as never);
 }
 
 // ── join() ───────────────────────────────────────────────────────────────────

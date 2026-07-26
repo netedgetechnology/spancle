@@ -29,6 +29,7 @@ import { SlotRepository }  from '../../slot/repositories/slot.repository';
 import { BookingRulesService } from '../../booking-rules/services/booking-rules.service';
 import { CustomerService }    from '../../customer/services/customer.service';
 import { MembershipIntegrationService } from './membership-integration.service';
+import { RedisEventBusPublisher } from '../../../common/event-bus/redis-event-bus.publisher';
 import type { CreateBookingDto }    from '../dto/create-booking.dto';
 import type { BookingQueryDto }     from '../dto/booking-query.dto';
 import type {
@@ -79,6 +80,7 @@ export class BookingService {
     private readonly bookingRulesService:  BookingRulesService,
     private readonly customerService:      CustomerService,
     private readonly membershipIntegration: MembershipIntegrationService,
+    private readonly redisPublisher:       RedisEventBusPublisher,
   ) {}
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -354,6 +356,18 @@ export class BookingService {
       reason: 'expired', actorId, timestamp: new Date().toISOString(),
     });
 
+    // CB-2 FIX: bridge BOOKING_EXPIRED to Redis so communication-service receives it
+    void this.redisPublisher.publishBookingExpired({
+      tenantId,
+      bookingId:     id,
+      customerEmail: booking.customerEmail ?? undefined,
+      customerName:  booking.customerName  ?? undefined,
+      reference:     booking.reference     ?? undefined,
+      startsAt:      booking.startsAt instanceof Date
+        ? booking.startsAt.toISOString()
+        : String(booking.startsAt),
+    });
+
     return updated;
   }
 
@@ -363,21 +377,30 @@ export class BookingService {
     const booking = await this.findOne(id, tenantId);
     this.assertTransitionAllowed(booking.status, 'confirmed');
 
+    // CB-1 FIX: both the booking status update AND the slot status updates must
+    // execute on the same EntityManager so they are covered by a single transaction.
+    // Previously bookingRepository.updateById() used its own injected repo connection
+    // (outside the transaction manager), creating a split-brain risk where slot rows
+    // could commit while the booking row roll-back (or vice versa).
     const updated = await this.dataSource.transaction(async (manager) => {
-      const b = await this.bookingRepository.updateById(id, tenantId, {
-        status:     'confirmed',
-        updatedById: actorId,
-      });
+      const SlotEntity = (await import('../../slot/entities/slot.entity')).SlotEntity;
+
+      // Update booking status via manager — same transaction as slot updates below
+      await manager.update(
+        BookingEntity,
+        { id, tenantId },
+        { status: 'confirmed', updatedById: actorId, updatedAt: new Date() },
+      );
 
       for (const slotId of booking.slotIds) {
         await manager.update(
-          (await import('../../slot/entities/slot.entity')).SlotEntity,
+          SlotEntity,
           { id: slotId, tenantId },
           { status: 'booked', reservedUntil: null, updatedAt: new Date() },
         );
       }
 
-      return b;
+      return manager.findOneOrFail(BookingEntity, { where: { id, tenantId } });
     });
 
     await this.logRepository.insert({
@@ -556,6 +579,21 @@ export class BookingService {
       timestamp: new Date().toISOString(),
     };
     await this.eventEmitter.emitAsync(BookingEvents.RESCHEDULED, payload);
+
+    // CB-2 FIX: bridge BOOKING_RESCHEDULED to Redis for communication-service email
+    void this.redisPublisher.publishBookingRescheduled({
+      tenantId,
+      bookingId:     id,
+      actorId,
+      customerEmail: booking.customerEmail ?? undefined,
+      customerName:  booking.customerName  ?? undefined,
+      reference:     booking.reference     ?? undefined,
+      newStartsAt:   updated.startsAt instanceof Date
+        ? updated.startsAt.toISOString()
+        : String(updated.startsAt),
+      durationMins:  updated.totalDurationMins,
+      reason:        dto.reason ?? null,
+    });
 
     this.logger.log(`Booking rescheduled: ${booking.reference} tenant=${tenantId}`);
     return updated;

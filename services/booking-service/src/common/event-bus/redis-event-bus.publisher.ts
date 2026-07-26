@@ -201,4 +201,122 @@ export class RedisEventBusPublisher implements OnModuleInit, OnModuleDestroy {
       correlationId,
     );
   }
+
+  // CB-2 FIX: The following publish helpers were missing, causing BOOKING_RESCHEDULED,
+  // BOOKING_EXPIRED, WAITLIST_PROMOTED, and reminder events to never reach the
+  // communication-service Redis subscriber.
+
+  /**
+   * publishBookingRescheduled()
+   *
+   * Called by BookingService.reschedule() after the transaction commits.
+   * Bridges the in-process BOOKING_RESCHEDULED event to the Redis channel
+   * so communication-service can send a reschedule confirmation email.
+   */
+  async publishBookingRescheduled(params: {
+    tenantId:        string;
+    bookingId:       string;
+    actorId?:        string;
+    customerEmail?:  string;
+    customerName?:   string;
+    reference?:      string;
+    newStartsAt?:    string;
+    durationMins?:   number;
+    venueName?:      string;
+    courtName?:      string;
+    reason?:         string | null;
+    correlationId?:  string;
+  }): Promise<void> {
+    const { correlationId, tenantId, ...rest } = params;
+    await this.publish(
+      EventRegistry.BOOKING_RESCHEDULED,
+      tenantId,
+      rest as Record<string, unknown>,
+      correlationId,
+    );
+  }
+
+  /**
+   * publishBookingExpired()
+   *
+   * Called by BookingService.expire() after the transaction commits.
+   * Bridges the in-process BOOKING_EXPIRED event to Redis so
+   * communication-service can notify the customer their hold lapsed.
+   */
+  async publishBookingExpired(params: {
+    tenantId:       string;
+    bookingId:      string;
+    customerEmail?: string;
+    customerName?:  string;
+    reference?:     string;
+    startsAt?:      string;
+    venueName?:     string;
+    correlationId?: string;
+  }): Promise<void> {
+    const { correlationId, tenantId, ...rest } = params;
+    await this.publish(
+      EventRegistry.BOOKING_EXPIRED,
+      tenantId,
+      rest as Record<string, unknown>,
+      correlationId,
+    );
+  }
+
+  /**
+   * publishWaitlistPromoted()
+   *
+   * Called by WaitlistService.promoteNext() after a customer is promoted.
+   * Bridges the in-process event to Redis so communication-service can
+   * send the "your slot is available" email.
+   */
+  async publishWaitlistPromoted(params: {
+    tenantId:        string;
+    waitlistEntryId: string;
+    slotId:          string;
+    customerEmail?:  string;
+    customerName?:   string;
+    startsAt?:       string;
+    endsAt?:         string;
+    courtName?:      string;
+    venueName?:      string;
+    promotedUntil?:  string;
+    correlationId?:  string;
+  }): Promise<void> {
+    const { correlationId, tenantId, ...rest } = params;
+    await this.publish(
+      EventRegistry.WAITLIST_PROMOTED,
+      tenantId,
+      rest as Record<string, unknown>,
+      correlationId,
+    );
+  }
+
+  /**
+   * publishBookingReminder()
+   *
+   * Called by the NotificationSchedulerService (communication-service) via
+   * local EventEmitter — but booking-service can also call this from a
+   * scheduler if needed in future. Included here for completeness.
+   *
+   * @param hoursUntil  24 or 2 — determines which EventRegistry channel to use.
+   */
+  async publishBookingReminder(params: {
+    tenantId:       string;
+    bookingId:      string;
+    customerEmail?: string;
+    customerName?:  string;
+    reference?:     string;
+    startsAt?:      string;
+    durationMins?:  number;
+    venueName?:     string;
+    courtName?:     string;
+    hoursUntil:     24 | 2;
+    correlationId?: string;
+  }): Promise<void> {
+    const { correlationId, tenantId, hoursUntil, ...rest } = params;
+    const channel = hoursUntil === 2
+      ? EventRegistry.BOOKING_REMINDER_2H
+      : EventRegistry.BOOKING_REMINDER_24H;
+    await this.publish(channel, tenantId, rest as Record<string, unknown>, correlationId);
+  }
 }

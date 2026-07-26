@@ -17,6 +17,7 @@ import { SlotRepository }         from '../../slot/repositories/slot.repository'
 import { SlotEntity }             from '../../slot/entities/slot.entity';
 import { BookingEvents }          from '../../booking/events/booking.events';
 import { SlotEvents }             from '../../slot/events/slot.events';
+import { RedisEventBusPublisher } from '../../../common/event-bus/redis-event-bus.publisher';
 import type { JoinWaitlistDto, WaitlistQueryDto } from '../dto/waitlist.dto';
 
 /** Default TTL given to a promoted customer to complete the booking. */
@@ -51,6 +52,7 @@ export class WaitlistService {
     private readonly eventEmitter:       EventEmitter2,
     private readonly config:             ConfigService,
     @InjectDataSource() private readonly ds: DataSource,
+    private readonly redisPublisher:     RedisEventBusPublisher,
   ) {
     this.reservationTtlMins =
       this.config.get<number>('WAITLIST_RESERVATION_TTL_MINS') ??
@@ -257,6 +259,18 @@ export class WaitlistService {
       `Waitlist promoted — entry=${promoted.id} slot=${slotId} ` +
       `customer=${promoted.customerName} until=${promoted.promotedUntil?.toISOString()}`,
     );
+
+    // CB-2 FIX: publish WAITLIST_PROMOTED to Redis so communication-service receives it.
+    // Previously only the local EventEmitter2 was used, so the notification email
+    // was never sent (comm-service subscribes via Redis, not in-process events).
+    void this.redisPublisher.publishWaitlistPromoted({
+      tenantId,
+      waitlistEntryId: promoted.id,
+      slotId,
+      customerEmail:   promoted.customerEmail   ?? undefined,
+      customerName:    promoted.customerName,
+      promotedUntil:   promoted.promotedUntil?.toISOString(),
+    });
 
     // Emit CONFIRMED so communication-service sends the promotion notification
     await this.eventEmitter.emitAsync(BookingEvents.CONFIRMED, {

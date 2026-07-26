@@ -157,6 +157,34 @@ export class EntitlementService {
     let updatedBalance!: EntitlementBalanceEntity;
 
     await this.dataSource.transaction(async (manager) => {
+      // CB-3 FIX: idempotency guard — if a consume transaction already exists
+      // for this (tenantId, referenceType, referenceId) pair, return the current
+      // balance without double-deducting. This protects against HTTP retries and
+      // the rare concurrent double-confirm race on the same booking.
+      if (dto.referenceId && dto.referenceType) {
+        const existing = await manager.query<Array<{ id: string }>>(
+          `SELECT id FROM membership_transactions
+           WHERE tenant_id       = $1
+             AND reference_type  = $2
+             AND reference_id    = $3
+             AND transaction_type = 'consume'
+           LIMIT 1`,
+          [tenantId, dto.referenceType, dto.referenceId],
+        );
+        if (existing.length > 0) {
+          this.logger.warn(
+            `consume() idempotency hit — referenceId=${dto.referenceId} ` +
+            `referenceType=${dto.referenceType} membershipId=${membershipId} — skipping`,
+          );
+          // Load and return the current balance; skip the deduction entirely
+          const bal = await this.entitlementRepository.findByBenefitTypeOrFail(
+            membershipId, dto.benefitType, tenantId,
+          );
+          updatedBalance = bal;
+          return; // exits the transaction callback — no writes executed
+        }
+      }
+
       const locked = await this.entitlementRepository.lockBalance(
         membershipId, dto.benefitType, tenantId, manager,
       );
