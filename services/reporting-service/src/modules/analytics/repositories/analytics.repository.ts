@@ -692,4 +692,301 @@ export class AnalyticsRepository {
       })),
     };
   }
+
+  // ── Revenue by sport ───────────────────────────────────────────────────────
+
+  async getRevenueBySport(params: {
+    tenantId:  string;
+    from:      string;
+    to:        string;
+    branchId?: string;
+  }): Promise<Array<{
+    sportId:            string | null;
+    totalBookings:      number;
+    totalRevenueMinor:  number;
+    avgRevenueMinor:    number;
+    totalDurationMins:  number;
+    cancellationCount:  number;
+    cancellationRate:   number;
+  }>> {
+    const { tenantId, from, to, branchId } = params;
+    const p: unknown[] = [tenantId, from, to];
+    const extra: string[] = [];
+    if (branchId) { extra.push(`AND branch_id = $${p.push(branchId)}`); }
+
+    return this.dataSource.query<Array<Record<string, string>>>(`
+      SELECT
+        sport_id                                                         AS "sportId",
+        COUNT(*)::int                                                    AS "totalBookings",
+        COALESCE(SUM(final_price_minor), 0)::bigint                     AS "totalRevenueMinor",
+        ROUND(AVG(NULLIF(final_price_minor, 0)))::bigint                AS "avgRevenueMinor",
+        COALESCE(SUM(duration_mins), 0)::int                            AS "totalDurationMins",
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int               AS "cancellationCount",
+        ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'cancelled')
+          / NULLIF(COUNT(*), 0), 2)::float                              AS "cancellationRate"
+      FROM bookings
+      WHERE tenant_id = $1
+        AND is_deleted = FALSE
+        AND status NOT IN ('draft')
+        AND starts_at >= $2::timestamptz
+        AND starts_at <  ($3::date + interval '1 day')::timestamptz
+        ${extra.join('\n')}
+      GROUP BY sport_id
+      ORDER BY "totalRevenueMinor" DESC NULLS LAST
+    `, p).then((rows) => rows.map((r) => ({
+      sportId:            r['sportId']           ?? null,
+      totalBookings:      Number(r['totalBookings']     ?? 0),
+      totalRevenueMinor:  Number(r['totalRevenueMinor'] ?? 0),
+      avgRevenueMinor:    Number(r['avgRevenueMinor']   ?? 0),
+      totalDurationMins:  Number(r['totalDurationMins'] ?? 0),
+      cancellationCount:  Number(r['cancellationCount'] ?? 0),
+      cancellationRate:   Number(r['cancellationRate']  ?? 0),
+    })));
+  }
+
+  // ── Revenue by branch ──────────────────────────────────────────────────────
+
+  async getRevenueByBranch(params: {
+    tenantId:  string;
+    from:      string;
+    to:        string;
+    sportId?:  string;
+  }): Promise<Array<{
+    branchId:           string;
+    totalBookings:      number;
+    totalRevenueMinor:  number;
+    avgRevenueMinor:    number;
+    totalDurationMins:  number;
+    cancellationCount:  number;
+    noShowCount:        number;
+    utilizationPct:     number;
+  }>> {
+    const { tenantId, from, to, sportId } = params;
+    const p: unknown[] = [tenantId, from, to];
+    const extra: string[] = [];
+    if (sportId) { extra.push(`AND sport_id = $${p.push(sportId)}`); }
+
+    return this.dataSource.query<Array<Record<string, string>>>(`
+      SELECT
+        branch_id                                                        AS "branchId",
+        COUNT(*)::int                                                    AS "totalBookings",
+        COALESCE(SUM(final_price_minor), 0)::bigint                     AS "totalRevenueMinor",
+        ROUND(AVG(NULLIF(final_price_minor, 0)))::bigint                AS "avgRevenueMinor",
+        COALESCE(SUM(duration_mins), 0)::int                            AS "totalDurationMins",
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int               AS "cancellationCount",
+        COUNT(*) FILTER (WHERE status = 'no_show')::int                 AS "noShowCount",
+        ROUND(100.0 * COUNT(*) FILTER (WHERE status IN ('confirmed','completed','in_progress','checked_in'))
+          / NULLIF(COUNT(*), 0), 2)::float                              AS "utilizationPct"
+      FROM bookings
+      WHERE tenant_id = $1
+        AND is_deleted = FALSE
+        AND status NOT IN ('draft')
+        AND starts_at >= $2::timestamptz
+        AND starts_at <  ($3::date + interval '1 day')::timestamptz
+        ${extra.join('\n')}
+      GROUP BY branch_id
+      ORDER BY "totalRevenueMinor" DESC NULLS LAST
+    `, p).then((rows) => rows.map((r) => ({
+      branchId:           r['branchId']          ?? '',
+      totalBookings:      Number(r['totalBookings']     ?? 0),
+      totalRevenueMinor:  Number(r['totalRevenueMinor'] ?? 0),
+      avgRevenueMinor:    Number(r['avgRevenueMinor']   ?? 0),
+      totalDurationMins:  Number(r['totalDurationMins'] ?? 0),
+      cancellationCount:  Number(r['cancellationCount'] ?? 0),
+      noShowCount:        Number(r['noShowCount']        ?? 0),
+      utilizationPct:     Number(r['utilizationPct']    ?? 0),
+    })));
+  }
+
+  // ── Booking trends ─────────────────────────────────────────────────────────
+
+  async getBookingTrends(params: {
+    tenantId:    string;
+    from:        string;
+    to:          string;
+    branchId?:   string;
+    sportId?:    string;
+    granularity: Granularity;
+  }): Promise<Array<{
+    period:         string;
+    totalBookings:  number;
+    confirmed:      number;
+    cancelled:      number;
+    noShows:        number;
+    newCustomers:   number;
+    revenueMinor:   number;
+    avgBookingMins: number;
+  }>> {
+    const { tenantId, from, to, branchId, sportId, granularity } = params;
+    const p: unknown[] = [tenantId, from, to];
+    const extra: string[] = [];
+    if (branchId) { extra.push(`AND branch_id = $${p.push(branchId)}`); }
+    if (sportId)  { extra.push(`AND sport_id  = $${p.push(sportId)}`);  }
+
+    const rows = await this.dataSource.query<Array<Record<string, string>>>(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('${granularity}', starts_at), 'YYYY-MM-DD')  AS period,
+        COUNT(*)::int                                                      AS "totalBookings",
+        COUNT(*) FILTER (WHERE status IN ('confirmed','completed'))::int   AS confirmed,
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int                  AS cancelled,
+        COUNT(*) FILTER (WHERE status = 'no_show')::int                    AS "noShows",
+        COUNT(DISTINCT customer_id) FILTER (
+          WHERE created_at >= $2::timestamptz
+            AND customer_id IS NOT NULL
+        )::int                                                             AS "newCustomers",
+        COALESCE(SUM(final_price_minor), 0)::bigint                        AS "revenueMinor",
+        ROUND(AVG(NULLIF(duration_mins, 0)))::int                          AS "avgBookingMins"
+      FROM bookings
+      WHERE tenant_id = $1
+        AND is_deleted = FALSE
+        AND starts_at >= $2::timestamptz
+        AND starts_at <  ($3::date + interval '1 day')::timestamptz
+        ${extra.join('\n')}
+      GROUP BY DATE_TRUNC('${granularity}', starts_at)
+      ORDER BY DATE_TRUNC('${granularity}', starts_at)
+    `, p);
+
+    return rows.map((r) => ({
+      period:         r['period']         ?? '',
+      totalBookings:  Number(r['totalBookings']  ?? 0),
+      confirmed:      Number(r['confirmed']      ?? 0),
+      cancelled:      Number(r['cancelled']      ?? 0),
+      noShows:        Number(r['noShows']        ?? 0),
+      newCustomers:   Number(r['newCustomers']   ?? 0),
+      revenueMinor:   Number(r['revenueMinor']   ?? 0),
+      avgBookingMins: Number(r['avgBookingMins'] ?? 0),
+    }));
+  }
+
+  // ── Customer booking summary ───────────────────────────────────────────────
+
+  async getCustomerBookingSummary(params: {
+    tenantId:  string;
+    from:      string;
+    to:        string;
+    branchId?: string;
+    sportId?:  string;
+    limit:     number;
+    offset:    number;
+  }): Promise<{
+    total: number;
+    rows:  Array<{
+      customerId:         string | null;
+      customerName:       string;
+      customerEmail:      string | null;
+      totalBookings:      number;
+      confirmedBookings:  number;
+      cancelledBookings:  number;
+      noShows:            number;
+      totalSpendMinor:    number;
+      avgBookingMins:     number;
+      lastBookingDate:    string | null;
+    }>;
+  }> {
+    const { tenantId, from, to, branchId, sportId, limit, offset } = params;
+    const p: unknown[] = [tenantId, from, to];
+    const extra: string[] = [];
+    if (branchId) { extra.push(`AND b.branch_id = $${p.push(branchId)}`); }
+    if (sportId)  { extra.push(`AND b.sport_id  = $${p.push(sportId)}`);  }
+
+    const where = `
+      b.tenant_id = $1
+      AND b.is_deleted = FALSE
+      AND b.starts_at >= $2::timestamptz
+      AND b.starts_at <  ($3::date + interval '1 day')::timestamptz
+      ${extra.join('\n')}
+    `;
+
+    const [countRows, rows] = await Promise.all([
+      this.dataSource.query<[{ count: string }]>(
+        `SELECT COUNT(DISTINCT COALESCE(b.customer_id::text, b.customer_name))::int AS count
+         FROM bookings b WHERE ${where}`,
+        p,
+      ),
+      this.dataSource.query<Array<Record<string, string>>>(`
+        SELECT
+          b.customer_id                                                     AS "customerId",
+          MAX(b.customer_name)                                              AS "customerName",
+          MAX(b.customer_email)                                             AS "customerEmail",
+          COUNT(*)::int                                                     AS "totalBookings",
+          COUNT(*) FILTER (WHERE b.status IN ('confirmed','completed'))::int AS "confirmedBookings",
+          COUNT(*) FILTER (WHERE b.status = 'cancelled')::int              AS "cancelledBookings",
+          COUNT(*) FILTER (WHERE b.status = 'no_show')::int                AS "noShows",
+          COALESCE(SUM(b.final_price_minor), 0)::bigint                    AS "totalSpendMinor",
+          ROUND(AVG(NULLIF(b.duration_mins, 0)))::int                      AS "avgBookingMins",
+          TO_CHAR(MAX(b.starts_at), 'YYYY-MM-DD')                         AS "lastBookingDate"
+        FROM bookings b
+        WHERE ${where}
+        GROUP BY b.customer_id, b.customer_name
+        ORDER BY "totalSpendMinor" DESC NULLS LAST
+        LIMIT $${p.length + 1} OFFSET $${p.length + 2}
+      `, [...p, limit, offset]),
+    ]);
+
+    return {
+      total: Number(countRows[0]?.count ?? 0),
+      rows:  rows.map((r) => ({
+        customerId:         r['customerId']         ?? null,
+        customerName:       r['customerName']       ?? '',
+        customerEmail:      r['customerEmail']      ?? null,
+        totalBookings:      Number(r['totalBookings']      ?? 0),
+        confirmedBookings:  Number(r['confirmedBookings']  ?? 0),
+        cancelledBookings:  Number(r['cancelledBookings']  ?? 0),
+        noShows:            Number(r['noShows']            ?? 0),
+        totalSpendMinor:    Number(r['totalSpendMinor']    ?? 0),
+        avgBookingMins:     Number(r['avgBookingMins']     ?? 0),
+        lastBookingDate:    r['lastBookingDate']    ?? null,
+      })),
+    };
+  }
+
+  // ── Membership usage report ────────────────────────────────────────────────
+
+  async getMembershipUsage(params: {
+    tenantId:  string;
+    from:      string;
+    to:        string;
+    branchId?: string;
+  }): Promise<Array<{
+    membershipId:        string | null;
+    entitlementType:     string | null;
+    bookingsWithCredit:  number;
+    totalDiscountMinor:  number;
+    totalWalletMinor:    number;
+    avgDiscountMinor:    number;
+    uniqueCustomers:     number;
+  }>> {
+    const { tenantId, from, to, branchId } = params;
+    const p: unknown[] = [tenantId, from, to];
+    const extra: string[] = [];
+    if (branchId) { extra.push(`AND branch_id = $${p.push(branchId)}`); }
+
+    return this.dataSource.query<Array<Record<string, string>>>(`
+      SELECT
+        membership_id                                                      AS "membershipId",
+        entitlement_type                                                   AS "entitlementType",
+        COUNT(*) FILTER (WHERE membership_id IS NOT NULL)::int            AS "bookingsWithCredit",
+        COALESCE(SUM(discount_minor), 0)::bigint                          AS "totalDiscountMinor",
+        COALESCE(SUM(wallet_amount_minor), 0)::bigint                     AS "totalWalletMinor",
+        ROUND(AVG(NULLIF(discount_minor, 0)))::bigint                     AS "avgDiscountMinor",
+        COUNT(DISTINCT customer_id) FILTER (WHERE membership_id IS NOT NULL)::int AS "uniqueCustomers"
+      FROM bookings
+      WHERE tenant_id = $1
+        AND is_deleted = FALSE
+        AND starts_at >= $2::timestamptz
+        AND starts_at <  ($3::date + interval '1 day')::timestamptz
+        ${extra.join('\n')}
+      GROUP BY membership_id, entitlement_type
+      HAVING membership_id IS NOT NULL
+      ORDER BY "totalDiscountMinor" DESC NULLS LAST
+    `, p).then((rows) => rows.map((r) => ({
+      membershipId:        r['membershipId']        ?? null,
+      entitlementType:     r['entitlementType']     ?? null,
+      bookingsWithCredit:  Number(r['bookingsWithCredit']  ?? 0),
+      totalDiscountMinor:  Number(r['totalDiscountMinor']  ?? 0),
+      totalWalletMinor:    Number(r['totalWalletMinor']    ?? 0),
+      avgDiscountMinor:    Number(r['avgDiscountMinor']    ?? 0),
+      uniqueCustomers:     Number(r['uniqueCustomers']     ?? 0),
+    })));
+  }
 }

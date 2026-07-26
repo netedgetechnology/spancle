@@ -228,3 +228,149 @@ export const PRESET_RANGES = [
   { label: 'Last 30 days', from: () => nDaysAgo(29), to: todayString },
   { label: 'Last 90 days', from: () => nDaysAgo(89), to: todayString },
 ] as const;
+
+// ── Revenue by sport ──────────────────────────────────────────────────────────
+
+export interface RevenueBySportRow {
+  sportId:           string | null;
+  totalBookings:     number;
+  totalRevenueMinor: number;
+  avgRevenueMinor:   number;
+  totalDurationMins: number;
+  cancellationCount: number;
+  cancellationRate:  number;
+}
+
+export interface RevenueBySportSummary {
+  from:              string;
+  to:                string;
+  totalRevenueMinor: number;
+  totalBookings:     number;
+  bySport:           RevenueBySportRow[];
+}
+
+// ── Revenue by branch ─────────────────────────────────────────────────────────
+
+export interface RevenueByBranchRow {
+  branchId:          string;
+  totalBookings:     number;
+  totalRevenueMinor: number;
+  avgRevenueMinor:   number;
+  totalDurationMins: number;
+  cancellationCount: number;
+  noShowCount:       number;
+  utilizationPct:    number;
+}
+
+export interface RevenueByBranchSummary {
+  from:              string;
+  to:                string;
+  totalRevenueMinor: number;
+  totalBookings:     number;
+  byBranch:          RevenueByBranchRow[];
+}
+
+// ── Booking trends ────────────────────────────────────────────────────────────
+
+export interface BookingTrendPeriod {
+  period:         string;
+  totalBookings:  number;
+  confirmed:      number;
+  cancelled:      number;
+  noShows:        number;
+  newCustomers:   number;
+  revenueMinor:   number;
+  avgBookingMins: number;
+}
+
+export interface BookingTrendsSummary {
+  from:              string;
+  to:                string;
+  totalBookings:     number;
+  totalRevenueMinor: number;
+  byPeriod:          BookingTrendPeriod[];
+}
+
+// ── Customer summary ──────────────────────────────────────────────────────────
+
+export interface CustomerSummaryRow {
+  customerId:        string | null;
+  customerName:      string;
+  customerEmail:     string | null;
+  totalBookings:     number;
+  confirmedBookings: number;
+  cancelledBookings: number;
+  noShows:           number;
+  totalSpendMinor:   number;
+  avgBookingMins:    number;
+  lastBookingDate:   string | null;
+}
+
+export interface CustomerSummaryResult {
+  total: number;
+  rows:  CustomerSummaryRow[];
+}
+
+// ── Membership usage ──────────────────────────────────────────────────────────
+
+export interface MembershipUsageRow {
+  membershipId:       string | null;
+  entitlementType:    string | null;
+  bookingsWithCredit: number;
+  totalDiscountMinor: number;
+  totalWalletMinor:   number;
+  avgDiscountMinor:   number;
+  uniqueCustomers:    number;
+}
+
+export interface MembershipUsageSummary {
+  from:               string;
+  to:                 string;
+  totalDiscountMinor: number;
+  totalWalletMinor:   number;
+  byMembership:       MembershipUsageRow[];
+}
+
+// ── Extended query keys ───────────────────────────────────────────────────────
+
+export const analyticsReportKeys = {
+  all:             ()                    => ['analytics-reports'] as const,
+  revenueBySport:  (p: AnalyticsDateRange) => ['analytics-reports', 'revenue-sport', p]  as const,
+  revenueByBranch: (p: AnalyticsDateRange) => ['analytics-reports', 'revenue-branch', p] as const,
+  bookingTrends:   (p: AnalyticsDateRange) => ['analytics-reports', 'trends', p]          as const,
+  customerSummary: (p: AnalyticsDateRange) => ['analytics-reports', 'customer-summary', p] as const,
+  membershipUsage: (p: AnalyticsDateRange) => ['analytics-reports', 'membership-usage', p] as const,
+};
+
+// ── Fetch functions ───────────────────────────────────────────────────────────
+
+export async function fetchRevenueBySport(p: AnalyticsDateRange): Promise<RevenueBySportSummary> {
+  const res = await apiClient.get<RevenueBySportSummary>(`${BASE}/revenue-by-sport`, { baseURL: REPORTING_BASE, params: toParams(p as AnalyticsDateRange) });
+  return res.data;
+}
+
+export async function fetchRevenueByBranch(p: AnalyticsDateRange): Promise<RevenueByBranchSummary> {
+  const res = await apiClient.get<RevenueByBranchSummary>(`${BASE}/revenue-by-branch`, { baseURL: REPORTING_BASE, params: toParams(p) });
+  return res.data;
+}
+
+export async function fetchBookingTrends(p: AnalyticsDateRange & { granularity?: string }): Promise<BookingTrendsSummary> {
+  const res = await apiClient.get<BookingTrendsSummary>(`${BASE}/booking-trends`, { baseURL: REPORTING_BASE, params: toParams(p) });
+  return res.data;
+}
+
+export async function fetchCustomerSummary(p: AnalyticsDateRange & { limit?: number; offset?: number }): Promise<CustomerSummaryResult> {
+  const res = await apiClient.get<CustomerSummaryResult>(`${BASE}/customer-summary`, { baseURL: REPORTING_BASE, params: toParams(p) });
+  return res.data;
+}
+
+export async function fetchMembershipUsage(p: AnalyticsDateRange): Promise<MembershipUsageSummary> {
+  const res = await apiClient.get<MembershipUsageSummary>(`${BASE}/membership-usage`, { baseURL: REPORTING_BASE, params: toParams(p) });
+  return res.data;
+}
+
+export function buildExportUrl(report: string, format: 'csv' | 'xlsx', params: AnalyticsDateRange): string {
+  const q = new URLSearchParams({ report, format, ...toParams(params) as Record<string, string> });
+  return `${REPORTING_BASE}/api/v1/analytics/export?${q.toString()}`;
+}
+

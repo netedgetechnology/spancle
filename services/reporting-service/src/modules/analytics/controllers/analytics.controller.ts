@@ -2,9 +2,11 @@ import {
   Controller,
   Get,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { TenantCtx, type TenantContext } from '../../../common/decorators/tenant.decorator';
 import { TenantGuard }      from '../../report/guards/report.guard';
 import { Roles }            from '../../../common/decorators/roles.decorator';
@@ -16,6 +18,12 @@ import {
   PeakHourQueryDto,
   CancellationQueryDto,
   NoShowQueryDto,
+  RevenueBySportQueryDto,
+  RevenueByBranchQueryDto,
+  BookingTrendsQueryDto,
+  CustomerSummaryQueryDto,
+  MembershipUsageQueryDto,
+  ExportQueryDto,
 } from '../dto/analytics.dto';
 
 /**
@@ -73,5 +81,67 @@ export class AnalyticsController {
     @TenantCtx() tenant: TenantContext,
   ) {
     return this.analyticsService.getNoShowAnalytics(query, tenant.tenantId);
+  }
+
+  @Get('revenue-by-sport')
+  getRevenueBySport(
+    @Query() query: RevenueBySportQueryDto,
+    @TenantCtx() tenant: TenantContext,
+  ) {
+    return this.analyticsService.getRevenueBySport(query, tenant.tenantId);
+  }
+
+  @Get('revenue-by-branch')
+  getRevenueByBranch(
+    @Query() query: RevenueByBranchQueryDto,
+    @TenantCtx() tenant: TenantContext,
+  ) {
+    return this.analyticsService.getRevenueByBranch(query, tenant.tenantId);
+  }
+
+  @Get('booking-trends')
+  getBookingTrends(
+    @Query() query: BookingTrendsQueryDto,
+    @TenantCtx() tenant: TenantContext,
+  ) {
+    return this.analyticsService.getBookingTrends(query, tenant.tenantId);
+  }
+
+  @Get('customer-summary')
+  getCustomerSummary(
+    @Query() query: CustomerSummaryQueryDto,
+    @TenantCtx() tenant: TenantContext,
+  ) {
+    return this.analyticsService.getCustomerSummary(query, tenant.tenantId);
+  }
+
+  @Get('membership-usage')
+  getMembershipUsage(
+    @Query() query: MembershipUsageQueryDto,
+    @TenantCtx() tenant: TenantContext,
+  ) {
+    return this.analyticsService.getMembershipUsage(query, tenant.tenantId);
+  }
+
+  /**
+   * GET /api/v1/analytics/export
+   *
+   * Exports any report as CSV or XLSX.
+   * Query params: report, format (csv|xlsx), from, to, branchId?, sportId?, courtId?, granularity?
+   * Response: file download with appropriate Content-Disposition header.
+   */
+  @Get('export')
+  async exportReport(
+    @Query() query: ExportQueryDto,
+    @TenantCtx() tenant: TenantContext,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { filename, contentType, buffer } =
+      await this.analyticsService.exportReport(query, tenant.tenantId);
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
   }
 }
