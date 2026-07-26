@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Sidebar } from './sidebar';
-import { Topbar }  from './topbar';
+import { Sidebar }    from './sidebar';
+import { Topbar }     from './topbar';
+import { BottomNav }  from './bottom-nav';
 
 interface DashboardLayoutProps {
   children:   React.ReactNode;
@@ -32,11 +33,12 @@ export function DashboardLayout({
         />
         <main
           id="main-content"
-          className="flex-1 overflow-y-auto p-4 sm:p-6"
+          className="flex-1 overflow-y-auto p-4 sm:p-6 pb-20 lg:pb-6"
           role="main"
         >
           {children}
         </main>
+        <BottomNav />
       </div>
     </div>
   );

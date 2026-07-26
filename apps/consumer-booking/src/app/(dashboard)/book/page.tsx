@@ -16,8 +16,8 @@
  *   5 Your details  (guest only — step 4 for members is final)
  */
 
-import { useState, useCallback }    from 'react';
-import { useRouter }                 from 'next/navigation';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation }     from '@tanstack/react-query';
 import { useSession }                from 'next-auth/react';
 import { cn }                        from '@/lib/utils/cn';
@@ -27,6 +27,7 @@ import { BookingSummaryCard }        from '@/components/booking/booking-summary-
 import { GuestCustomerForm, validateGuestCustomer } from '@/components/booking/guest-customer-form';
 import type { GuestCustomerFields }  from '@/components/booking/guest-customer-form';
 import { fetchVenues, venueKeys }    from '@/lib/api/venue.api';
+import { fetchSports, sportKeys }      from '@/lib/api/sport.api';
 import { fetchCourts, courtKeys }    from '@/lib/api/court.api';
 import { fetchDaySlots, slotKeys }   from '@/lib/api/slot.api';
 import { createBooking } from '@/lib/api/booking.api';
@@ -39,19 +40,21 @@ import type { Slot, CreateBookingPayload } from '@/types/booking.types';
 
 const MEMBER_STEPS = [
   { id: 1, label: 'Venue'   },
-  { id: 2, label: 'Court'   },
-  { id: 3, label: 'Date'    },
-  { id: 4, label: 'Slots'   },
-  { id: 5, label: 'Payment' },
+  { id: 2, label: 'Sport'   },
+  { id: 3, label: 'Court'   },
+  { id: 4, label: 'Date'    },
+  { id: 5, label: 'Slots'   },
+  { id: 6, label: 'Payment' },
 ];
 
 const GUEST_STEPS = [
   { id: 1, label: 'Venue'   },
-  { id: 2, label: 'Court'   },
-  { id: 3, label: 'Date'    },
-  { id: 4, label: 'Slots'   },
-  { id: 5, label: 'Details' },
-  { id: 6, label: 'Payment' },
+  { id: 2, label: 'Sport'   },
+  { id: 3, label: 'Court'   },
+  { id: 4, label: 'Date'    },
+  { id: 5, label: 'Slots'   },
+  { id: 6, label: 'Details' },
+  { id: 7, label: 'Payment' },
 ];
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -65,7 +68,14 @@ export default function BookPage(): React.ReactElement {
   const steps              = isGuest ? GUEST_STEPS : MEMBER_STEPS;
 
   const [step,         setStep]         = useState(1);
-  const [venueId,      setVenueId]      = useState('');
+  const searchParams   = useSearchParams();
+  const [sportId,       setSportId]       = useState(() => searchParams.get('sport') ?? '');
+  const [venueId,      setVenueId]      = useState(() => searchParams.get('venue') ?? '');
+  // Auto-advance when venue/sport pre-selected from URL
+  useEffect(() => {
+    if (venueId && step === 1) setStep(2);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [courtId,      setCourtId]      = useState('');
   const [branchId,     setBranchId]     = useState('');
   const [date,         setDate]         = useState(todayISO());
@@ -80,6 +90,12 @@ export default function BookPage(): React.ReactElement {
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
+  const sportsQuery = useQuery({
+    queryKey: sportKeys.list(),
+    queryFn:  () => fetchSports(),
+    staleTime: 10 * 60_000,
+  });
+
   const venuesQuery = useQuery({
     queryKey: venueKeys.list(),
     queryFn:  () => fetchVenues(),
@@ -87,8 +103,8 @@ export default function BookPage(): React.ReactElement {
   });
 
   const courtsQuery = useQuery({
-    queryKey: courtKeys.list({ venueId }),
-    queryFn:  () => fetchCourts({ venueId }),
+    queryKey: courtKeys.list({ venueId, ...(sportId ? { sportId } : {}) }),
+    queryFn:  () => fetchCourts({ venueId, ...(sportId ? { branchId: undefined } : {}) }),
     enabled:  !!venueId,
     staleTime: 5 * 60_000,
   });
@@ -96,13 +112,15 @@ export default function BookPage(): React.ReactElement {
   const slotsQuery = useQuery({
     queryKey: slotKeys.availability(courtId, branchId, date),
     queryFn:  () => fetchDaySlots({ courtId, branchId, date }),
-    enabled:  !!courtId && !!branchId && step >= 4,
+    enabled:  !!courtId && !!branchId && step >= 5,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
 
+  const sports = sportsQuery.data ?? [];
   const venues = venuesQuery.data ?? [];
-  const courts = courtsQuery.data ?? [];
+  const allCourts = courtsQuery.data ?? [];
+  const courts = sportId ? allCourts.filter((c) => !c.sportId || c.sportId === sportId) : allCourts;
   const slots  = slotsQuery.data  ?? [];
 
   const selectedVenue = venues.find((v) => v.id === venueId) ?? null;
@@ -225,9 +243,10 @@ export default function BookPage(): React.ReactElement {
 
   const goBack = () => {
     if (step > 1) {
-      if (step === 4) setSelectedIds([]);
-      if (step === 3) { setDate(todayISO()); setSelectedIds([]); }
-      if (step === 2) { setCourtId(''); setBranchId(''); setSelectedIds([]); }
+      if (step === 5) setSelectedIds([]);
+      if (step === 4) { setDate(todayISO()); setSelectedIds([]); }
+      if (step === 3) { setCourtId(''); setBranchId(''); setSelectedIds([]); }
+      if (step === 2) { setSportId(''); }
       setStep((s) => s - 1);
     }
   };
@@ -266,8 +285,24 @@ export default function BookPage(): React.ReactElement {
             </WizardPanel>
           )}
 
-          {/* Step 2 — Court */}
+          {/* Step 2 — Sport */}
           {step === 2 && (
+            <WizardPanel title="Select a sport" loading={sportsQuery.isLoading}>
+              {!sportsQuery.isLoading && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {sports.map((s) => (
+                    <SelectCard key={s.id} label={s.name} selected={sportId === s.id}
+                      onClick={() => { setSportId(s.id); setCourtId(''); setBranchId(''); setStep(3); }} />
+                  ))}
+                  <SelectCard label="Any sport" selected={!sportId}
+                    onClick={() => { setSportId(''); setCourtId(''); setBranchId(''); setStep(3); }} />
+                </div>
+              )}
+            </WizardPanel>
+          )}
+
+          {/* Step 3 — Court */}
+          {step === 3 && (
             <WizardPanel title="Select a court" loading={courtsQuery.isLoading} error={courtsQuery.error ? 'Failed to load courts' : null}>
               {!courtsQuery.isLoading && courts.length === 0
                 ? <EmptyState message="No courts available at this venue." />
@@ -283,8 +318,8 @@ export default function BookPage(): React.ReactElement {
             </WizardPanel>
           )}
 
-          {/* Step 3 — Date */}
-          {step === 3 && (
+          {/* Step 4 — Date */}
+          {step === 4 && (
             <WizardPanel title="Choose a date">
               <div className="flex flex-col gap-4">
                 <div>
@@ -301,8 +336,8 @@ export default function BookPage(): React.ReactElement {
             </WizardPanel>
           )}
 
-          {/* Step 4 — Slots */}
-          {step === 4 && (
+          {/* Step 5 — Slots */}
+          {step === 5 && (
             <WizardPanel title="Select time slots" subtitle="You can select multiple consecutive slots"
               loading={slotsQuery.isLoading} error={slotsQuery.error ? 'Failed to load slots.' : null} onRetry={() => void slotsQuery.refetch()}>
               <SlotGrid slots={slots} selectedIds={selectedIds} onToggle={handleToggle} isLoading={slotsQuery.isLoading} />
@@ -314,7 +349,7 @@ export default function BookPage(): React.ReactElement {
               )}
               {/* Guest: next goes to details step */}
               {isGuest && selectedIds.length > 0 && (
-                <button type="button" onClick={() => setStep(5)}
+                <button type="button" onClick={() => setStep(6)}
                   className="mt-4 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                   Continue to your details →
                 </button>
@@ -322,8 +357,8 @@ export default function BookPage(): React.ReactElement {
             </WizardPanel>
           )}
 
-          {/* Step 5 — Guest details (guest only) */}
-          {step === 5 && isGuest && (
+          {/* Step 6 — Guest details (guest only) */}
+          {step === 6 && isGuest && (
             <WizardPanel title="Your details" subtitle="No account needed — just your name and email">
               <GuestCustomerForm value={guestFields} onChange={setGuestFields} errors={guestErrors} />
               {submitError && (
@@ -397,7 +432,7 @@ export default function BookPage(): React.ReactElement {
         </div>
 
         {/* Right column — Summary (shown at final step for member; at step 5 for guest) */}
-        {((step === 4 && !isGuest) || (step === 5 && isGuest)) && !paymentResult && (
+        {((step === 5 && !isGuest) || (step === 6 && isGuest)) && !paymentResult && (
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
             <BookingSummaryCard
               venue={selectedVenue} court={selectedCourt} date={date}
