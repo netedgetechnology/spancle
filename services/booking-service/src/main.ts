@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from '@nestjs/common';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -82,9 +83,7 @@ async function bootstrap(): Promise<void> {
       swaggerOptions: { persistAuthorization: true },
     });
 
-    const host = `http://localhost:${port}`;
-    app.get(ConfigService).get('NODE_ENV') !== 'test' &&
-      console.log(`OpenAPI docs: ${host}/api/docs`);
+    new Logger('Bootstrap').log(`OpenAPI docs: http://localhost:${port}/api/docs`);
   }
 
   await app.listen(port);

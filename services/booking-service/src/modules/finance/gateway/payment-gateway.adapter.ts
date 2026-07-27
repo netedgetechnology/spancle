@@ -10,8 +10,9 @@
  *   - New gateways (PayTM, Adyen, Square) are plug-in adapters — no changes
  *     to PaymentService required.
  *
- * Batch 7.2 delivers architecture-only stubs.
- * Real SDK integration is Batch 7.5 (gateway implementation sprint).
+ * Production implementations:
+ *   - StripeAdapter   — stripe.adapter.ts    (Stripe SDK)
+ *   - RazorpayAdapter — razorpay.adapter.ts  (Razorpay SDK)
  */
 
 // ── DI token ─────────────────────────────────────────────────────────────────
@@ -84,7 +85,6 @@ export abstract class PaymentGatewayAdapter {
   /**
    * Issues a refund against an existing captured payment.
    * idempotencyKey is stable (ref_<refund.id>) — safe to retry on timeout.
-   * Batch 7.5: replace stubs with real SDK calls.
    */
   abstract refund(input: GatewayRefundInput): Promise<GatewayRefundResult>;
 }

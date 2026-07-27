@@ -75,6 +75,29 @@ module.exports = {
         REDIS_HOST:            process.env['REDIS_HOST']             ?? '127.0.0.1',
         REDIS_PORT:            process.env['REDIS_PORT']             ?? '6379',
         REDIS_PASSWORD:        process.env['REDIS_PASSWORD']         ?? '',
+        // ── CORS (required — service throws on startup if NODE_ENV=production and unset)
+        CORS_ORIGINS:          process.env['CORS_ORIGINS']           ?? '',
+        // ── Guest / QR session tokens
+        GUEST_SESSION_SECRET:  process.env['GUEST_SESSION_SECRET']   ?? '',
+        // ── Payment gateways (set whichever is active; both can coexist)
+        PAYMENT_GATEWAY:       process.env['PAYMENT_GATEWAY']        ?? 'stripe',
+        STRIPE_SECRET_KEY:     process.env['STRIPE_SECRET_KEY']      ?? '',
+        STRIPE_WEBHOOK_SECRET: process.env['STRIPE_WEBHOOK_SECRET']  ?? '',
+        STRIPE_CAPTURE_METHOD: process.env['STRIPE_CAPTURE_METHOD']  ?? 'automatic',
+        RAZORPAY_KEY_ID:       process.env['RAZORPAY_KEY_ID']        ?? '',
+        RAZORPAY_KEY_SECRET:   process.env['RAZORPAY_KEY_SECRET']    ?? '',
+        RAZORPAY_WEBHOOK_SECRET: process.env['RAZORPAY_WEBHOOK_SECRET'] ?? '',
+        RAZORPAY_CURRENCY:     process.env['RAZORPAY_CURRENCY']      ?? 'INR',
+        // ── Webhook processing
+        WEBHOOK_SYSTEM_ACTOR_ID:          process.env['WEBHOOK_SYSTEM_ACTOR_ID']          ?? 'system:webhook',
+        WEBHOOK_TIMESTAMP_TOLERANCE_MS:   process.env['WEBHOOK_TIMESTAMP_TOLERANCE_MS']   ?? '300000',
+        // ── Booking scheduler tuning (all optional — defaults in code)
+        BOOKING_RESERVATION_TTL_MINS:     process.env['BOOKING_RESERVATION_TTL_MINS']     ?? '15',
+        BOOKING_NO_SHOW_GRACE_MINS:       process.env['BOOKING_NO_SHOW_GRACE_MINS']       ?? '30',
+        BOOKING_AUTOCOMPLETE_DELAY_MINS:  process.env['BOOKING_AUTOCOMPLETE_DELAY_MINS']  ?? '60',
+        BOOKING_SCHEDULER_BATCH_SIZE:     process.env['BOOKING_SCHEDULER_BATCH_SIZE']     ?? '50',
+        WAITLIST_RESERVATION_TTL_MINS:    process.env['WAITLIST_RESERVATION_TTL_MINS']    ?? '30',
+        FINANCE_BOOKING_REFUND_JOB_LEASE_SECONDS: process.env['FINANCE_BOOKING_REFUND_JOB_LEASE_SECONDS'] ?? '600',
       },
     },
 

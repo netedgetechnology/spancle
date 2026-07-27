@@ -17,9 +17,9 @@ import { RazorpayAdapter }         from '../../finance/gateway/razorpay.adapter'
  *   PAYMENT_GATEWAY=stripe     (default)
  *   PAYMENT_GATEWAY=razorpay
  *
- * Fix (Batch 7.5):
- *   StripeAdapter is now DI-injected (receives ConfigService for STRIPE_SECRET_KEY).
- *   RazorpayAdapter remains a stub (Batch 7.5 Razorpay sprint).
+ * Both adapters are @Injectable() NestJS services injected via FinanceModule.
+ * StripeAdapter: uses STRIPE_SECRET_KEY + STRIPE_API_VERSION from ConfigService.
+ * RazorpayAdapter: uses RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET from ConfigService.
  *
  * Adding a new gateway:
  *   1. Extend PaymentGatewayAdapter.
