@@ -3,6 +3,7 @@
 import { useState }  from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn }    from 'next-auth/react';
+import { queryClient } from '@/lib/api/query-client';
 
 export default function LoginPage(): React.ReactElement {
   const router   = useRouter();
@@ -20,6 +21,10 @@ export default function LoginPage(): React.ReactElement {
       if (result?.error) {
         setError('Invalid credentials');
       } else {
+        // Clear the entire React Query cache before navigating.
+        // This prevents data from a previous session (different user or
+        // expired token) from being served to the newly authenticated user.
+        queryClient.clear();
         router.push('/');
       }
     } catch {
