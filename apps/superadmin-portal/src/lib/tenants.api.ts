@@ -82,7 +82,14 @@ export async function fetchTenantList(params: TenantListParams = {}): Promise<Te
   const query = Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== '' && v !== undefined),
   );
-  const res = await apiClient.get<TenantListResponse>('/api/v1/tenants', { params: query });
+  const res = await apiClient.get<TenantListResponse | TenantDetail[]>('/api/v1/tenants', { params: query });
+
+  // The saas-platform-service returns a plain TenantDetail[] array.
+  // The identity-service returns { data: TenantDetail[], total: number }.
+  // Normalise both shapes so the table always receives { data, total }.
+  if (Array.isArray(res.data)) {
+    return { data: res.data, total: res.data.length };
+  }
   return res.data;
 }
 
