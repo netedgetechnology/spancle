@@ -3,32 +3,43 @@ import axios, {
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { getSession, signOut } from 'next-auth/react';
+import { getSession } from 'next-auth/react';
 
-import type { ApiError } from '@/types';
+import type { ApiError }          from '@/types';
+
+import { dispatchLogoutRequired } from '@/lib/auth/session-events';
 
 const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? '/api';
 
 /**
- * Authenticated API client for the Superadmin portal.
+ * Authenticated API client — transport layer only.
  *
- * ── Request interceptor ────────────────────────────────────────────────────
- * Every request calls getSession() to obtain the current access token.
- * NextAuth fetches /api/auth/session each time and returns the session
- * reflected in the current JWT cookie — including any silently-refreshed
- * access token written by the jwt callback.
+ * Responsibilities (what this file owns):
+ *   ✓ Attach the current Bearer token to every outgoing request.
+ *   ✓ Attach the x-tenant-id header to every outgoing request.
+ *   ✓ Signal that authentication has failed (via dispatchLogoutRequired).
+ *   ✓ Normalise error shapes to ApiError.
  *
- * If the session carries error='RefreshAccessTokenError' (the silent refresh
- * failed because the refresh token itself has expired), we sign the user out
- * immediately rather than firing an API call that will 401.
+ * Responsibilities (what this file does NOT own):
+ *   ✗ Calling signOut() — that is the auth layer's job.
+ *   ✗ Clearing the React Query cache — that is the auth layer's job.
+ *   ✗ Redirecting to /login — that is the auth layer's job.
  *
- * The Authorization header is set per-request on the config object — it is
- * NEVER written to apiClient.defaults.headers, which would persist the old
- * token across requests as a module-level singleton side-effect.
+ * When a 401 is received or the session reports a refresh failure, this
+ * client dispatches 'auth:logout-required' via the session-events module.
+ * AppProviders and useSessionGuard listen for that event and handle sign-out,
+ * cache clearing, and redirect.  The two layers are decoupled — neither
+ * imports the other at module load time.
  *
- * ── Response interceptor ──────────────────────────────────────────────────
- * 401 responses mean the backend rejected the token. In all cases we sign
- * out and redirect to /login, clearing the query cache first.
+ * Token read strategy:
+ *   getSession() is called on every request.  It reads the current NextAuth
+ *   session cookie via a lightweight internal fetch to /api/auth/session.
+ *   After the NextAuth jwt callback silently refreshes the access token and
+ *   writes the new token to the cookie, the very next getSession() call
+ *   returns the refreshed token with no extra coordination needed here.
+ *   The Authorization header is set on the per-request config object, never
+ *   on apiClient.defaults.headers (which would persist the token across
+ *   requests on the module-level singleton).
  */
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -36,41 +47,25 @@ export const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
 });
 
-// Guard: only one sign-out in flight at a time to prevent redirect loops.
-let signingOut = false;
-
-async function forceSignOut(): Promise<void> {
-  if (signingOut || typeof window === 'undefined') {
-    return;
-  }
-  signingOut = true;
-  // Clear query cache before redirecting so no stale data survives re-login.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const mod: { queryClient: { clear: () => void } } = await import('@/lib/api/query-client') as never;
-    mod.queryClient.clear();
-  } catch {
-    // query-client may not be initialised yet — safe to ignore.
-  }
-  await signOut({ callbackUrl: '/login', redirect: true });
-}
+// ── Request interceptor ────────────────────────────────────────────────────
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
     const session = await getSession();
 
-    // Hard sign-out when the refresh token itself has expired.
+    // If the server-side refresh failed, signal the auth layer immediately
+    // rather than sending a request that will 401 anyway.
     if ((session as Record<string, unknown> | null)?.['error'] === 'RefreshAccessTokenError') {
-      void forceSignOut();
-      return Promise.reject(new Error('Session expired. Please sign in again.'));
+      dispatchLogoutRequired();
+      return Promise.reject(new Error('Session expired — please sign in again.'));
     }
 
-    // Set Authorization per-request, never on the shared axios defaults.
+    // Attach token per-request; never cache on defaults.
     if (session?.accessToken) {
       config.headers.set('Authorization', `Bearer ${String(session.accessToken)}`);
     } else {
-      // No token available — remove any previously set header to prevent
-      // a stale value from leaking through if headers were inherited.
+      // No token — remove any header that may have been inherited from a
+      // previous config object to avoid sending a stale Bearer value.
       config.headers.delete('Authorization');
     }
 
@@ -83,22 +78,26 @@ apiClient.interceptors.request.use(
   (error: unknown) => Promise.reject(error),
 );
 
+// ── Response interceptor ───────────────────────────────────────────────────
+
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
-  async (error: unknown) => {
+  (error: unknown) => {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 401 && typeof window !== 'undefined') {
-        // The backend rejected the token. Sign out and redirect to /login.
-        void forceSignOut();
+        // Backend rejected the token.  Signal the auth layer — it handles
+        // sign-out, cache clearing, and redirect.  We do not call signOut()
+        // here to keep authentication logic out of the transport layer.
+        dispatchLogoutRequired();
         return Promise.reject(error);
       }
 
-      const responseData = error.response?.data as Record<string, unknown> | undefined;
+      const d = error.response?.data as Record<string, unknown> | undefined;
       const apiError: ApiError = {
-        statusCode: (responseData?.['statusCode'] as number | undefined) ?? error.response?.status ?? 0,
-        message:    (responseData?.['message']    as string | undefined) ?? error.message,
-        error:      (responseData?.['error']      as string | undefined) ?? 'Network Error',
-        timestamp:  (responseData?.['timestamp']  as string | undefined) ?? new Date().toISOString(),
+        statusCode: (d?.['statusCode'] as number  | undefined) ?? error.response?.status ?? 0,
+        message:    (d?.['message']    as string  | undefined) ?? error.message,
+        error:      (d?.['error']      as string  | undefined) ?? 'Network Error',
+        timestamp:  (d?.['timestamp']  as string  | undefined) ?? new Date().toISOString(),
       };
       return Promise.reject(apiError);
     }

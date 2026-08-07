@@ -7,25 +7,44 @@ const PLATFORM_TENANT_ID = process.env['PLATFORM_TENANT_ID'] ?? process.env['NEX
 const IDENTITY_API       = process.env['IDENTITY_SERVICE_URL'] ?? 'http://127.0.0.1:4001';
 const NEXTAUTH_SECRET    = process.env['NEXTAUTH_SECRET'] ?? '';
 
-// Refresh the access token 60 seconds before it expires to avoid a
-// window where the NextAuth session is valid but the backend rejects it.
+/**
+ * How many seconds before expiry to start the proactive refresh.
+ * 60 s gives the request time to complete before the backend rejects the token.
+ */
 const REFRESH_MARGIN_SECONDS = 60;
 
 interface TokenPair {
   accessToken:  string;
   refreshToken: string;
-  expiresIn:    number; // seconds
+  expiresIn:    number; // seconds until the new accessToken expires
 }
 
 /**
- * refreshAccessToken()
+ * In-flight refresh promise cache — server-side singleton.
  *
- * Calls POST /api/v1/auth/refresh with the stored refreshToken.
- * Returns an updated JWT payload on success.
- * Returns the original token with `error: 'RefreshAccessTokenError'`
- * on failure — the client interceptor treats this as a hard sign-out.
+ * The NextAuth /api/auth/session route handler runs inside a single Node.js
+ * process.  When multiple browser tabs or multiple simultaneous axios
+ * getSession() calls arrive while the access token is expired, the jwt
+ * callback is invoked for each request concurrently.  Without this guard
+ * every invocation would independently POST /api/v1/auth/refresh.  Because
+ * the identity service issues single-use refresh tokens, only the first call
+ * succeeds — all subsequent ones receive 401, which would incorrectly set
+ * error='RefreshAccessTokenError' and sign the user out mid-session.
+ *
+ * The fix: the first call to need a refresh creates a Promise and caches it
+ * here.  Every concurrent call awaits the same Promise.  When it resolves
+ * (success or failure) all callers get the same result and the cache is
+ * cleared so the next expiry cycle can refresh again.
+ *
+ * Key properties:
+ *   – Only one HTTP request to the identity service per expiry cycle.
+ *   – Concurrent callers all get the refreshed token, not an error.
+ *   – No stale promise across multiple expiry cycles (cleared on settle).
+ *   – Thread-safe: Node.js event loop is single-threaded; no mutex needed.
  */
-async function refreshAccessToken(token: JWT): Promise<JWT> {
+let refreshPromise: Promise<JWT> | null = null;
+
+async function doRefresh(token: JWT): Promise<JWT> {
   try {
     const res = await fetch(`${IDENTITY_API}/api/v1/auth/refresh`, {
       method:  'POST',
@@ -44,18 +63,32 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 
     return {
       ...token,
-      accessToken:           data.accessToken,
-      refreshToken:          data.refreshToken ?? token['refreshToken'],
-      accessTokenExpiresAt:  Math.floor(Date.now() / 1000) + data.expiresIn,
-      error:                 undefined,
+      accessToken:          data.accessToken,
+      refreshToken:         data.refreshToken ?? token['refreshToken'],
+      accessTokenExpiresAt: Math.floor(Date.now() / 1000) + data.expiresIn,
+      error:                undefined,
     };
   } catch (err) {
     console.error('[NextAuth] refreshAccessToken error:', err);
-    return {
-      ...token,
-      error: 'RefreshAccessTokenError',
-    };
+    return { ...token, error: 'RefreshAccessTokenError' };
   }
+}
+
+/**
+ * refreshAccessToken()
+ *
+ * Public entry point used by the jwt callback.
+ * Deduplicates concurrent refresh calls by coalescing them onto one Promise.
+ */
+async function refreshAccessToken(token: JWT): Promise<JWT> {
+  if (!refreshPromise) {
+    // First caller in this expiry cycle — own the refresh.
+    refreshPromise = doRefresh(token).finally(() => {
+      // Clear regardless of success or failure so the next cycle can refresh.
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -67,7 +100,9 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials): Promise<User | null> {
-        if (!credentials?.email || !credentials?.password) {return null;}
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
 
         try {
           const res = await fetch(`${IDENTITY_API}/api/v1/auth/login`, {
@@ -82,7 +117,9 @@ export const authOptions: NextAuthOptions = {
             }),
           });
 
-          if (!res.ok) {return null;}
+          if (!res.ok) {
+            return null;
+          }
 
           const data = await res.json() as {
             accessToken:  string;
@@ -91,7 +128,9 @@ export const authOptions: NextAuthOptions = {
             user?: { id: string; role?: string; email?: string };
           };
 
-          if (!data.accessToken) {return null;}
+          if (!data.accessToken) {
+            return null;
+          }
 
           return {
             id:                   data.user?.id ?? credentials.email,
@@ -99,8 +138,6 @@ export const authOptions: NextAuthOptions = {
             role:                 'SUPER_ADMIN',
             accessToken:          data.accessToken,
             refreshToken:         data.refreshToken,
-            // Store absolute epoch seconds so the jwt callback can compare
-            // against Date.now() without knowing the relative expiresIn again.
             accessTokenExpiresAt: Math.floor(Date.now() / 1000) + (data.expiresIn ?? 900),
             tenantId:             PLATFORM_TENANT_ID,
           } as User & Record<string, unknown>;
@@ -115,32 +152,31 @@ export const authOptions: NextAuthOptions = {
     /**
      * jwt callback
      *
-     * Called on every getSession() / useSession() call and on every
-     * server-side request that reads the session cookie.
+     * Invoked on every /api/auth/session request and on every server-side
+     * getServerSession() call.  The encrypted JWT cookie is the only storage.
      *
-     * On initial sign-in (`user` is populated): stamp all fields.
-     * On subsequent calls: check whether the access token has expired
-     * (with a REFRESH_MARGIN_SECONDS grace window) and silently refresh
-     * it using the stored refresh token.
+     * Initial sign-in (user is present): copy all token fields from authorize().
+     * Subsequent calls: if the access token is still fresh, return as-is.
+     *                   If within REFRESH_MARGIN_SECONDS of expiry, refresh.
      *
-     * If the refresh fails (expired refresh token, network error, token
-     * revoked): set error='RefreshAccessTokenError' so the client-side
-     * interceptor can force a sign-out immediately.
+     * Concurrent calls during a single expiry window share one refresh
+     * Promise (see refreshPromise above) so the single-use refresh token
+     * is consumed exactly once.
      */
     async jwt({ token, user }) {
-      // Initial sign-in — stamp everything from the authorize() return value.
+      // ── Initial sign-in ───────────────────────────────────────────────────
       if (user) {
         const u = user as unknown as Record<string, unknown>;
-        token['accessToken']          = u['accessToken']  as string;
-        token['refreshToken']         = u['refreshToken'] as string;
+        token['accessToken']          = u['accessToken']          as string;
+        token['refreshToken']         = u['refreshToken']         as string;
         token['accessTokenExpiresAt'] = u['accessTokenExpiresAt'] as number;
-        token['tenantId']             = u['tenantId']    as string;
-        token['role']                 = u['role']        as string;
+        token['tenantId']             = u['tenantId']             as string;
+        token['role']                 = u['role']                 as string;
         token['error']                = undefined;
         return token;
       }
 
-      // Not yet expired (with margin) — return as-is.
+      // ── Token still fresh ─────────────────────────────────────────────────
       const expiresAt = token['accessTokenExpiresAt'];
       const nowSec    = Math.floor(Date.now() / 1000);
 
@@ -148,7 +184,7 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
-      // Access token has expired (or is within the margin) — attempt refresh.
+      // ── Token expired or within margin — refresh (deduplicated) ───────────
       return refreshAccessToken(token);
     },
 
@@ -157,8 +193,9 @@ export const authOptions: NextAuthOptions = {
       session.accessToken = token['accessToken'];
       session.tenantId    = token['tenantId'];
       session.user.id     = token.sub ?? '';
-      (session.user as Record<string, unknown>)['role']  = token['role'];
-      // Surface the refresh error to the client so it can force sign-out.
+      (session.user as Record<string, unknown>)['role'] = token['role'];
+      // Propagate refresh errors so the client can force an immediate sign-out
+      // without waiting for a 401 from the backend.
       (session as unknown as Record<string, unknown>)['error'] = token['error'];
       return session;
     },
@@ -171,7 +208,7 @@ export const authOptions: NextAuthOptions = {
 
   session: {
     strategy: 'jwt',
-    maxAge:   8 * 60 * 60, // 8 hours (matches refresh token window)
+    maxAge:   8 * 60 * 60, // 8 h — matches refresh-token lifetime in identity service
   },
 
   secret: NEXTAUTH_SECRET || undefined,
