@@ -4,6 +4,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { getSession, signOut } from 'next-auth/react';
+
 import type { ApiError } from '@/types';
 
 const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? '/api';
@@ -13,9 +14,9 @@ const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? '/api';
  *
  * ── Request interceptor ────────────────────────────────────────────────────
  * Every request calls getSession() to obtain the current access token.
- * getSession() is called with event: 'storage' to bypass the in-memory
- * cache and always read the latest NextAuth session cookie value.
- * This prevents stale tokens from being used after re-login or token refresh.
+ * NextAuth fetches /api/auth/session each time and returns the session
+ * reflected in the current JWT cookie — including any silently-refreshed
+ * access token written by the jwt callback.
  *
  * If the session carries error='RefreshAccessTokenError' (the silent refresh
  * failed because the refresh token itself has expired), we sign the user out
@@ -26,14 +27,8 @@ const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? '/api';
  * token across requests as a module-level singleton side-effect.
  *
  * ── Response interceptor ──────────────────────────────────────────────────
- * 401 responses mean the backend rejected the token. This can happen when:
- *   a) The access token expired between the getSession() call and the network
- *      roundtrip (very short window, sub-second).
- *   b) The token was revoked server-side (logout on another device).
- *   c) The NextAuth refresh succeeded client-side but the new token hasn't
- *      propagated to the cookie yet (rare).
- *
- * In all cases we sign out and redirect to /login, clearing all session state.
+ * 401 responses mean the backend rejected the token. In all cases we sign
+ * out and redirect to /login, clearing the query cache first.
  */
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -45,13 +40,15 @@ export const apiClient: AxiosInstance = axios.create({
 let signingOut = false;
 
 async function forceSignOut(): Promise<void> {
-  if (signingOut || typeof window === 'undefined') return;
+  if (signingOut || typeof window === 'undefined') {
+    return;
+  }
   signingOut = true;
   // Clear query cache before redirecting so no stale data survives re-login.
-  // Import dynamically to avoid a circular dependency with query-client.ts.
   try {
-    const { queryClient } = await import('@/lib/api/query-client');
-    queryClient.clear();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const mod: { queryClient: { clear: () => void } } = await import('@/lib/api/query-client') as never;
+    mod.queryClient.clear();
   } catch {
     // query-client may not be initialised yet — safe to ignore.
   }
@@ -60,15 +57,6 @@ async function forceSignOut(): Promise<void> {
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
-    // getSession() is called without arguments.
-    // NextAuth fetches /api/auth/session on the client and returns the
-    // current cookie value. The session is cached for the duration of the
-    // React render cycle, but each interceptor call triggers a fresh read
-    // because we are outside React and the cache is not shared here.
-    //
-    // If the jwt callback performed a silent token refresh, the updated
-    // accessToken is already encoded in the session cookie that getSession()
-    // reads — no extra work needed.
     const session = await getSession();
 
     // Hard sign-out when the refresh token itself has expired.
@@ -105,11 +93,12 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      const apiError: ApiError = (error.response?.data as ApiError | undefined) ?? {
-        statusCode: error.response?.status ?? 0,
-        message:    error.message,
-        error:      'Network Error',
-        timestamp:  new Date().toISOString(),
+      const responseData = error.response?.data as Record<string, unknown> | undefined;
+      const apiError: ApiError = {
+        statusCode: (responseData?.['statusCode'] as number | undefined) ?? error.response?.status ?? 0,
+        message:    (responseData?.['message']    as string | undefined) ?? error.message,
+        error:      (responseData?.['error']      as string | undefined) ?? 'Network Error',
+        timestamp:  (responseData?.['timestamp']  as string | undefined) ?? new Date().toISOString(),
       };
       return Promise.reject(apiError);
     }

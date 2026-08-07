@@ -3,9 +3,11 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools }  from '@tanstack/react-query-devtools';
 import { SessionProvider }     from 'next-auth/react';
-import { queryClient }         from '@/lib/api/query-client';
-import { NotificationProvider } from './notification-provider';
+
 import { LoadingProvider }       from './loading-provider';
+import { NotificationProvider } from './notification-provider';
+
+import { queryClient }         from '@/lib/api/query-client';
 
 /**
  * AppProviders

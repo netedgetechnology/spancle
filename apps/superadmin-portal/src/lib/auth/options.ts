@@ -1,4 +1,5 @@
 import CredentialsProvider from 'next-auth/providers/credentials';
+
 import type { NextAuthOptions, User } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 
@@ -66,7 +67,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials): Promise<User | null> {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {return null;}
 
         try {
           const res = await fetch(`${IDENTITY_API}/api/v1/auth/login`, {
@@ -81,7 +82,7 @@ export const authOptions: NextAuthOptions = {
             }),
           });
 
-          if (!res.ok) return null;
+          if (!res.ok) {return null;}
 
           const data = await res.json() as {
             accessToken:  string;
@@ -90,7 +91,7 @@ export const authOptions: NextAuthOptions = {
             user?: { id: string; role?: string; email?: string };
           };
 
-          if (!data.accessToken) return null;
+          if (!data.accessToken) {return null;}
 
           return {
             id:                   data.user?.id ?? credentials.email,
@@ -140,7 +141,7 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Not yet expired (with margin) — return as-is.
-      const expiresAt = token['accessTokenExpiresAt'] as number | undefined;
+      const expiresAt = token['accessTokenExpiresAt'];
       const nowSec    = Math.floor(Date.now() / 1000);
 
       if (expiresAt && nowSec < expiresAt - REFRESH_MARGIN_SECONDS) {
@@ -153,8 +154,8 @@ export const authOptions: NextAuthOptions = {
 
     // eslint-disable-next-line @typescript-eslint/require-await
     async session({ session, token }) {
-      session.accessToken = token['accessToken'] as string | undefined;
-      session.tenantId    = token['tenantId']    as string | undefined;
+      session.accessToken = token['accessToken'];
+      session.tenantId    = token['tenantId'];
       session.user.id     = token.sub ?? '';
       (session.user as Record<string, unknown>)['role']  = token['role'];
       // Surface the refresh error to the client so it can force sign-out.
