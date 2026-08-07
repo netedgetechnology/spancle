@@ -277,6 +277,15 @@ export class TenantResolverMiddleware implements NestMiddleware {
 
   private shouldSkip(path: string): boolean {
     const skipPaths = ['/health', '/metrics', '/favicon.ico', '/_next'];
-    return skipPaths.some((p) => path.startsWith(p));
+    if (skipPaths.some((p) => path.startsWith(p))) return true;
+
+    // Superadmin tenant-management routes operate across all tenants and
+    // have no single tenant context. Resolution would fail because the
+    // superadmin portal sends a platform UUID that does not exist as a
+    // row in the tenants table.
+    // Auth and RBAC (JwtAuthGuard + @Roles('SUPER_ADMIN')) still apply.
+    if (path.startsWith('/api/v1/tenants')) return true;
+
+    return false;
   }
 }
