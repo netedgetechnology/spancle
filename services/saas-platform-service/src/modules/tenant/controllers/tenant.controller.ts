@@ -21,8 +21,8 @@ export class TenantController {
   }
 
   @Get()
-  findAll(@TenantCtx() tenant: TenantContext): Promise<unknown[]> {
-    return this.tenantService.findAll(tenant.tenantId);
+  findAll(): Promise<unknown[]> {
+    return this.tenantService.findAll();
   }
 
   @Get(':id')

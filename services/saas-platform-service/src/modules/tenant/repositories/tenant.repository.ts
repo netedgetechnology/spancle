@@ -20,6 +20,16 @@ export class TenantRepository {
     return this.repo.find({ where: { tenantId, isDeleted: false } });
   }
 
+  /**
+   * findAll() — super-admin only.
+   * Returns every non-deleted tenant row regardless of tenant_id.
+   * Used by the superadmin portal list endpoint which must see all tenants,
+   * not just those scoped to the platform super-tenant UUID.
+   */
+  async findAll(): Promise<TenantEntity[]> {
+    return this.repo.find({ where: { isDeleted: false }, order: { createdAt: 'DESC' } });
+  }
+
   async findByIdAndTenant(id: string, tenantId: string): Promise<TenantEntity | null> {
     return this.repo.findOne({ where: { id, tenantId, isDeleted: false } });
   }

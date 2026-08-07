@@ -22,8 +22,8 @@ export class TenantService {
     return entity;
   }
 
-  async findAll(tenantId: string): Promise<TenantEntity[]> {
-    return this.tenantRepository.findAllByTenant(tenantId);
+  async findAll(): Promise<TenantEntity[]> {
+    return this.tenantRepository.findAll();
   }
 
   async findOne(id: string, tenantId: string): Promise<TenantEntity> {
