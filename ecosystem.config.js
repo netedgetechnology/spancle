@@ -76,7 +76,7 @@ module.exports = {
         REDIS_PORT:            process.env['REDIS_PORT']             ?? '6379',
         REDIS_PASSWORD:        process.env['REDIS_PASSWORD']         ?? '',
         // ── CORS (required — service throws on startup if NODE_ENV=production and unset)
-        CORS_ORIGINS:          process.env['CORS_ORIGINS']           ?? '',
+        CORS_ORIGINS:          process.env['CORS_ORIGINS']           ?? 'https://manage.spancle.com,https://www.spancle.com,https://spancle.com,http://localhost:3000,http://localhost:3001',
         // ── Guest / QR session tokens
         GUEST_SESSION_SECRET:  process.env['GUEST_SESSION_SECRET']   ?? '',
         // ── Payment gateways (set whichever is active; both can coexist)
