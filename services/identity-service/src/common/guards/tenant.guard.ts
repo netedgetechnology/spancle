@@ -36,6 +36,11 @@ export class TenantGuard implements CanActivate {
 
   constructor(private readonly reflector: Reflector) {}
 
+  // Superadmin routes that operate across all tenants have no single
+  // tenant context. Skip tenant header enforcement for these paths.
+  // Auth and RBAC (JwtAuthGuard + @Roles('SUPER_ADMIN')) still apply.
+  private readonly superAdminPaths = ['/api/v1/tenants'];
+
   canActivate(context: ExecutionContext): boolean {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
@@ -45,6 +50,11 @@ export class TenantGuard implements CanActivate {
     const request = context
       .switchToHttp()
       .getRequest<TenantRequest>();
+
+    // Skip tenant context enforcement for cross-tenant superadmin routes
+    if (this.superAdminPaths.some((p) => request.path.startsWith(p))) {
+      return true;
+    }
 
     const tenantId = request.headers[this.tenantHeader];
 
